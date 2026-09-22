@@ -98,7 +98,7 @@ independente de tenant, porque o vínculo vive na associação. Logo `usuarios` 
 | `papel_plataforma` | Existe fora do eixo por definição; um papel de plataforma com tenant seria um tenant privilegiado |
 | `auditoria_plataforma` | Registra atos que não acontecem dentro de tenant nenhum: criar tenant, criar usuário, conceder papel |
 | `sessao_plataforma` | Sessão do papel de plataforma, que não tem tenant ativo; separá-la de `sessao` é o que impede um principal de plataforma de portar um tenant |
-| `schema_migrations` | Metadado de migração |
+| `schema_migrations` | Metadado do executor de migração. Única da lista que **não** é criada por um arquivo de migração: quem a cria é `scripts/migrar.py`, antes de saber o que já foi aplicado |
 
 `associacao_tenant` **tem** `tenant_id`: é ela que carrega o vínculo, e é por ela que toda
 resolução de papel passa.
@@ -107,8 +107,9 @@ A auditoria de ação dentro de um tenant é outra tabela, com `tenant_id`, e n�
 com `auditoria_plataforma`. Separar as duas é o que impede um ato de plataforma de aparecer
 como se tivesse acontecido dentro de um tenant.
 
-O checador `tests/invariants/check_tenant_id.py` hoje isenta só `alembic_version`, `tenants`
-e `schema_migrations`. Ele precisa passar a ler esta lista — tarefa do plano, não desta spec.
+`tests/invariants/check_tenant_id.py` espelha esta tabela, com a justificativa de cada
+exceção no código, e um teste falha se as duas listas divergirem. É o que dá força à regra:
+acrescentar exceção só no checador não passa na CI.
 
 ## Papéis dentro do tenant
 
