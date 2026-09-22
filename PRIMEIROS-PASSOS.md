@@ -37,12 +37,16 @@ quando a `core-001` começar a persistir alguma coisa.
 
 ## 4. Sobre a versão de Python
 
-O **alvo de execução é 3.9**, porque é a versão dos hypervisors onde o agente roda.
-Você pode desenvolver num Python mais novo, mas não use sintaxe de 3.10+ — o `ruff` com
-`target-version = "py39"` reclama.
+**O agente é 3.9; o projeto não.** A restrição vem dos hypervisors, e lá só roda o
+agente. O control plane — API, CLI, tudo o mais — roda em 3.11.
 
-Se o `mypy` recusar `python_version = "3.9"` por ser antigo demais, suba só o mypy para
-`"3.10"` no `pyproject.toml` e mantenha o ruff em py39.
+Na prática: `packages/agent` e `packages/core-domain` declaram `target-version = "py39"`
+no próprio `pyproject.toml` e não podem usar sintaxe de 3.10+. O resto segue a raiz, em
+`py311`.
+
+A parte que é fácil esquecer: um pacote restrito não pode importar um que não seja. O
+`tests/invariants/check_alvo_py39.py` falha o build se isso acontecer — senão a fronteira
+seria documentação, não garantia. O porquê está em `docs/adr/0007-alvo-de-python-por-pacote.md`.
 
 ## 5. Spec Kit
 
@@ -96,6 +100,6 @@ rodando local, editando os arquivos remotos.
 | `docs/01-arquitetura-dr.md` | O ciclo, os números validados e as 8 pegadinhas |
 | `docs/02-plataforma.md` | Núcleo vs feature, conexões, eventos |
 | `docs/03-roadmap.md` | Os 6 marcos com critério de saída |
-| `docs/adr/` | Quatro decisões já registradas |
-| `tests/invariants/` | A CI falha se o domínio fizer IO, as fronteiras furarem ou faltar tenant_id |
+| `docs/adr/` | Sete decisões já registradas |
+| `tests/invariants/` | A CI falha se o domínio fizer IO, as fronteiras furarem, faltar tenant_id ou o fecho de 3.9 vazar |
 | `scripts/` | Censo de formatos, medição de taxa de mudança, verificação do scaffold |

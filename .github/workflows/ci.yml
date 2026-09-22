@@ -1,5 +1,9 @@
 name: CI
 
+# A CI chama alvos do Makefile e nao repete os comandos deles.
+# Foi a repeticao que deixou o `psycopg` no `make setup` e fora do YAML:
+# dois lugares definindo como se roda o projeto, e um deles desatualizou.
+
 on:
   push:
     branches: [main]
@@ -15,26 +19,55 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar ferramentas
-        run: pip install ruff mypy pytest pytest-cov
+      - name: Ambiente
+        run: make setup
 
-      - name: Lint
-        run: ruff check packages tests
+      - name: Lint, tipos, testes e invariantes
+        run: make check
 
-      - name: Formatacao
-        run: ruff format --check packages tests
+  banco:
+    runs-on: ubuntu-latest
 
-      - name: Tipos
-        run: mypy packages
+    services:
+      # Os mesmos valores do docker-compose.yml, que e o que roda local.
+      # O GitHub nao le compose, entao aqui repetem — se mudar la, mude aqui.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vzdr
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: vzdr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vzdr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
-      - name: Testes unitarios
-        run: pytest tests/unit
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Invariante — core.domain nao faz IO
-        run: python tests/invariants/check_core_domain_pure.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Invariante — fronteiras entre modulos
-        run: python tests/invariants/check_import_boundaries.py
+      - name: Ambiente
+        run: make setup
 
-      - name: Invariante — tenant_id em toda tabela
-        run: python tests/invariants/check_tenant_id.py
+      - name: Testes com banco
+        run: make test-db
+
+  # O ruff e o checador dizem que a INTENCAO e 3.9. Este job verifica o FATO:
+  # instala 3.9 de verdade e compila o que roda no hypervisor. Ver ADR-0007.
+  alvo-py39:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Compilar com Python 3.9 real
+        run: python -m compileall -q packages/agent packages/core-domain

@@ -2,32 +2,36 @@
 name = "vzdr"
 version = "0.1.0"
 description = "Plataforma de operacao de infraestrutura VHI"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 [tool.ruff]
-# Alvo de EXECUCAO: 3.9, a versao dos hypervisors. Nao use sintaxe 3.10+.
-target-version = "py39"
+# Control plane: roda onde escolhemos, 3.11.
+# A restricao de 3.9 vale so para o que roda no hypervisor — packages/agent e o fecho
+# de dependencias dele. Cada um desses pacotes declara py39 no proprio pyproject, e
+# tests/invariants/check_alvo_py39.py garante que o fecho nao vaza. Ver ADR-0007.
+target-version = "py311"
 line-length = 100
-src = ["packages", "tests"]
+src = ["packages", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG", "PTH"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["vzdr"]
+known-first-party = ["vzdr", "scripts"]
 
 [tool.mypy]
-# Se o mypy reclamar que 3.9 e antigo demais, suba AQUI para "3.10" e mantenha
-# o ruff em py39 — o ruff e quem garante a compatibilidade de sintaxe.
-python_version = "3.10"
+# Global: control plane, 3.11.
+# mypy NAO aceita python_version por modulo — e opcao global. Os pacotes restritos
+# passam por uma segunda invocacao com --python-version 3.9: ver `typecheck` no Makefile.
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = "packages/core-domain/src:packages/core-connections/src:packages/core-jobs/src:packages/core-agents/src:packages/core-inventory/src:packages/core-events/src:packages/core-api/src:packages/tool-dr/src:packages/agent/src:packages/cli/src"
+mypy_path = ".:packages/core-domain/src:packages/core-connections/src:packages/core-jobs/src:packages/core-agents/src:packages/core-inventory/src:packages/core-events/src:packages/core-api/src:packages/tool-dr/src:packages/agent/src:packages/cli/src"
 
 [[tool.mypy.overrides]]
 module = "vzdr.core.domain.*"

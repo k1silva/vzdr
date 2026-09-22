@@ -3,13 +3,24 @@
 
 P do dominio: a logica tem que ser testavel sem hypervisor, sem rede e sem banco.
 """
+
 import ast
 import sys
 from pathlib import Path
 
 PROIBIDOS = {
-    "libvirt", "socket", "requests", "httpx", "urllib", "sqlalchemy",
-    "psycopg", "psycopg2", "asyncpg", "subprocess", "openstack", "boto3",
+    "libvirt",
+    "socket",
+    "requests",
+    "httpx",
+    "urllib",
+    "sqlalchemy",
+    "psycopg",
+    "psycopg2",
+    "asyncpg",
+    "subprocess",
+    "openstack",
+    "boto3",
 }
 
 ROOT = Path(__file__).resolve().parents[2] / "packages" / "core-domain" / "src"

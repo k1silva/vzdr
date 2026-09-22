@@ -16,10 +16,11 @@ Se o código diverge da spec, a spec está errada — atualize-a.
 
 ```bash
 make setup        # venv + dependências de desenvolvimento
-make lint         # ruff check
+make lint         # ruff check + ruff format --check
 make fmt          # ruff format + fix
 make typecheck    # mypy
 make test         # pytest tests/unit — rápido, sem infraestrutura
+make test-db      # pytest tests/db — exige PostgreSQL local (make db-up)
 make test-int     # pytest tests/integration — exige libvirt + qemu reais
 make invariants   # checadores de invariante (pureza, tenant_id, fronteiras)
 make check        # lint + typecheck + test + invariants
@@ -28,15 +29,37 @@ make db-up        # PostgreSQL local
 
 `make check` tem que passar antes de qualquer commit. Sem exceção.
 
+`make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
+infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
+também — a CI roda os dois.
+
+**A CI chama alvos do Makefile e nunca repete os comandos deles.** Um lugar só define
+como se roda o projeto. Ferramenta nova, alvo novo ou dependência nova entram no
+`Makefile`; o workflow continua chamando `make <alvo>`. Foi a repetição que deixou o
+`psycopg` no `make setup` e fora do YAML, e a CI quebrou num passo que localmente
+passava.
+
 ## Versão de Python
 
-O **alvo de execução é 3.9** — é a versão dos hypervisors, onde o agente roda.
-Desenvolva no que quiser, mas não use sintaxe de 3.10+ (`match`, `X | Y` em anotação
-sem `from __future__ import annotations`, etc.). O `ruff` com `target-version = "py39"`
-é quem verifica isso.
+**O agente é 3.9, não o projeto.** A restrição vem dos hypervisors, onde só o agente
+roda. O control plane roda onde escolhemos: 3.11.
 
-Se o `mypy` reclamar de `python_version = "3.9"` por ser antigo demais, suba só o mypy
-para 3.10 e mantenha o ruff em py39 — o ruff é quem garante a compatibilidade de sintaxe.
+| Onde | Alvo | Quem verifica |
+| --- | --- | --- |
+| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote |
+| Todo o resto | 3.11 | `ruff` na raiz |
+
+Nos pacotes restritos, nada de sintaxe 3.10+ (`match`, `X | Y` em anotação sem
+`from __future__ import annotations`).
+
+Um pacote restrito **não pode importar** pacote sem a restrição: quebraria no hypervisor
+em tempo de import, não na CI. `tests/invariants/check_alvo_py39.py` verifica o fecho.
+
+O `mypy` não aceita `python_version` por módulo — é opção global. Por isso o `make
+typecheck` roda duas vezes: a global em 3.11 e uma segunda sobre os dois pacotes
+restritos. Essa segunda usa `--python-version 3.10`, que é o piso que o mypy atual
+aceita — **quem garante a sintaxe de 3.9 é o `ruff`**, como já era a regra. Ver
+`docs/adr/0007-alvo-de-python-por-pacote.md`.
 
 ## Estrutura
 
@@ -48,6 +71,7 @@ packages/cli           CLI, cliente da mesma API que a interface consome
 specs/                 uma pasta por feature: spec.md, plan.md, tasks.md
 docs/adr/              decisões de arquitetura registradas
 tests/unit             sem infraestrutura
+tests/db               exige PostgreSQL local; isolamento de tenant, RLS, migrações
 tests/integration      exige libvirt 9.5 e QEMU 8.2 reais
 tests/invariants       checadores que rodam na CI
 ```
@@ -68,6 +92,10 @@ from vzdr.tools.dr import ...
 - Tipagem obrigatória em assinaturas públicas. `mypy --strict` em `vzdr.core.domain`.
 - `ruff` para estilo e ordenação de imports. `make fmt` antes do commit.
 - Termos de negócio em português (`ciclo`, `janela`, `ponto_de_recuperacao`); o resto em inglês.
+- Classe de exceção termina em `Error` (`TokenInvalidoError`, `BancoRecusadoError`).
+  O termo de negócio continua em português; `Error` é marcador de tipo, não palavra
+  de negócio. É a regra `N818` do ruff, e ela fica ligada: um `ignore` de regra de
+  estilo vira imposto de leitura para quem chegar depois perguntando o porquê.
 - Nenhuma dependência nova sem justificativa na spec ou num ADR.
 
 ## Fronteiras — a CI verifica
@@ -76,7 +104,9 @@ from vzdr.tools.dr import ...
 - Nenhum módulo do núcleo importa de `vzdr.tools.*`. O núcleo não conhece as features.
 - Uma feature não importa de outra feature. Conversam por eventos.
 - O agente não fala com o banco. Fala com a API.
-- `tenant_id` em toda tabela, desde a primeira migração.
+- `tenant_id` em toda tabela que guarda dado de tenant, desde a primeira migração.
+  A lista de exceções é fechada e justificada em `specs/core-001-tenancy/spec.md`;
+  acrescentar exceção é alterar a spec, não editar o checador.
 
 ## O que NUNCA fazer
 
@@ -98,3 +128,15 @@ from vzdr.tools.dr import ...
 
 Uma tarefa, um commit. Se o diff ficou grande demais para ser revisado de uma sentada,
 a tarefa estava mal fatiada — pare e proponha a divisão.
+
+## Branch e PR
+
+- **Nunca commitar direto em `main`.** Um branch por spec, nomeado com o id dela:
+  `core-001-tenancy`, `dr-003-ciclo`.
+- Uma tarefa, um commit, no branch da spec. Mensagem diz o *porquê*, não só o quê.
+- `make check` verde antes de cada commit.
+- O merge em `main` é por PR, com revisão humana do diff. Nenhum agente de IA commita
+  sem que um humano tenha lido o diff, e nenhum faz `git push` para `main`.
+- Mudança de infraestrutura compartilhada — CI, Makefile, checador de invariante — vai
+  em commit próprio, separado da tarefa que a motivou. Quem revisa uma tarefa não deveria
+  ter que revisar o build junto.
