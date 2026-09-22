@@ -1,7 +1,10 @@
-"""Onde o teste com banco descobre a que Postgres falar, e quando se recusar.
+"""A que Postgres falar, e quando se recusar a falar.
 
-Logica pura, sem conectar: o conftest usa, e `tests/unit` testa o comportamento em
-falha sem precisar de banco nenhum.
+Uma regra, um lugar: serve os testes de `tests/db` e o executor de migracao. Quem
+mais precisa dela e o executor, porque e dele que o AGENTS.md fala ao proibir
+migracao fora do ambiente local.
+
+Logica pura, sem conectar — o comportamento em falha e testavel sem banco nenhum.
 """
 
 from __future__ import annotations
@@ -34,9 +37,11 @@ def host_de(dsn: str) -> str | None:
 def verificar_alvo(dsn: str, ambiente: Mapping[str, str]) -> None:
     """Recusa DSN nao-local sem autorizacao explicita.
 
-    Os testes de `tests/db` criam e apagam esquema. AGENTS.md proibe rodar comando
-    contra cluster de producao e migracao fora do ambiente local; um DSN apontando
-    para outra maquina e a forma mais facil de furar isso sem perceber.
+    Os testes de `tests/db` e o executor de migracao criam e apagam esquema.
+    AGENTS.md proibe rodar comando contra cluster de producao e migracao fora do
+    ambiente local; um DSN apontando para outra maquina e a forma mais barata de
+    furar isso sem perceber — nao exige erro de codigo, so uma variavel esquecida
+    no shell.
     """
     host = host_de(dsn)
     if host in HOSTS_LOCAIS:
@@ -44,9 +49,9 @@ def verificar_alvo(dsn: str, ambiente: Mapping[str, str]) -> None:
     if ambiente.get(VARIAVEL_REMOTO) == "1":
         return
     raise BancoRecusadoError(
-        f"{VARIAVEL} aponta para '{host}', que nao e esta maquina. Os testes de "
-        f"tests/db criam e apagam esquema — rodar isso contra outro banco pode "
-        f"destruir dado. Se for mesmo o que voce quer, exporte {VARIAVEL_REMOTO}=1."
+        f"{VARIAVEL} aponta para '{host}', que nao e esta maquina. Isto cria e "
+        f"apaga esquema — rodar contra outro banco pode destruir dado. Se for "
+        f"mesmo o que voce quer, exporte {VARIAVEL_REMOTO}=1."
     )
 
 

@@ -11,14 +11,14 @@ requires-python = ">=3.11"
 # tests/invariants/check_alvo_py39.py garante que o fecho nao vaza. Ver ADR-0007.
 target-version = "py311"
 line-length = 100
-src = ["packages", "tests"]
+src = ["packages", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG", "PTH"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["vzdr"]
+known-first-party = ["vzdr", "scripts"]
 
 [tool.mypy]
 # Global: control plane, 3.11.
@@ -31,7 +31,7 @@ disallow_untyped_defs = true
 ignore_missing_imports = true
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = "packages/core-domain/src:packages/core-connections/src:packages/core-jobs/src:packages/core-agents/src:packages/core-inventory/src:packages/core-events/src:packages/core-api/src:packages/tool-dr/src:packages/agent/src:packages/cli/src"
+mypy_path = ".:packages/core-domain/src:packages/core-connections/src:packages/core-jobs/src:packages/core-agents/src:packages/core-inventory/src:packages/core-events/src:packages/core-api/src:packages/tool-dr/src:packages/agent/src:packages/cli/src"
 
 [[tool.mypy.overrides]]
 module = "vzdr.core.domain.*"

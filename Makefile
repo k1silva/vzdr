@@ -13,14 +13,14 @@ setup:
 	@echo "pronto. ative com: source $(VENV)/bin/activate"
 
 lint:
-	$(BIN)/ruff check packages tests
+	$(BIN)/ruff check packages tests scripts
 
 fmt:
-	$(BIN)/ruff format packages tests
-	$(BIN)/ruff check --fix packages tests
+	$(BIN)/ruff format packages tests scripts
+	$(BIN)/ruff check --fix packages tests scripts
 
 typecheck:
-	$(BIN)/mypy packages
+	$(BIN)/mypy packages scripts
 	# mypy nao aceita python_version por modulo (e opcao global), entao o que roda no
 	# hypervisor passa por uma segunda invocacao. 3.10 e o piso que o mypy aceita —
 	# quem garante a sintaxe de 3.9 e o ruff. Ver ADR-0007.

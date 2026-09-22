@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from tests.db.ambiente import dsn_de, mensagem_sem_banco, verificar_alvo
+from scripts.ambiente_db import dsn_de, mensagem_sem_banco, verificar_alvo
 
 
 @pytest.fixture(scope="session")
@@ -38,3 +38,24 @@ def conexao(dsn: str):
         yield conn
     finally:
         conn.close()
+
+
+@pytest.fixture()
+def esquema_limpo(conexao):
+    """Um schema so para o teste, derrubado no fim.
+
+    Migracao cria e apaga tabela; sem isolamento, um teste enxerga o esquema que
+    o outro deixou e a suite passa a depender da ordem.
+    """
+    import uuid
+
+    conexao.autocommit = True
+    nome = f"teste_{uuid.uuid4().hex[:12]}"
+    with conexao.cursor() as cur:
+        cur.execute(f'create schema "{nome}"')
+        cur.execute(f'set search_path to "{nome}"')
+    try:
+        yield nome
+    finally:
+        with conexao.cursor() as cur:
+            cur.execute(f'drop schema if exists "{nome}" cascade')

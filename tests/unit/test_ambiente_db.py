@@ -6,7 +6,7 @@ que impede rodar a suite contra a maquina errada.
 
 import pytest
 
-from tests.db.ambiente import (
+from scripts.ambiente_db import (
     DSN_LOCAL,
     VARIAVEL,
     VARIAVEL_REMOTO,
