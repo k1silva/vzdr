@@ -80,6 +80,10 @@ from vzdr.tools.dr import ...
 - Tipagem obrigatória em assinaturas públicas. `mypy --strict` em `vzdr.core.domain`.
 - `ruff` para estilo e ordenação de imports. `make fmt` antes do commit.
 - Termos de negócio em português (`ciclo`, `janela`, `ponto_de_recuperacao`); o resto em inglês.
+- Classe de exceção termina em `Error` (`TokenInvalidoError`, `BancoRecusadoError`).
+  O termo de negócio continua em português; `Error` é marcador de tipo, não palavra
+  de negócio. É a regra `N818` do ruff, e ela fica ligada: um `ignore` de regra de
+  estilo vira imposto de leitura para quem chegar depois perguntando o porquê.
 - Nenhuma dependência nova sem justificativa na spec ou num ADR.
 
 ## Fronteiras — a CI verifica
@@ -88,7 +92,9 @@ from vzdr.tools.dr import ...
 - Nenhum módulo do núcleo importa de `vzdr.tools.*`. O núcleo não conhece as features.
 - Uma feature não importa de outra feature. Conversam por eventos.
 - O agente não fala com o banco. Fala com a API.
-- `tenant_id` em toda tabela, desde a primeira migração.
+- `tenant_id` em toda tabela que guarda dado de tenant, desde a primeira migração.
+  A lista de exceções é fechada e justificada em `specs/core-001-tenancy/spec.md`;
+  acrescentar exceção é alterar a spec, não editar o checador.
 
 ## O que NUNCA fazer
 
