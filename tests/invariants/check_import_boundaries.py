@@ -3,6 +3,7 @@
 
 P11: features nao conhecem umas as outras; o nucleo nao conhece as features.
 """
+
 import ast
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ def modulo_de(arquivo: Path) -> str:
     if "src" not in partes:
         return ""
     i = partes.index("src")
-    return ".".join(partes[i + 1:]).removesuffix(".py").removesuffix(".__init__")
+    return ".".join(partes[i + 1 :]).removesuffix(".py").removesuffix(".__init__")
 
 
 def imports_de(arquivo: Path):

@@ -3,6 +3,7 @@
 
 P9: tenant_id em toda tabela, desde a primeira migracao.
 """
+
 import re
 import sys
 from pathlib import Path
