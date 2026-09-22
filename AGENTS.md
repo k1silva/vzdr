@@ -16,7 +16,7 @@ Se o código diverge da spec, a spec está errada — atualize-a.
 
 ```bash
 make setup        # venv + dependências de desenvolvimento
-make lint         # ruff check
+make lint         # ruff check + ruff format --check
 make fmt          # ruff format + fix
 make typecheck    # mypy
 make test         # pytest tests/unit — rápido, sem infraestrutura
@@ -32,6 +32,12 @@ make db-up        # PostgreSQL local
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
 também — a CI roda os dois.
+
+**A CI chama alvos do Makefile e nunca repete os comandos deles.** Um lugar só define
+como se roda o projeto. Ferramenta nova, alvo novo ou dependência nova entram no
+`Makefile`; o workflow continua chamando `make <alvo>`. Foi a repetição que deixou o
+`psycopg` no `make setup` e fora do YAML, e a CI quebrou num passo que localmente
+passava.
 
 ## Versão de Python
 
@@ -122,3 +128,15 @@ from vzdr.tools.dr import ...
 
 Uma tarefa, um commit. Se o diff ficou grande demais para ser revisado de uma sentada,
 a tarefa estava mal fatiada — pare e proponha a divisão.
+
+## Branch e PR
+
+- **Nunca commitar direto em `main`.** Um branch por spec, nomeado com o id dela:
+  `core-001-tenancy`, `dr-003-ciclo`.
+- Uma tarefa, um commit, no branch da spec. Mensagem diz o *porquê*, não só o quê.
+- `make check` verde antes de cada commit.
+- O merge em `main` é por PR, com revisão humana do diff. Nenhum agente de IA commita
+  sem que um humano tenha lido o diff, e nenhum faz `git push` para `main`.
+- Mudança de infraestrutura compartilhada — CI, Makefile, checador de invariante — vai
+  em commit próprio, separado da tarefa que a motivou. Quem revisa uma tarefa não deveria
+  ter que revisar o build junto.

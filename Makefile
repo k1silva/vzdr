@@ -14,6 +14,7 @@ setup:
 
 lint:
 	$(BIN)/ruff check packages tests scripts
+	$(BIN)/ruff format --check packages tests scripts
 
 fmt:
 	$(BIN)/ruff format packages tests scripts
