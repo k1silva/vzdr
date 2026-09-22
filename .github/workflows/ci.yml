@@ -27,6 +27,9 @@ jobs:
       - name: Tipos
         run: mypy packages
 
+      - name: Tipos — o que roda no hypervisor
+        run: mypy --python-version 3.10 packages/agent packages/core-domain
+
       - name: Testes unitarios
         run: pytest tests/unit
 
@@ -38,3 +41,20 @@ jobs:
 
       - name: Invariante — tenant_id em toda tabela
         run: python tests/invariants/check_tenant_id.py
+
+      - name: Invariante — fecho de 3.9 do agente
+        run: python tests/invariants/check_alvo_py39.py
+
+  # O ruff e o checador dizem que a INTENCAO e 3.9. Este job verifica o FATO:
+  # instala 3.9 de verdade e compila o que roda no hypervisor. Ver ADR-0007.
+  alvo-py39:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Compilar com Python 3.9 real
+        run: python -m compileall -q packages/agent packages/core-domain

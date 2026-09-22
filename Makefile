@@ -19,6 +19,10 @@ fmt:
 
 typecheck:
 	$(BIN)/mypy packages
+	# mypy nao aceita python_version por modulo (e opcao global), entao o que roda no
+	# hypervisor passa por uma segunda invocacao. 3.10 e o piso que o mypy aceita —
+	# quem garante a sintaxe de 3.9 e o ruff. Ver ADR-0007.
+	$(BIN)/mypy --python-version 3.10 packages/agent packages/core-domain
 
 test:
 	$(BIN)/pytest tests/unit
@@ -30,6 +34,7 @@ invariants:
 	$(BIN)/python tests/invariants/check_core_domain_pure.py
 	$(BIN)/python tests/invariants/check_import_boundaries.py
 	$(BIN)/python tests/invariants/check_tenant_id.py
+	$(BIN)/python tests/invariants/check_alvo_py39.py
 
 check: lint typecheck test invariants
 	@echo "tudo verde"

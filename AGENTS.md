@@ -30,13 +30,25 @@ make db-up        # PostgreSQL local
 
 ## Versão de Python
 
-O **alvo de execução é 3.9** — é a versão dos hypervisors, onde o agente roda.
-Desenvolva no que quiser, mas não use sintaxe de 3.10+ (`match`, `X | Y` em anotação
-sem `from __future__ import annotations`, etc.). O `ruff` com `target-version = "py39"`
-é quem verifica isso.
+**O agente é 3.9, não o projeto.** A restrição vem dos hypervisors, onde só o agente
+roda. O control plane roda onde escolhemos: 3.11.
 
-Se o `mypy` reclamar de `python_version = "3.9"` por ser antigo demais, suba só o mypy
-para 3.10 e mantenha o ruff em py39 — o ruff é quem garante a compatibilidade de sintaxe.
+| Onde | Alvo | Quem verifica |
+| --- | --- | --- |
+| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote |
+| Todo o resto | 3.11 | `ruff` na raiz |
+
+Nos pacotes restritos, nada de sintaxe 3.10+ (`match`, `X | Y` em anotação sem
+`from __future__ import annotations`).
+
+Um pacote restrito **não pode importar** pacote sem a restrição: quebraria no hypervisor
+em tempo de import, não na CI. `tests/invariants/check_alvo_py39.py` verifica o fecho.
+
+O `mypy` não aceita `python_version` por módulo — é opção global. Por isso o `make
+typecheck` roda duas vezes: a global em 3.11 e uma segunda sobre os dois pacotes
+restritos. Essa segunda usa `--python-version 3.10`, que é o piso que o mypy atual
+aceita — **quem garante a sintaxe de 3.9 é o `ruff`**, como já era a regra. Ver
+`docs/adr/0007-alvo-de-python-por-pacote.md`.
 
 ## Estrutura
 
