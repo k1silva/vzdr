@@ -41,6 +41,7 @@ strict = true
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = [
+    "db: exige PostgreSQL local (make db-up)",
     "integration: exige libvirt e qemu reais",
     "e2e: exige dois clusters de laboratorio",
 ]

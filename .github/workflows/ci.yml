@@ -33,6 +33,12 @@ jobs:
       - name: Testes unitarios
         run: pytest tests/unit
 
+      - name: Subir PostgreSQL
+        run: docker compose up -d postgres
+
+      - name: Testes com banco
+        run: pytest tests/db -m db
+
       - name: Invariante — core.domain nao faz IO
         run: python tests/invariants/check_core_domain_pure.py
 

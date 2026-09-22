@@ -20,6 +20,7 @@ make lint         # ruff check
 make fmt          # ruff format + fix
 make typecheck    # mypy
 make test         # pytest tests/unit — rápido, sem infraestrutura
+make test-db      # pytest tests/db — exige PostgreSQL local (make db-up)
 make test-int     # pytest tests/integration — exige libvirt + qemu reais
 make invariants   # checadores de invariante (pureza, tenant_id, fronteiras)
 make check        # lint + typecheck + test + invariants
@@ -27,6 +28,10 @@ make db-up        # PostgreSQL local
 ```
 
 `make check` tem que passar antes de qualquer commit. Sem exceção.
+
+`make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
+infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
+também — a CI roda os dois.
 
 ## Versão de Python
 
@@ -60,6 +65,7 @@ packages/cli           CLI, cliente da mesma API que a interface consome
 specs/                 uma pasta por feature: spec.md, plan.md, tasks.md
 docs/adr/              decisões de arquitetura registradas
 tests/unit             sem infraestrutura
+tests/db               exige PostgreSQL local; isolamento de tenant, RLS, migrações
 tests/integration      exige libvirt 9.5 e QEMU 8.2 reais
 tests/invariants       checadores que rodam na CI
 ```

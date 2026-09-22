@@ -1,4 +1,4 @@
-.PHONY: setup lint fmt typecheck test test-int invariants check db-up db-down clean
+.PHONY: setup lint fmt typecheck test test-db test-int invariants check db-up db-down clean
 
 VENV := .venv
 PIP := $(VENV)/bin/pip
@@ -8,6 +8,8 @@ setup:
 	python3 -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install ruff mypy pytest pytest-cov
+	# driver do Postgres: justificado em specs/core-001-tenancy/plan.md
+	$(PIP) install 'psycopg[binary]'
 	@echo "pronto. ative com: source $(VENV)/bin/activate"
 
 lint:
@@ -26,6 +28,9 @@ typecheck:
 
 test:
 	$(BIN)/pytest tests/unit
+
+test-db:
+	$(BIN)/pytest tests/db -m db
 
 test-int:
 	$(BIN)/pytest tests/integration -m integration
