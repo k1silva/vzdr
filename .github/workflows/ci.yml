@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar ferramentas
+        run: pip install ruff mypy pytest pytest-cov
+
+      - name: Lint
+        run: ruff check packages tests
+
+      - name: Formatacao
+        run: ruff format --check packages tests
+
+      - name: Tipos
+        run: mypy packages
+
+      - name: Testes unitarios
+        run: pytest tests/unit
+
+      - name: Invariante — core.domain nao faz IO
+        run: python tests/invariants/check_core_domain_pure.py
+
+      - name: Invariante — fronteiras entre modulos
+        run: python tests/invariants/check_import_boundaries.py
+
+      - name: Invariante — tenant_id em toda tabela
+        run: python tests/invariants/check_tenant_id.py

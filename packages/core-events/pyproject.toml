@@ -1,0 +1,12 @@
+[project]
+name = "core-events"
+version = "0.1.0"
+description = "Barramento de eventos e webhooks de saida."
+requires-python = ">=3.9"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
