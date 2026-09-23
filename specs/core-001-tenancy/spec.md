@@ -70,7 +70,8 @@ Existe fora do eixo de tenant. Não é um tenant especial e não é superusuári
 | --- | --- |
 | Criar e gerir tenants | Ler dado de tenant |
 | Criar usuários e conceder papéis | Escrever dado de tenant |
-| Ver saúde do sistema | Conceder papel a si mesmo sem que o ato apareça na auditoria |
+| Ver saúde da infraestrutura | Ver saúde da proteção de um tenant |
+| | Conceder papel a si mesmo sem que o ato apareça na auditoria |
 
 Para ler dado de um tenant, alguém concede a ele um papel dentro daquele tenant. A
 concessão é um ato auditado, e é o que torna o acesso visível em vez de implícito.
@@ -84,6 +85,28 @@ o log inteiro.
 
 Os nomes seguem a convenção `dominio.acao`, no passado e em snake_case — ver
 `docs/adr/0005-convencao-de-eventos.md`.
+
+### Saúde são duas coisas, em eixos diferentes
+
+Não existe uma ação "ver saúde". Existem duas, e confundi-las vaza tenant.
+
+| Ação | Eixo | O que mostra |
+| --- | --- | --- |
+| `ver_saude_tenant` | Tenant | A proteção **daquele** tenant: RPO sendo cumprido, último ciclo, último ponto de recuperação, VMs protegidas |
+| `ver_saude_plataforma` | Plataforma | A infraestrutura: relés, pool de receptoras, filas, agentes, todos os tenants somados |
+
+A primeira é produto, não extra: o cliente precisa saber se a proteção dele está de pé,
+e é a resposta que a interface dá na tela inicial. Todo papel de tenant a tem, `viewer`
+inclusive — ler o próprio estado é o mínimo de `viewer`.
+
+A segunda o tenant **não** pode, nem o `admin` dele. Ela agrega os tenants e expõe fila,
+capacidade e contagem — ou seja, a existência de outros clientes. Um cliente descobrir
+quantos outros existem, ou que a fila está cheia por causa deles, é vazamento de tenant
+mesmo sem nenhuma linha de dado alheio aparecer.
+
+O papel de plataforma tem a segunda e **não** tem a primeira: para ver a proteção de um
+tenant, ele precisa de um papel concedido dentro daquele tenant, como qualquer leitura de
+dado de tenant.
 
 ### O que fica fora do eixo de tenant
 
@@ -115,7 +138,7 @@ acrescentar exceção só no checador não passa na CI.
 
 | Papel | Pode |
 | --- | --- |
-| `viewer` | Ler tudo do seu tenant |
+| `viewer` | Ler tudo do seu tenant, incluindo a saúde da proteção dele |
 | `operator` | Configurar proteção, rodar test-failover |
 | `admin` | Tudo do operator, mais disparar failover e gerir usuários |
 
