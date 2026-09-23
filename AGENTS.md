@@ -131,12 +131,19 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
 
 ## Branch e PR
 
-- **Nunca commitar direto em `main`.** Um branch por spec, nomeado com o id dela:
-  `core-001-tenancy`, `dr-003-ciclo`.
-- Uma tarefa, um commit, no branch da spec. Mensagem diz o *porquê*, não só o quê.
+- **Nunca commitar direto em `main`.** Um branch por **fatia revisável**, não por spec
+  inteira: `core-001-dominio`, `core-001-sessao`, `dr-003-checkpoint`. Uma spec de 14
+  tarefas vira um PR que ninguém revisa e mantém `main` vermelho por semanas.
+- A fatia é o maior conjunto de tarefas que alguém revisa de uma sentada e que deixa
+  `main` coerente ao ser mesclado. Na dúvida, menor.
+- Uma tarefa, um commit, no branch da fatia. Mensagem diz o *porquê*, não só o quê.
 - `make check` verde antes de cada commit.
 - O merge em `main` é por PR, com revisão humana do diff. Nenhum agente de IA commita
   sem que um humano tenha lido o diff, e nenhum faz `git push` para `main`.
 - Mudança de infraestrutura compartilhada — CI, Makefile, checador de invariante — vai
   em commit próprio, separado da tarefa que a motivou. Quem revisa uma tarefa não deveria
   ter que revisar o build junto.
+- **Mudança em workflow só está pronta quando uma execução nova aparecer verde.** Não
+  basta o YAML parecer certo: ausência de check é indistinguível de sucesso em quase toda
+  interface — um job que deixou de existir, um nome que mudou ou um gatilho que não casa
+  aparecem como "nada falhou". Confira que o job rodou, não só que não reprovou.

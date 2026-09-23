@@ -44,6 +44,18 @@ caminho de falha.
   - Arquivos: `packages/core-domain/src/vzdr/core/domain/tenancy.py`,
     `tests/unit/test_pode.py`
 
+- [ ] **TI1** — Instalação editável dos pacotes no `make setup`
+  - Tarefa de infraestrutura, não da spec. Fazer **logo depois** que a fatia T4+T5
+    fechar, e antes de um terceiro pacote entrar.
+  - Hoje há duas listas dos mesmos dez caminhos: `mypy_path` e `pythonpath`. É a mesma
+    duplicação que quebrou a CI com o `psycopg` — dois lugares dizendo onde o projeto
+    vive, e um deles vai desatualizar.
+  - `make setup` instala cada `packages/*` em modo editável; `mypy_path` e `pythonpath`
+    saem do `pyproject.toml`.
+  - Testes: `pytest` e `mypy` acham `vzdr.*` sem as duas listas; pacote novo funciona
+    sem editar configuração nenhuma
+  - Arquivos: `Makefile`, `pyproject.toml`, `packages/*/pyproject.toml`
+
 - [ ] **T5** — ADR-0006: isolamento de tenant com RLS
   - Decisão, alternativa (só repositório injetando filtro), e o custo real: `SET LOCAL` por
     transação, papel de banco sem `BYPASSRLS`, `FORCE ROW LEVEL SECURITY`.
@@ -166,6 +178,8 @@ Dependências que importam, além da sequência:
 - **T5 antes de T6**: o ADR decide o que a migração implementa.
 - **T8 antes de T12, T13**: bootstrap e concessão escrevem na auditoria.
 - **T4 e T9 não tocam banco**: podem sair de ordem se alguém precisar paralelizar.
+- **TI1 depois de T5, antes de T6**: a T6 é a primeira tarefa que traz pacote novo com
+  código, e é quando a duplicação passa a custar.
 
 T1 a T3 são infraestrutura; se você quiser valor visível antes, T4 entrega a matriz de
 permissão testável sem banco nenhum, mas a primeira migração fica sem rede de proteção.
