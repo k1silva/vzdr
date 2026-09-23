@@ -63,8 +63,11 @@ class Acao(str, enum.Enum):
     RODAR_TEST_FAILOVER = "rodar_test_failover"
     DISPARAR_FAILOVER = "disparar_failover"
     GERIR_USUARIOS = "gerir_usuarios"
+    # Saude sao duas, em eixos diferentes: a protecao de um tenant e a
+    # infraestrutura inteira. Ver specs/core-001-tenancy/spec.md.
+    VER_SAUDE_TENANT = "ver_saude_tenant"
     GERIR_TENANTS = "gerir_tenants"
-    VER_SAUDE = "ver_saude"
+    VER_SAUDE_PLATAFORMA = "ver_saude_plataforma"
 
 
 #: Acontecem dentro de um tenant e exigem papel naquele tenant.
@@ -75,21 +78,25 @@ ACOES_DE_TENANT = frozenset(
         Acao.RODAR_TEST_FAILOVER,
         Acao.DISPARAR_FAILOVER,
         Acao.GERIR_USUARIOS,
+        Acao.VER_SAUDE_TENANT,
     }
 )
 
 #: Nao acontecem dentro de tenant nenhum. So o papel de plataforma as faz.
-ACOES_DE_PLATAFORMA = frozenset({Acao.GERIR_TENANTS, Acao.VER_SAUDE})
+ACOES_DE_PLATAFORMA = frozenset({Acao.GERIR_TENANTS, Acao.VER_SAUDE_PLATAFORMA})
 
 #: Exigem confirmacao humana explicita e papel `admin` (P6), mesmo quando o
 #: pedido chega por token de servico — inclusive de um assistente de IA.
 ACOES_DESTRUTIVAS = frozenset({Acao.DISPARAR_FAILOVER})
 
 _PERMISSOES: Mapping[Papel, frozenset[Acao]] = {
-    Papel.VIEWER: frozenset({Acao.LER}),
+    # Ver a saude da propria protecao e o minimo de viewer: e o que a tela
+    # inicial responde, e e produto, nao extra.
+    Papel.VIEWER: frozenset({Acao.LER, Acao.VER_SAUDE_TENANT}),
     Papel.OPERATOR: frozenset(
         {
             Acao.LER,
+            Acao.VER_SAUDE_TENANT,
             Acao.CONFIGURAR_PROTECAO,
             Acao.RODAR_TEST_FAILOVER,
         }
@@ -175,7 +182,8 @@ def pode(principal: Principal, acao: Acao) -> bool:
     if principal.plataforma:
         return acao in ACOES_DE_PLATAFORMA
     if acao in ACOES_DE_PLATAFORMA:
-        # Papel de tenant nao gere tenants nem ve a saude do sistema.
+        # Papel de tenant nao gere tenants nem ve a saude da infraestrutura:
+        # ela agrega os tenants e expoe a existencia de outros clientes.
         return False
     if principal.papel is None:  # pragma: no cover - barrado no __post_init__
         return False

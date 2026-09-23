@@ -30,29 +30,33 @@ MATRIZ = {
     (Papel.VIEWER, Acao.RODAR_TEST_FAILOVER): False,
     (Papel.VIEWER, Acao.DISPARAR_FAILOVER): False,
     (Papel.VIEWER, Acao.GERIR_USUARIOS): False,
+    (Papel.VIEWER, Acao.VER_SAUDE_TENANT): True,
     (Papel.VIEWER, Acao.GERIR_TENANTS): False,
-    (Papel.VIEWER, Acao.VER_SAUDE): False,
+    (Papel.VIEWER, Acao.VER_SAUDE_PLATAFORMA): False,
     (Papel.OPERATOR, Acao.LER): True,
     (Papel.OPERATOR, Acao.CONFIGURAR_PROTECAO): True,
     (Papel.OPERATOR, Acao.RODAR_TEST_FAILOVER): True,
     (Papel.OPERATOR, Acao.DISPARAR_FAILOVER): False,
     (Papel.OPERATOR, Acao.GERIR_USUARIOS): False,
+    (Papel.OPERATOR, Acao.VER_SAUDE_TENANT): True,
     (Papel.OPERATOR, Acao.GERIR_TENANTS): False,
-    (Papel.OPERATOR, Acao.VER_SAUDE): False,
+    (Papel.OPERATOR, Acao.VER_SAUDE_PLATAFORMA): False,
     (Papel.ADMIN, Acao.LER): True,
     (Papel.ADMIN, Acao.CONFIGURAR_PROTECAO): True,
     (Papel.ADMIN, Acao.RODAR_TEST_FAILOVER): True,
     (Papel.ADMIN, Acao.DISPARAR_FAILOVER): True,
     (Papel.ADMIN, Acao.GERIR_USUARIOS): True,
+    (Papel.ADMIN, Acao.VER_SAUDE_TENANT): True,
     (Papel.ADMIN, Acao.GERIR_TENANTS): False,
-    (Papel.ADMIN, Acao.VER_SAUDE): False,
+    (Papel.ADMIN, Acao.VER_SAUDE_PLATAFORMA): False,
     (PLATAFORMA, Acao.LER): False,
     (PLATAFORMA, Acao.CONFIGURAR_PROTECAO): False,
     (PLATAFORMA, Acao.RODAR_TEST_FAILOVER): False,
     (PLATAFORMA, Acao.DISPARAR_FAILOVER): False,
     (PLATAFORMA, Acao.GERIR_USUARIOS): False,
+    (PLATAFORMA, Acao.VER_SAUDE_TENANT): False,
     (PLATAFORMA, Acao.GERIR_TENANTS): True,
-    (PLATAFORMA, Acao.VER_SAUDE): True,
+    (PLATAFORMA, Acao.VER_SAUDE_PLATAFORMA): True,
 }
 
 
@@ -92,6 +96,26 @@ def test_servico_tem_exatamente_o_que_o_dono_tem(papel):
     servico = Principal.de_servico(dono, uuid4(), tenant, papel)
     for acao in Acao:
         assert pode(servico, acao) is pode(usuario, acao)
+
+
+@pytest.mark.parametrize("papel", sorted(Papel, key=repr))
+def test_todo_papel_de_tenant_ve_a_saude_da_propria_protecao(papel):
+    """E produto, nao extra: e o que a tela inicial responde."""
+    assert pode(principal_de(papel), Acao.VER_SAUDE_TENANT) is True
+
+
+@pytest.mark.parametrize("papel", sorted(Papel, key=repr))
+def test_nenhum_papel_de_tenant_ve_a_saude_da_infraestrutura(papel):
+    """Agregar tenants expoe a existencia de outros clientes — vazamento sem
+    que nenhuma linha de dado alheio apareca."""
+    assert pode(principal_de(papel), Acao.VER_SAUDE_PLATAFORMA) is False
+
+
+def test_plataforma_nao_ve_a_protecao_de_um_tenant():
+    """Para isso precisa de papel concedido dentro daquele tenant."""
+    p = Principal.de_plataforma(uuid4())
+    assert pode(p, Acao.VER_SAUDE_TENANT) is False
+    assert pode(p, Acao.VER_SAUDE_PLATAFORMA) is True
 
 
 def test_so_disparar_failover_e_destrutiva():
