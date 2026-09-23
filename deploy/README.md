@@ -28,7 +28,23 @@ migração nova que ordena antes de uma já aplicada **falham** em vez de seguir
 
 Migração nunca roda automaticamente em produção, e nunca é executada por agente de IA.
 
-## Túnel
+## Transporte
 
-WireGuard ponto a ponto entre os datacenters. O tráfego de replicação não divide interface
-nem VLAN com o tráfego de serviço das VMs.
+O padrão é **`push`**: o QEMU do hypervisor de origem disca para um `IP:porta` no destino
+e escreve por NBD sobre **TLS mútuo**. Não há túnel. O cliente não publica porta de
+entrada — precisa só de saída NAT — e o único IP público é o do destino, sob controle do
+provedor.
+
+Autenticação é o TLS do NBD em si, em todos os modos: `verify-peer=on` nas duas pontas e
+`authz-simple` restringindo o CN do cliente. Regra de firewall por `/32` é segunda camada,
+não a primeira.
+
+**WireGuard não roda no hypervisor.** Ele existe apenas no modo `rendezvous-wg`, em VM de
+borda com rota estática — nunca alterando rota nem carregando módulo de kernel num host de
+cluster suportado pelo fornecedor.
+
+Os cinco modos, quando cada um se aplica e por que o `push` é o padrão estão em
+[ADR-0008](../docs/adr/0008-modos-de-transporte.md). O relé dos modos que o usam é
+componente separado da control plane: [ADR-0009](../docs/adr/0009-separacao-rele-control-plane.md).
+
+O tráfego de replicação não divide interface nem VLAN com o tráfego de serviço das VMs.

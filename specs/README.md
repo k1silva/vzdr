@@ -17,7 +17,7 @@ Núcleo e feature intercalados: cada capacidade do núcleo nasce quando o DR pre
 | dr-004 | Quiesce com watchdog | freeze/thaw garantido, nível de consistência registrado | dr-003 | M2 |
 | dr-005 | Reconciliação e resync | Detecção de divergência, decisão de resync | dr-003 | M2 |
 | core-004 | Frota de agentes | Registro, versão, saúde, comando | core-002 | M2 |
-| dr-006 | Receptor: volumes e export | Provisiona volume Cinder, anexa, expõe NBD | dr-001, core-002 | M3 |
+| dr-006 | Provisionamento: proteger uma VM é um clique | Volume espelho, anexação, export, seed e entrada no ciclo — o fluxo inteiro, não só a mecânica do destino | dr-001, dr-002, core-002 | M3 |
 | dr-007 | Pontos de recuperação e retenção | Snapshot Cinder por VM, política, expurgo | dr-006 | M3 |
 | dr-008 | Transporte TLS | Credenciais, nó destino, throttle | dr-003, dr-006 | M3 |
 | core-005 | Inventário | VMs, volumes, redes, hosts; sincronização e drift | core-002 | M4 |
