@@ -26,15 +26,25 @@ incidente. Três válvulas de escape são requisito:
 
 ## Regra de ouro
 
-**O plano de controle roda fora dos dois clusters; o plano de dados viaja direto do
-hypervisor de origem para a receptora de destino, dentro de um túnel privado.**
+**O plano de controle roda fora dos dois clusters; o plano de dados viaja, por padrão,
+direto do hypervisor de origem para a receptora de destino.**
 
 | Plano | O que trafega | Por onde |
 | --- | --- | --- |
 | Controle | Comandos, catálogo, estado, métricas | HTTPS para as APIs dos clusters |
-| Dados | Blocos alterados | NBD sobre TLS, direto DC-1 → DC-2 |
+| Dados | Blocos alterados | NBD sobre TLS mútuo, direto DC-1 → DC-2 (modo `push`) |
 
-Fazer os blocos passarem pela aplicação externa destruiria o RTO e dobraria a banda.
+Fazer os blocos passarem pela **aplicação** destruiria o RTO e dobraria a banda: ela
+terminaria o protocolo e reprocessaria o dado, e estaria no caminho do failover.
+
+**As exceções são nomeadas, não implícitas.** Quando o cliente não libera saída direta,
+`jump-ssh` e `rendezvous-wg` encaminham os bytes por um relé. Esse relé é outra coisa: ele
+encaminha ciphertext sem interpretá-lo e está fora do caminho da recuperação — quando o
+desastre acontece, o espelho e os pontos de recuperação já estão no DC-2, e o relé podia
+estar desligado há uma hora. É caminho de replicação, não de recuperação.
+
+Os modos estão em [ADR-0008](adr/0008-modos-de-transporte.md); a separação entre relé e
+control plane, em [ADR-0009](adr/0009-separacao-rele-control-plane.md).
 
 ## Divisão núcleo / feature
 
