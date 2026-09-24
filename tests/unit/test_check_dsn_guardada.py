@@ -49,3 +49,19 @@ def test_arvore_sem_as_pastas_nao_quebra(tmp_path):
 def test_o_repositorio_de_verdade_esta_conforme():
     """O que o checador afirma, afirmado sobre este repositório."""
     assert verificar(RAIZ) == []
+
+
+def test_acesso_dinamico_escapa_e_isso_esta_documentado(tmp_path):
+    """Limite conhecido: `ast` não segue getattr. O checador barra distração,
+    não quem está decidido a contornar — e o docstring dele diz isso."""
+    raiz = montar(
+        tmp_path,
+        {"scripts/x.py": "import psycopg\ngetattr(psycopg, 'connect')('...')\n"},
+    )
+    assert verificar(raiz) == []
+
+
+def test_qualquer_metodo_connect_reprova(tmp_path):
+    """Casa por nome, então é falso positivo em potencial. Documentado."""
+    raiz = montar(tmp_path, {"scripts/x.py": "qualquer.connect('...')\n"})
+    assert len(verificar(raiz)) == 1
