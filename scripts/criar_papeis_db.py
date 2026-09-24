@@ -47,7 +47,12 @@ class SenhaAusenteError(Exception):
 # `nobypassrls` e o ponto: um papel que ignora RLS transformaria a politica em
 # decoracao, e o teste de isolamento passaria sem provar nada (ADR-0006).
 AJUSTAR = f"alter role {PAPEL} with login nobypassrls"
-CRIAR = f"create role {PAPEL} with login password %s nobypassrls"
+
+# `create role` e comando utilitario: nao aceita parametro vinculado, entao a
+# senha entra composta com psycopg.sql.Literal, que escapa. Isto so falha na
+# primeira execucao num banco sem o papel — foi a CI que pegou, porque
+# localmente o papel ja existia.
+CRIAR = "create role {papel} with login password {senha} nobypassrls"
 
 
 def senha_para_criar(senha: str | None) -> str:
@@ -68,7 +73,13 @@ def main() -> int:
         return 2
 
     try:
-        with psycopg.connect(dsn, autocommit=True) as conexao, conexao.cursor() as cur:
+        conexao = psycopg.connect(dsn, autocommit=True)
+    except psycopg.Error as erro:
+        print(mensagem_sem_banco(dsn, erro), file=sys.stderr)
+        return 1
+
+    try:
+        with conexao.cursor() as cur:
             cur.execute(EXISTE, (PAPEL,))
             if cur.fetchone() is not None:
                 cur.execute(AJUSTAR)
@@ -80,10 +91,20 @@ def main() -> int:
             except SenhaAusenteError as erro:
                 print(f"criar_papeis_db: {erro}", file=sys.stderr)
                 return 2
-            cur.execute(CRIAR, (senha,))
+
+            cur.execute(
+                psycopg.sql.SQL(CRIAR).format(
+                    papel=psycopg.sql.Identifier(PAPEL),
+                    senha=psycopg.sql.Literal(senha),
+                )
+            )
     except psycopg.Error as erro:
-        print(mensagem_sem_banco(dsn, erro), file=sys.stderr)
+        # Nao e "sem banco": conectamos. E falha ao mexer no papel, e o erro
+        # cru do Postgres vai inteiro (P8).
+        print(f"criar_papeis_db: falhou ao criar ou ajustar {PAPEL}.\n  {erro!r}", file=sys.stderr)
         return 1
+    finally:
+        conexao.close()
 
     print(f"papel {PAPEL} criado")
     return 0
