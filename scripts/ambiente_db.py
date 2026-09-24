@@ -13,10 +13,16 @@ from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 VARIAVEL = "VZDR_DATABASE_URL"
+VARIAVEL_APP = "VZDR_DATABASE_URL_APP"
 VARIAVEL_REMOTO = "VZDR_PERMITIR_BANCO_REMOTO"
 
 # O mesmo que o docker-compose.yml sobe com `make db-up`.
 DSN_LOCAL = "postgresql://vzdr:dev@localhost:5432/vzdr"
+
+# O papel da aplicacao: nao e dono das tabelas e nao tem BYPASSRLS. E com ele
+# que os testes de isolamento falam com o banco — rodar como dono provaria
+# nada, porque dono ignora politica de RLS (ADR-0006).
+DSN_LOCAL_APP = "postgresql://vzdr_app:dev@localhost:5432/vzdr"
 
 HOSTS_LOCAIS = frozenset({"localhost", "127.0.0.1", "::1", "", None})
 
@@ -28,6 +34,11 @@ class BancoRecusadoError(Exception):
 def dsn_de(ambiente: Mapping[str, str]) -> str:
     """O DSN do ambiente, ou o local do docker-compose."""
     return ambiente.get(VARIAVEL) or DSN_LOCAL
+
+
+def dsn_app_de(ambiente: Mapping[str, str]) -> str:
+    """O DSN do papel da aplicacao."""
+    return ambiente.get(VARIAVEL_APP) or DSN_LOCAL_APP
 
 
 def host_de(dsn: str) -> str | None:

@@ -11,7 +11,12 @@ import os
 
 import pytest
 
-from scripts.ambiente_db import dsn_de, mensagem_sem_banco, verificar_alvo
+from scripts.ambiente_db import (
+    dsn_app_de,
+    dsn_de,
+    mensagem_sem_banco,
+    verificar_alvo,
+)
 
 
 @pytest.fixture(scope="session")
@@ -59,3 +64,42 @@ def esquema_limpo(conexao):
     finally:
         with conexao.cursor() as cur:
             cur.execute(f'drop schema if exists "{nome}" cascade')
+
+
+@pytest.fixture(scope="session")
+def dsn_app() -> str:
+    alvo = dsn_app_de(os.environ)
+    verificar_alvo(alvo, os.environ)
+    return alvo
+
+
+@pytest.fixture()
+def conexao_app(dsn_app: str, esquema_limpo: str):
+    """Conexao com o papel da aplicacao, no mesmo schema do teste.
+
+    Nao e dono das tabelas e nao tem BYPASSRLS. Todo teste de privilegio ou de
+    isolamento fala por aqui; `conexao` e o dono, e dono nao prova isolamento.
+    """
+    import psycopg
+
+    try:
+        conn = psycopg.connect(dsn_app)
+    except Exception as erro:
+        pytest.fail(mensagem_sem_banco(dsn_app, erro))
+
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f'set search_path to "{esquema_limpo}"')
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
+def esquema_migrado(conexao, esquema_limpo: str) -> str:
+    """Schema temporario com a migracao 0001 aplicada."""
+    from scripts.migrar import PASTA, migrar
+
+    migrar(conexao, PASTA)
+    return esquema_limpo

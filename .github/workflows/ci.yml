@@ -45,6 +45,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+    # Senha de laboratorio, a mesma do docker-compose.yml. Nao ha padrao no
+    # codigo: `make test-db` cria o papel da aplicacao e precisa dela aqui,
+    # porque o service container do GitHub nao roda o script de init.
+    env:
+      VZDR_SENHA_APP: dev
+
     steps:
       - uses: actions/checkout@v4
 

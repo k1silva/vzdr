@@ -56,6 +56,16 @@ caminho de falha.
     sem editar configuração nenhuma
   - Arquivos: `Makefile`, `pyproject.toml`, `packages/*/pyproject.toml`
 
+- [ ] **TI2** — Restringir `ignore_missing_imports` a terceiros *(candidata)*
+  - Hoje ele é global em `[tool.mypy]`, o que faz **qualquer** import não resolvido virar
+    `Any` em silêncio — inclusive `vzdr.*`. Foi o que tornou a ausência de `py.typed`
+    invisível na TI1.
+  - Passar a valer só para módulos de terceiros, por override, e deixar import interno
+    não resolvido falhar.
+  - Não fazer agora: mexer nisso provavelmente acende erros em cadeia, e merece uma fatia
+    própria em vez de contaminar uma tarefa de produto.
+  - Arquivos: `pyproject.toml`
+
 - [ ] **T5** — ADR-0006: isolamento de tenant com RLS
   - Decisão, alternativa (só repositório injetando filtro), e o custo real: `SET LOCAL` por
     transação, papel de banco sem `BYPASSRLS`, `FORCE ROW LEVEL SECURITY`.
