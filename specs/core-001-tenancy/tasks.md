@@ -205,12 +205,23 @@ caminho de falha.
     `tests/db/test_conceder_papel.py`
 
 - [ ] **T14** — Token de serviço
-  - Modelo e resolução apenas. O token guarda o dono, **nunca o papel**: o papel vive só em
-    `associacao_tenant`, e é isso que faz o rebaixamento propagar sem revogação.
-  - Testes: token resolve para tenant e papel do dono; rebaixar o dono rebaixa o token no
-    uso seguinte; dono sem associação no tenant derruba o token; auditoria mostra serviço e
-    dono; token de serviço nunca excede o dono
-  - Arquivos: `packages/core-tenancy/src/vzdr/core/tenancy/servico.py`,
+  - Modelo e resolução apenas; criar, listar, revogar e rotacionar são `core-007`.
+  - O token guarda o dono, **nunca o papel**: o papel vive só em `associacao_tenant`, e é
+    isso que faz o rebaixamento propagar sem revogação.
+  - **Mesmo formato da sessão**, `<tenant_id>.<segredo>`: `token_servico` tem RLS e o ovo
+    e a galinha é idêntico. Formato único, um analisador só.
+  - **Migração `0006`**: `ultimo_uso_em timestamptz`. `id` e `descricao` já existem — são o
+    identificador visível e o rótulo legível que a tela de `core-007` vai precisar. Gravar
+    o uso é **condicional**, com granularidade de minutos, e na mesma instrução da
+    resolução: gravar a cada resolução tornaria o caminho de leitura mais quente do sistema
+    um caminho de escrita.
+  - Testes: token resolve para tenant e papel do dono; **rebaixar o dono muda o papel do
+    mesmo token, e uma ação que exigia `admin` passa a ser negada** — é o caso que a chave
+    composta *não* cobre, porque a associação continua existindo; dono sem associação
+    derruba o token (já coberto pelo esquema); auditoria mostra serviço e dono; token de
+    serviço nunca excede o dono; `ultimo_uso_em` é atualizado e não a cada resolução
+  - Arquivos: `deploy/migrations/0006_token_servico_uso.sql`,
+    `packages/core-tenancy/src/vzdr/core/tenancy/servico.py`,
     `tests/db/test_token_servico.py`
 
 ## Ordem

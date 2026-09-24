@@ -87,6 +87,68 @@ congelado na emissão: se o dono perde o papel, o token perde junto, no uso segu
 É assim que a CLI e o assistente de IA agem sem privilégio próprio. O assistente herda a
 autoridade de quem o acionou, e ação destrutiva continua exigindo confirmação humana (P6).
 
+**O token tem o mesmo formato da sessão**, `<tenant_id>.<segredo>`. `token_servico` tem
+`tenant_id` e portanto RLS, então o mesmo ovo e galinha da resolução de sessão se aplica, e
+a mesma saída serve. Formato único significa um analisador só e um caminho de código só;
+divergir aqui criaria duas formas de token pela única razão de terem nascido em tarefas
+diferentes.
+
+#### O que a chave composta garante, e o que ela não garante
+
+A chave composta para `associacao_tenant` garante que **associação some, token morre** — sem
+código, e com teste desde a T6a.
+
+Mas o caso mais comum não é sumir: é **mudar**. O dono era `admin` e virou `viewer`. A
+associação continua existindo, a chave não dispara, e a única coisa que faz o token perder
+autoridade é ele **ler o papel na hora da resolução** em vez de congelá-lo.
+
+Isso é comportamento de código, não garantia de esquema, e por isso precisa de teste
+próprio: rebaixar o dono e conferir que o **mesmo** token passa a resolver com o papel novo,
+e que uma ação que exigia `admin` passa a ser negada por ele.
+
+Sem esse teste, alguém pode "otimizar" guardando o papel na linha do token e nada acusa —
+o teste da chave composta continua passando, e dá a impressão de que a garantia está
+coberta.
+
+#### Listar e revogar: o modelo agora, a operação em `core-007`
+
+Token de sessão é efêmero e ninguém precisa vê-lo numa tela. Token de serviço é longevo,
+mora em arquivo de configuração e em CI, e um tenant vai ter vários. A tela precisa
+responder *quais existem, para que serve cada um, quando foi usado pela última vez* — e
+revogar um — **sem nunca ter o segredo**.
+
+O modelo disso é do token, então nasce aqui; a operação é de `core-007`, onde a tela existe.
+O esquema não pode ganhar coluna improvisada depois, quando a tela chegar.
+
+O que já existe: `id` é o identificador visível, que a tela usa para revogar, e `descricao`
+é o rótulo legível. O que falta é `ultimo_uso_em`.
+
+**E ele tem um custo que vale nomear:** gravar a cada resolução transforma o caminho de
+leitura mais quente do sistema em caminho de escrita, com contenção na mesma linha. A
+gravação é **condicional** — só quando o valor guardado já está velho, com granularidade de
+minutos — e feita na mesma instrução da resolução. "Último uso" com precisão de minutos
+responde à pergunta da tela; precisão de milissegundos custaria uma escrita por requisição
+e não responderia nada a mais.
+
+**O que o campo responde, exatamente:** *a última vez que este token foi apresentado **e
+resolveu com sucesso***. Não é "a última vez que foi apresentado". Token apresentado e
+recusado — dono sem associação, tenant errado, segredo inválido — não toca o campo.
+
+A precisão importa no dia em que alguém investigar. Campo de segurança com significado
+ambíguo é pior que campo ausente: o ausente faz a pessoa procurar em outro lugar, o ambíguo
+faz ela concluir errado.
+
+**Duas consequências, escritas para não virarem descoberta numa hora ruim:**
+
+A gravação vive na transação da ação. Ação que falha e desfaz leva o `ultimo_uso_em` junto,
+então "usado às 14h, ação falhou" não aparece. É aceito: a alternativa é transação
+autônoma, complexidade grande para um campo cuja pergunta real é *posso revogar este token
+sem quebrar nada?* — e para essa pergunta, uso que não completou não conta mesmo.
+
+E a resolução passa a exigir transação de leitura-escrita. **Se algum dia alguém quiser
+servir leitura por réplica, este campo é o obstáculo.** Melhor nomeado agora do que
+descoberto depois.
+
 ### Trocar de tenant: a cadeia de sessões
 
 Um usuário com papel em dois tenants troca de um para o outro **sem digitar a senha de
