@@ -14,6 +14,12 @@ Duas regras que valem sempre:
   assistente de IA agiu (P6, P8).
 - **A auditoria nao e reescrita.** A aplicacao tem `select` e `insert`, nunca
   `update` nem `delete` (migracao 0001). Corrigir log e reescrever historia.
+- **O autor vai tambem em texto legivel.** Auditoria nao e autorizacao: sessao e
+  token de servico devem morrer com a associacao, mas o registro historico tem
+  que sobreviver a remocao de tudo que referencia — senao revogar alguem apaga
+  a prova do que essa pessoa fez. Sobreviver nao basta: um uuid que nao aponta
+  para lugar nenhum nao responde "quem fez". Por isso o e-mail do momento do ato
+  e copiado, nunca referenciado (migracao 0005).
 """
 
 from __future__ import annotations
@@ -42,6 +48,13 @@ class PrincipalNaoEDePlataformaError(Exception):
     """
 
 
+def _autor(cur: Any, usuario_id: Any) -> str | None:
+    """O identificador legivel do autor, agora. Busca por chave primaria."""
+    cur.execute("select email from usuarios where id = %s", (usuario_id,))
+    linha = cur.fetchone()
+    return str(linha[0]) if linha else None
+
+
 def registrar(
     repositorio: Repositorio,
     evento: str,
@@ -55,12 +68,15 @@ def registrar(
     filtro de toda consulta, nunca do chamador.
     """
     principal = repositorio.principal
+    with repositorio.conexao.cursor() as cur:
+        autor = _autor(cur, principal.usuario_id)
     repositorio.inserir(
         "auditoria",
         {
             "evento": evento,
             "usuario_id": principal.usuario_id,
             "servico_id": principal.servico_id,
+            "autor": autor,
             "alvo": alvo,
             "detalhe": Jsonb(detalhe) if detalhe is not None else None,
         },
@@ -84,8 +100,8 @@ def registrar_plataforma(
 
     consulta = sql.SQL(
         "insert into auditoria_plataforma "
-        "(evento, usuario_id, servico_id, alvo, detalhe) "
-        "values (%s, %s, %s, %s, %s)"
+        "(evento, usuario_id, servico_id, autor, alvo, detalhe) "
+        "values (%s, %s, %s, %s, %s, %s)"
     )
     with conexao.cursor() as cur:
         cur.execute(
@@ -94,6 +110,7 @@ def registrar_plataforma(
                 evento,
                 principal.usuario_id,
                 principal.servico_id,
+                _autor(cur, principal.usuario_id),
                 alvo,
                 Jsonb(detalhe) if detalhe is not None else None,
             ),

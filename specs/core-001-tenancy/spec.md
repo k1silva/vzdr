@@ -319,11 +319,31 @@ tenant de um cliente sem que o cliente conseguisse ver — e num produto de DR v
 terceiros essa é exatamente a pergunta que a auditoria do cliente vai fazer: *quem
 colocou essa pessoa aqui?*
 
-Isso depende de um detalhe do esquema que parece descuido e não é: **`auditoria.usuario_id`
-não tem chave estrangeira para `associacao_tenant`**. É o que permite registrar como autor
-alguém que não é membro do tenant — exatamente o caso do operador de plataforma.
-Acrescentar essa chave "por consistência" quebraria a auditoria que o cliente mais precisa
-ler.
+#### Auditoria não é autorização
+
+A distinção decide o esquema, e as duas metades apontam para lados opostos.
+
+`sessao` e `token_servico` **são autorizações vivas**, e por isso ganharam chave composta
+para `associacao_tenant`: perder o papel derruba as duas na hora. Registro histórico é o
+contrário — ele precisa **sobreviver à remoção de tudo que referencia**. Senão revogar
+alguém apaga a prova do que essa pessoa fez, que é a versão catastrófica do problema.
+
+Por isso `auditoria.usuario_id` e `servico_id` não têm chave estrangeira. É o que permite
+registrar como autor alguém que não é mais membro — ou que não é membro nenhum, como o
+operador de plataforma. Acrescentar essa chave "por consistência" quebraria a auditoria
+que o cliente mais precisa ler.
+
+**E sobreviver não basta: o registro precisa continuar legível.** Um `uuid` que não aponta
+para lugar nenhum não responde "quem fez". Cada linha guarda também o identificador do
+autor **no momento do ato** — cópia, nunca referência. Se o e-mail mudar depois, o registro
+continua dizendo quem era na hora, que é a pergunta da auditoria.
+
+**Uma exceção que fica registrada e não resolvida:** `auditoria.tenant_id` **tem** chave
+estrangeira para `tenants`, sem `on delete`. Na prática isso impede apagar um tenant que
+tenha histórico. Hoje não incomoda, porque apagar tenant não é operação desta spec. Quando
+for, a decisão é entre manter o bloqueio — histórico impede remoção — ou soltar a chave,
+como nas outras colunas. Pelo argumento acima, soltar é o mais coerente; decidir agora
+seria decidir sem o caso de uso na mão.
 
 #### Em aberto: o tenant que perdeu todos os admins
 
@@ -331,10 +351,27 @@ Se o último `admin` de um tenant for removido, ninguém de dentro pode conceder
 plataforma não tem caminho — `criar_tenant` só vale na criação. É caso de suporte real e
 não está resolvido aqui.
 
-O que já fica decidido, para quem for resolver: a saída **não** é afrouxar
-`conceder_papel` para aceitar operador de plataforma, porque isso devolve as duas regras
-na mesma operação. Seria operação própria, com nome próprio, evento próprio, e a mesma
-auditoria dupla — visível ao cliente, sempre.
+A assimetria que isso revela, dita em voz alta porque é ela que torna a lacuna concreta:
+
+| Situação | Recuperação |
+| --- | --- |
+| Plataforma sem operadores | o bootstrap volta a valer — condição sobre o estado |
+| Tenant sem `admin` | **nenhuma** |
+
+O que já fica decidido, para quem for resolver, **e o formato importa tanto quanto a
+recusa**: a saída **não** é afrouxar `conceder_papel` para aceitar operador de plataforma,
+porque isso devolve as duas regras na mesma operação — e é exatamente o que alguém vai
+reinventar daqui a três meses se só estiver escrito que não pode.
+
+A operação futura tem forma definida:
+
+- **nome próprio**, não um parâmetro a mais em `conceder_papel`;
+- **evento próprio**, distinto de `tenancy.papel_concedido`, porque é ato de provedor
+  dentro do tenant de um cliente;
+- **auditoria dupla**, nos dois lugares, com o operador como autor na auditoria do cliente
+  — a mesma regra da criação;
+- e, se possível, uma condição de estado que a limite, como o bootstrap tem: só quando não
+  houver nenhum `admin`.
 
 ### O que fica fora do eixo de tenant
 

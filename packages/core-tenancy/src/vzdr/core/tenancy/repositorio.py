@@ -84,6 +84,10 @@ class Repositorio:
         self._profundidade = 0
 
     @property
+    def conexao(self) -> Conexao:
+        return self._conexao
+
+    @property
     def principal(self) -> Principal:
         return self._principal
 
