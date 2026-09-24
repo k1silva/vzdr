@@ -123,6 +123,11 @@ class Repositorio:
                 f"Envolva em `with repositorio.transacao() as r:`."
             )
 
+    # Nota: `colunas` sao identificadores, nao expressoes — `sql.Identifier`
+    # e o que impede injecao pelo nome da coluna. `onde` e SQL cru, porque o
+    # chamador precisa de comparacao e de operador de jsonb. A assimetria e
+    # deliberada; quem quiser `detalhe ->> 'x'` no SELECT traz `detalhe` e le a
+    # chave em Python.
     def selecionar(
         self,
         tabela: str,

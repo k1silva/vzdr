@@ -345,6 +345,20 @@ for, a decisão é entre manter o bloqueio — histórico impede remoção — o
 como nas outras colunas. Pelo argumento acima, soltar é o mais coerente; decidir agora
 seria decidir sem o caso de uso na mão.
 
+E quando esse caso aparecer, **a parte difícil não vai ser técnica**:
+
+> Quem lê a auditoria de um tenant apagado, e por quanto tempo?
+
+Hoje as linhas ficariam existindo e inalcançáveis — a RLS filtra por um
+`tenant_id` que não corresponde mais a ninguém, e o operador de plataforma não
+abre `Repositorio` de tenant. Dado que existe e ninguém pode ler é o pior dos
+dois mundos: ocupa espaço e não serve de prova.
+
+Num produto de DR vendido a terceiros isso é pergunta de contrato — quando um
+cliente sai, o que acontece com o rastro dele e por quanto tempo há obrigação de
+guardá-lo. Quem for decidir a chave estrangeira precisa dessa resposta **antes**,
+não depois.
+
 #### Em aberto: o tenant que perdeu todos os admins
 
 Se o último `admin` de um tenant for removido, ninguém de dentro pode conceder e a
@@ -398,6 +412,37 @@ como se tivesse acontecido dentro de um tenant.
 `tests/invariants/check_tenant_id.py` espelha esta tabela, com a justificativa de cada
 exceção no código, e um teste falha se as duas listas divergirem. É o que dá força à regra:
 acrescentar exceção só no checador não passa na CI.
+
+## Conceder papel — e por que revogar não está aqui
+
+`conceder_papel` tem **uma** regra de autorização: `admin` daquele tenant. Ela concede e
+altera, na mesma operação e na mesma instrução, porque separar as duas obrigaria quem chama
+a primeiro **ler** se a associação existe para escolher qual usar — e entre a leitura e a
+escrita alguém pode conceder ou revogar. É corrida que o chamador não tem como ganhar, e o
+banco resolve atomicamente. O histórico continua distinguindo os dois casos por
+`papel_anterior` estar nulo ou não, e isso se consulta de uma tabela só.
+
+**Revogar papel está fora desta spec, e não por esquecimento.** Alguém vai tentar revogar
+concedendo papel nulo, e não pode conseguir.
+
+Revogação não é o inverso simétrico de conceder. Pela migração `0004` e pela chave composta
+de `token_servico`, tirar a associação **derruba a sessão viva e o token de serviço junto**
+— é operação destrutiva com raio de alcance, e cai em **P6**: confirmação humana explícita
+e auditoria. Não pode ser alcançável por um caminho cujo nome é "conceder", e por isso
+`papel` não aceita nulo.
+
+Quando existir, revogar é operação própria, com nome próprio, evento próprio, e a
+confirmação que P6 exige.
+
+### Auditar tentativa negada tem um preço conhecido
+
+Tentativa negada de concessão entra na auditoria do próprio tenant. Isso cria uma
+superfície: qualquer membro, inclusive `viewer`, pode encher a auditoria repetindo o
+pedido.
+
+Não é grave — são linhas de um tenant só, visíveis a ele — e a alternativa, não registrar
+tentativa negada, é pior. **A contenção é de `core-007`**, onde o limite por origem mora,
+junto com o limite de tentativa de senha. Fica escrito para não virar descoberta.
 
 ## Papéis dentro do tenant
 
@@ -481,7 +526,9 @@ previsto pela fronteira de `verificar_token`, não implementado aqui.
 
 Ciclo de vida de token de serviço (criar, listar, revogar, rotacionar): `core-007`.
 
-Limite de tentativa de senha **por IP ou origem**: `core-007`, onde o HTTP existe. O
+Revogar papel — operação destrutiva, com P6. Ver "Conceder papel".
+
+Limite de tentativa de senha **por IP ou origem**, e contenção de tentativa negada de concessão: `core-007`, onde o HTTP existe. O
 contador e o bloqueio por usuário são dado e ficam aqui, junto de `usuarios`. A distinção
 importa: com hash memory-hard, login sem limite é negação de serviço barata, e o controle
 que falta não pode ficar sem dono entre as duas specs.

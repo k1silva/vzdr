@@ -181,6 +181,12 @@ caminho de falha.
     de ambiente exigida, sem padrão. Ver a spec, seção "O primeiro operador de plataforma".
   - O script novo é `scripts/criar-operador-plataforma.py`. **Não** reusar
     `scripts/bootstrap.sh`, que já existe e prepara o ambiente de desenvolvimento.
+  - `autenticar_plataforma()` e `verificar_plataforma()` entram aqui. Não estavam nesta
+    lista e foram acrescentados na implementação: sem eles o operador não age e
+    `sessao_plataforma` fica tabela sem uso. Token opaco inteiro — `sessao_plataforma` não
+    tem `tenant_id` nem RLS, e portanto não precisa do prefixo que a sessão de tenant
+    precisa. Ficam registrados aqui para o contrato não divergir da implementação no
+    sentido oposto ao que motivou a **TI3**.
   - Testes: principal de plataforma é negado em toda ação de tenant, na borda e no SQL;
     sessão de plataforma não vira sessão de tenant; `criar_tenant` sem papel de plataforma
     é negado e auditado; identificador repetido falha; bootstrap é auditado e não repete
