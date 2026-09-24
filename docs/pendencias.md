@@ -30,6 +30,25 @@ sem dono é pior: é a suposição de que alguém vai lembrar.
 Chegada a data de revisão, o item muda de estado ou muda de data — com motivo. Não existe
 "continua pendente" em silêncio.
 
+**A data é de cada item, não do arquivo.** Duas pendências com a mesma data e dependências
+diferentes viram uma data só que ninguém respeita. Por isso cada uma declara de que depende:
+resposta de fornecedor e acordo comercial têm relógios próprios.
+
+### Quem faz cumprir
+
+`tests/invariants/check_pendencias.py`, na CI. Data de revisão vencida **falha o build**.
+
+Isso é deliberado e tem um custo real: quebra a build de quem estava mexendo em outra
+coisa. A alternativa — um aviso que não bloqueia — é o que este projeto já decidiu,
+repetidas vezes, que ninguém lê. O conserto é legítimo e leva trinta segundos: ou o item
+muda de estado, ou a data muda com motivo escrito na linha `Revisões`.
+
+**E a renovação tem limite.** O modo de falha desta regra não é ela bloquear, é a renovação
+virar carimbo: "+2 semanas, sem resposta ainda", indefinidamente, com a build verde e a
+pendência morta. Ao chegar na terceira renovação o checador falha de novo e só sai com
+mudança de estado — escalar, fechar, ou mover para "Candidatas". Renovar é barato uma vez;
+na terceira, a pendência não está sendo tocada e isso precisa parar a linha.
+
 ## Abertas
 
 ### P-001 — a capability `dirty-bitmaps` está desligada no VHI
@@ -37,10 +56,12 @@ Chegada a data de revisão, o item muda de estado ou muda de data — com motivo
 | | |
 |---|---|
 | **Pergunta** | Por que a capability `dirty-bitmaps` do QEMU está com `state: false` neste parque, e existe forma suportada de ligá-la? |
-| **Dono** | *a definir* — quem acompanha o chamado com a Virtuozzo |
+| **Dono** | Kawan |
 | **Aberta em** | 2026-09-23 |
 | **Revisar em** | 2026-10-08 |
+| **Depende de** | resposta do fornecedor |
 | **Estado** | aguardando o fornecedor |
+| **Revisões** | nenhuma |
 
 **O que ela bloqueia.** A medição **M4** do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md):
 se o bitmap sobrevive à migração automática do VHI. M4 exige cluster com mais de um nó e
@@ -63,10 +84,12 @@ resync despenca e o diferencial perde urgência; se **não sobrevive**, ganha.
 | | |
 |---|---|
 | **Pergunta** | Qual a distribuição real dos 40 TB do cliente-alvo? |
-| **Dono** | *a definir* — depende de acesso ao ambiente do cliente |
+| **Dono** | Kawan |
 | **Aberta em** | 2026-09-23 |
-| **Revisar em** | 2026-10-08 |
+| **Revisar em** | 2026-10-22 |
+| **Depende de** | acordo de acesso ao ambiente do cliente — conversa comercial, não técnica |
 | **Estado** | aguardando acesso |
+| **Revisões** | nenhuma |
 
 **O que ela bloqueia.** A medição **M2** do ADR-0012: rodar `scripts/censo-discos.sh` no
 ambiente do cliente.
