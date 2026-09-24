@@ -62,6 +62,19 @@ congelado na emissão: se o dono perde o papel, o token perde junto, no uso segu
 É assim que a CLI e o assistente de IA agem sem privilégio próprio. O assistente herda a
 autoridade de quem o acionou, e ação destrutiva continua exigindo confirmação humana (P6).
 
+### Revogar sessão é apagar a linha
+
+Revogação de sessão é `DELETE`, não marca de estado. A spec não dizia, e a diferença
+importa: a garantia "sessão irmã não sobrevive à mãe" é imposta pelo `on delete cascade`
+de `sessao_pai_id`. Com marca de estado — `revogada_em`, `status` — a cascata nunca
+dispara, e a invariante volta a depender de alguém lembrar de propagar.
+
+O que precisa sobreviver ao ato é o registro na auditoria, que é outra tabela. Reter
+sessão revogada é retenção de auditoria, não de `sessao`.
+
+Trocar isto por *soft delete* exige outro mecanismo para a mesma garantia — gatilho ou
+propagação explícita — e é alteração de spec, não detalhe de implementação.
+
 ### Papel de plataforma
 
 Existe fora do eixo de tenant. Não é um tenant especial e não é superusuário.
