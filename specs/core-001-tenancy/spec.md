@@ -87,6 +87,60 @@ congelado na emissão: se o dono perde o papel, o token perde junto, no uso segu
 É assim que a CLI e o assistente de IA agem sem privilégio próprio. O assistente herda a
 autoridade de quem o acionou, e ação destrutiva continua exigindo confirmação humana (P6).
 
+### Trocar de tenant: a cadeia de sessões
+
+Um usuário com papel em dois tenants troca de um para o outro **sem digitar a senha de
+novo** — é a consequência direta de papel ser por tenant, e sem isso o caso de teste
+central da spec seria hostil de usar.
+
+**A expiração é herdada, e o banco garante isso.** A sessão nova tem `expira_em` **igual**
+ao da que a originou, imposto por chave estrangeira composta
+`(sessao_pai_id, expira_em) → sessao (id, expira_em)`. Não é convenção: o banco recusa
+`insert` com expiração diferente. Sem essa garantia, trocar de tenant em sequência
+renovaria o relógio a cada salto e a sessão duraria para sempre.
+
+**A forma é cadeia, não leque.** Trocar de A para B e depois de B para C cria uma sessão
+filha **de B**, não uma irmã de B sob A. As duas formas pareceriam equivalentes e não são:
+no leque, revogar B deixaria C viva, e C nasceu de B — quem tivesse o token de B levaria C
+consigo depois da revogação. Na cadeia, revogar qualquer ancestral derruba tudo que desceu
+dela, porque o `on delete cascade` é recursivo.
+
+"Sessão irmã" descreve o propósito — mesmo login, outro tenant —, não o formato dos dados.
+Quem revoga precisa saber o que cai junto: **cai tudo que foi derivado**, direta ou
+indiretamente.
+
+**A verificação do destino usa o próprio destino.** Conferir se o usuário tem papel em B
+exige ler `associacao_tenant`, que tem RLS — e no contexto de A a linha de B está
+escondida. A saída é que o destino é conhecido: o usuário pediu para ir a B. Abre-se o
+contexto em B e procura-se `(usuario, B)`. Existe, e a RLS deixa ver; não existe, e vêm
+zero linhas — que é exatamente "não é membro". Sem conexão privilegiada e sem
+`security definer`, a mesma disciplina do token de sessão.
+
+A linha filha vive no tenant de destino e aponta para uma mãe no tenant de origem. Isso
+atravessa a fronteira de tenant de propósito, e funciona porque **verificação de
+integridade referencial ignora RLS** no PostgreSQL — é o que faz o cascade alcançar
+descendentes em outros tenants. Verificado, não suposto.
+
+Token de serviço **não** troca de tenant: é emitido para um e nele fica. Automação que
+atende dois tenants tem dois tokens, e isso é desejável — a auditoria diz qual agiu.
+
+#### O que isto não resolve: listar os tenants de um usuário
+
+Trocar de tenant funciona porque o destino é conhecido. **"Quais são os meus tenants?" não
+tem destino conhecido**, e é a primeira pergunta que a tela de troca faz. Sob RLS, a
+resposta exigiria abrir um contexto por tenant candidato — o que pressupõe já saber a
+lista.
+
+Está fora desta spec, mas fica escrito para ninguém improvisar quando a tela aparecer. As
+saídas plausíveis, em ordem de preferência:
+
+1. o login resolver a lista e o token carregá-la, porque no login o contexto ainda não
+   existe e a consulta pode acontecer antes de qualquer `set_config`;
+2. uma tabela de índice `usuario → tenants` fora do eixo de tenant — o que significa mais
+   uma linha na lista fechada de exceções, e portanto alteração de spec;
+3. uma função `security definer` estreita: a saída que esta spec já recusou duas vezes, e
+   que só deveria voltar com argumento novo.
+
 ### Revogar sessão é apagar a linha
 
 Revogação de sessão é `DELETE`, não marca de estado. A spec não dizia, e a diferença
