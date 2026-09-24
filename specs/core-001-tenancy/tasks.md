@@ -128,13 +128,24 @@ caminho de falha.
   - Arquivos: `packages/core-tenancy/src/vzdr/core/tenancy/autenticacao.py`,
     `tests/db/test_autenticacao.py`
 
-- [ ] **T11** — `trocar_tenant()`: sessão irmã
-  - Emite sessão para outro tenant a partir de uma sessão válida, sem senha. Exige
-    associação; herda `expira_em` da mãe; guarda `sessao_pai_id`; recusa token de serviço.
+- [ ] **T11** — `trocar_tenant()`: a cadeia de sessões
+  - Emite sessão para outro tenant a partir de uma sessão válida, sem senha. As três
+    decisões de desenho estão na spec, seção "Trocar de tenant: a cadeia de sessões":
+    expiração herdada por chave composta, forma em cadeia, e verificação no contexto do
+    destino.
+  - **Migração `0003`**: `unique (id, expira_em)` em `sessao` e troca do
+    `sessao_pai_id` simples pela chave composta
+    `(sessao_pai_id, expira_em) → sessao (id, expira_em)`, `on delete cascade`
+    `on update cascade`. É ela que torna a herança de expiração garantida e não
+    convencionada — verificado em protótipo: o banco recusa expiração diferente.
+  - O token da filha leva o prefixo do tenant de **destino** (T10).
   - Audita `tenancy.tenant_trocado` no tenant de destino, com a origem no detalhe.
-  - Testes: sem associação falha; expiração **não** é estendida por troca encadeada;
-    revogar a mãe revoga a filha; token de serviço é recusado
-  - Arquivos: `packages/core-tenancy/src/vzdr/core/tenancy/sessao.py`,
+  - Testes: sem associação no destino falha; expiração diferente é recusada **pelo banco**;
+    troca encadeada A→B→C não estende o relógio; revogar qualquer ancestral derruba os
+    descendentes, inclusive em outro tenant; token de serviço é recusado; o token da filha
+    resolve para o tenant de destino com o papel de lá
+  - Arquivos: `deploy/migrations/0003_sessao_encadeada.sql`,
+    `packages/core-tenancy/src/vzdr/core/tenancy/sessao.py`,
     `tests/db/test_trocar_tenant.py`
 
 - [ ] **T12** — Papel de plataforma, `sessao_plataforma`, `criar_tenant()` e bootstrap

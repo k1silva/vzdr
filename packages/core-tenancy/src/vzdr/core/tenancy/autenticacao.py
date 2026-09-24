@@ -169,12 +169,16 @@ class VerificadorDeToken(Protocol):
     def verificar(self, token: str) -> Principal: ...
 
 
-#: Sessao e papel numa consulta so. `left join` para distinguir "sessao existe
-#: mas o papel sumiu" de "sessao nao existe" — sao erros diferentes.
+#: Sessao e papel numa consulta so.
+#:
+#: `join` e nao `left join`: desde a migracao 0004 a sessao nao sobrevive a
+#: perda da associacao — a chave composta a apaga em cascata. Um `left join`
+#: aqui trataria um caso que o esquema tornou impossivel, e ramo que nenhum
+#: teste consegue exercitar e pior que ramo ausente.
 _RESOLVER = sql.SQL(
     "select s.usuario_id, s.tenant_id, s.expira_em, a.papel "
     "from sessao s "
-    "left join associacao_tenant a "
+    "join associacao_tenant a "
     "  on a.usuario_id = s.usuario_id and a.tenant_id = s.tenant_id "
     "where s.token_hash = %s"
 )
@@ -204,10 +208,6 @@ class VerificadorLocal:
             raise TokenInvalidoError("sessao desconhecida")
 
         usuario_id, tenant_da_linha, expira_em, papel = linha
-        if papel is None:
-            raise SemAssociacaoNoTenantError(
-                "sessao existe, mas o usuario nao tem mais papel neste tenant"
-            )
         if expira_em <= datetime.now(UTC):
             raise TokenExpiradoError("sessao expirada")
 

@@ -111,19 +111,24 @@ def test_email_e_unico_ignorando_caixa(conexao):
 
 @pytest.mark.usefixtures("esquema_migrado")
 def test_revogar_a_sessao_mae_revoga_a_filha(conexao):
-    """Sessão irmã de troca de tenant não pode sobreviver à que a originou."""
+    """Sessão derivada não pode sobreviver à que a originou.
+
+    A filha usa o `expira_em` da mãe, não um próprio: desde a migração 0003 a
+    chave composta exige igualdade, e é isso que impede a cadeia de renovar o
+    relógio a cada troca de tenant.
+    """
     tenant, usuario = semear(conexao)
     with conexao.cursor() as cur:
         cur.execute(
             "insert into sessao (token_hash, usuario_id, tenant_id, expira_em) "
-            "values ('mae', %s, %s, now() + interval '1 hour') returning id",
+            "values ('mae', %s, %s, now() + interval '1 hour') returning id, expira_em",
             (usuario, tenant),
         )
-        (mae,) = cur.fetchone()
+        mae, expira_em = cur.fetchone()
         cur.execute(
             "insert into sessao (token_hash, usuario_id, tenant_id, expira_em, sessao_pai_id) "
-            "values ('filha', %s, %s, now() + interval '1 hour', %s)",
-            (usuario, tenant, mae),
+            "values ('filha', %s, %s, %s, %s)",
+            (usuario, tenant, expira_em, mae),
         )
         cur.execute("delete from sessao where id = %s", (mae,))
         cur.execute("select count(*) from sessao")
