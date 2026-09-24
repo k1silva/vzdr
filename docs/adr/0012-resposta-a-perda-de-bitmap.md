@@ -3,10 +3,14 @@
 **Data:** 2026-09-23
 **Status:** aceito
 
-> Este ADR decide duas coisas e deixa uma aberta. A decisão 1 é invariante de segurança e
-> vale desde já; a decisão 3 depende das medições M1–M4 em "O que falta medir" e está
-> marcada como **em análise** no próprio texto. O status do documento é `aceito` porque o
-> que ele fecha, fecha — não porque tudo esteja resolvido.
+> **Leia antes de implementar: este ADR não fecha tudo.** A decisão 1 é invariante de
+> segurança e vale desde já. A **decisão 3 — resync diferencial — está em análise**, não
+> decidida, e depende das medições M1–M4 em "O que falta medir"; o rastreio delas está em
+> [`docs/pendencias.md`](../pendencias.md). O status é `aceito` porque o que este
+> documento fecha, fecha — não porque tudo esteja resolvido.
+>
+> A forma ortodoxa seria separar a decisão 3 num ADR próprio com status `proposto`. Está
+> registrada como candidata em `docs/pendencias.md`.
 
 > **Escopo dos números.** O censo abaixo é do **laboratório da 4EDGE**: 11,83 TiB, três
 > nós, 65 VMs. O ambiente do **cliente-alvo é de 40 TB** e sua distribuição é desconhecida.

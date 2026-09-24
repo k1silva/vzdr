@@ -10,6 +10,28 @@ garantia. Ja perdemos essa aposta quatro vezes nesta fatia.
 Entao: `psycopg.connect` so pode aparecer em scripts/ambiente_db.py. Quem
 precisa de conexao chama `conectar()`, que resolve, verifica e conecta numa
 operacao so.
+
+## Ate onde este checador alcanca
+
+Ele le o fonte com `ast`, sem executar nada. Medido, nao suposto:
+
+| Forma | Pega? |
+|---|---|
+| `psycopg.connect(...)` | sim |
+| `from psycopg import connect` e `connect(...)` | sim |
+| `import psycopg as p` e `p.connect(...)` | sim |
+| `getattr(psycopg, "connect")(...)` | **nao** |
+| `psycopg.__dict__["connect"](...)` | **nao** |
+| qualquer `x.connect(...)`, de qualquer objeto | sim — e falso positivo |
+
+Ou seja: ele barra o acesso direto e escorrega no acesso dinamico. Isso e
+deliberado — nenhuma analise estatica de Python fecha acesso dinamico, e tentar
+produziria um checador que ninguem entende. O que ele garante e que ninguem
+abre conexao *por distracao*; ele nao impede quem esteja decidido a contornar.
+
+A ultima linha tambem importa: como ele casa por nome, qualquer metodo chamado
+`connect` reprova. Se um dia isso incomodar, a saida e casar tambem o modulo de
+origem, nao afrouxar a regra.
 """
 
 import ast

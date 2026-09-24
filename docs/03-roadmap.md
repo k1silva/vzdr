@@ -57,7 +57,8 @@ Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage 
       11,83 TiB, 65 VMs, 115 discos.
       Ver [censo](validacao/2026-09-23-censo-do-parque.md)
 - [ ] Taxa de mudança em 20-30 VMs por 48 h (`scripts/medir-taxa-mudanca.sh`)
-- [ ] Teste de sobrevivência do bitmap à migração automática do VHI
+- [ ] Teste de sobrevivência do bitmap à migração automática do VHI (M4 do ADR-0012)
+      — bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo
 - [ ] Classificação das VMs por tier
 
 ## Pré-requisitos de infraestrutura
