@@ -87,6 +87,53 @@ def test_principal_de_tenant_nao_registra_ato_de_plataforma(conexao, tenant):
     assert contar(conexao, "auditoria_plataforma") == 0
 
 
+def test_o_autor_fica_legivel_depois_de_o_usuario_sumir(conexao, tenant):
+    """Auditoria não é autorização: o registro tem que sobreviver à remoção do
+    que referencia — e sobreviver não basta, precisa continuar legível.
+
+    Revogar alguém não pode apagar a prova do que essa pessoa fez, e um uuid
+    que não aponta para lugar nenhum não responde "quem fez".
+    """
+    with conexao.cursor() as cur:
+        cur.execute(
+            "insert into usuarios (email, senha_hash, senha_params) "
+            "values ('quem.agiu@exemplo.test','h','p') returning id"
+        )
+        (usuario,) = cur.fetchone()
+        cur.execute(
+            "insert into associacao_tenant (usuario_id, tenant_id, papel) values (%s, %s, 'admin')",
+            (usuario, tenant),
+        )
+
+    repo = Repositorio(conexao, Principal.de_usuario(usuario, tenant, Papel.ADMIN))
+    with repo.transacao() as r:
+        registrar(r, "tenancy.papel_concedido", "usuario:x")
+
+    with conexao.cursor() as cur:
+        cur.execute("delete from usuarios where id = %s", (usuario,))
+        cur.execute("select usuario_id, autor from auditoria")
+        gravado, autor = cur.fetchone()
+
+    assert gravado == usuario
+    assert autor == "quem.agiu@exemplo.test"
+
+
+def test_o_autor_de_ato_de_plataforma_tambem_e_legivel(conexao, tenant):  # noqa: ARG001
+    with conexao.cursor() as cur:
+        cur.execute(
+            "insert into usuarios (email, senha_hash, senha_params) "
+            "values ('operador@exemplo.test','h','p') returning id"
+        )
+        (usuario,) = cur.fetchone()
+
+    registrar_plataforma(
+        conexao, Principal.de_plataforma(usuario), "tenancy.tenant_criado", "tenant:x"
+    )
+    with conexao.cursor() as cur:
+        cur.execute("select autor from auditoria_plataforma")
+        assert cur.fetchone() == ("operador@exemplo.test",)
+
+
 def test_detalhe_vira_jsonb_consultavel(conexao, tenant):
     repo = Repositorio(conexao, Principal.de_usuario(uuid.uuid4(), tenant, Papel.ADMIN))
     with repo.transacao() as r:

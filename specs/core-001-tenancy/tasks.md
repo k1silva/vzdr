@@ -66,6 +66,17 @@ caminho de falha.
     própria em vez de contaminar uma tarefa de produto.
   - Arquivos: `pyproject.toml`
 
+- [ ] **TI3** — `check_eventos.py`: evento declarado tem que ser emitido
+  - Todo evento nomeado numa spec ou numa `tasks.md` precisa ter emissor no código e
+    teste que o exercite. Evento declarado e nunca emitido reprova o build.
+  - Motivo: `tenancy.tenant_trocado` foi exigido pela T11 e não implementado, e **passou
+    na revisão porque ninguém olha o que não está no diff**. Um diff não consegue mostrar
+    ausência; nem quem escreve nem quem revisa alcança essa classe.
+  - Testes: evento na spec sem emissor reprova; emissor sem teste reprova; evento emitido
+    e testado passa; evento citado em prosa e não como nome de evento não conta
+  - **Antes de a `core-001` fechar** — ela é a spec com mais eventos declarados.
+  - Arquivos: `tests/invariants/check_eventos.py`, `tests/unit/test_check_eventos.py`
+
 - [ ] **T5** — ADR-0006: isolamento de tenant com RLS
   - Decisão, alternativa (só repositório injetando filtro), e o custo real: `SET LOCAL` por
     transação, papel de banco sem `BYPASSRLS`, `FORCE ROW LEVEL SECURITY`.
@@ -151,14 +162,31 @@ caminho de falha.
 - [ ] **T12** — Papel de plataforma, `sessao_plataforma`, `criar_tenant()` e bootstrap
   - Sessão de plataforma em tabela própria, sem `tenant_id`: um principal de plataforma não
     tem onde carregar tenant, então a invariante deixa de depender de revisão.
-  - `criar_tenant(quem, nome, identificador)` — o passo 1 do comportamento normal da spec,
-    que não tinha dono em nenhuma tarefa. Exige papel de plataforma, audita em
-    `auditoria_plataforma`, identificador único.
-  - Bootstrap cria o primeiro papel de plataforma e registra em `auditoria_plataforma`.
-    Vem junto de `criar_tenant()` porque bootstrap sem tenant nenhum não tem o que fazer
-    depois. Roda fora da API e nunca por agente de IA (**P6**).
+  - `criar_tenant(quem, nome, identificador, primeiro_admin)` — o passo 1 do comportamento
+    normal da spec, que não tinha dono em nenhuma tarefa. Exige papel de plataforma,
+    identificador único, e **cria o tenant e a primeira associação na mesma transação**:
+    tenant vazio não é estado do sistema. Auditado nos **dois** lugares —
+    `tenancy.tenant_criado` em `auditoria_plataforma` e `tenancy.papel_concedido` na
+    auditoria do tenant novo, com o operador como autor. Ver a spec, seção "Criar tenant:
+    ele nasce com o primeiro admin".
+  - Testes adicionais: tenant nunca existe sem associação; a concessão inicial aparece na
+    auditoria do tenant com o operador como autor; `conceder_papel` continua recusando
+    principal de plataforma (uma regra só).
+  - Bootstrap cria o primeiro papel de plataforma e registra em `auditoria_plataforma`
+    como `tenancy.plataforma_iniciada` — evento próprio, porque é o único ato sem autor
+    autenticado. Vem junto de `criar_tenant()` porque bootstrap sem tenant nenhum não tem
+    o que fazer depois. **Não é endpoint**, roda local com credencial de dono do banco, e
+    nunca por agente de IA (**P6**). Recusa rodar se já existir qualquer papel de
+    plataforma — condição sobre o estado atual, não sobre o histórico. Senha por variável
+    de ambiente exigida, sem padrão. Ver a spec, seção "O primeiro operador de plataforma".
   - O script novo é `scripts/criar-operador-plataforma.py`. **Não** reusar
     `scripts/bootstrap.sh`, que já existe e prepara o ambiente de desenvolvimento.
+  - `autenticar_plataforma()` e `verificar_plataforma()` entram aqui. Não estavam nesta
+    lista e foram acrescentados na implementação: sem eles o operador não age e
+    `sessao_plataforma` fica tabela sem uso. Token opaco inteiro — `sessao_plataforma` não
+    tem `tenant_id` nem RLS, e portanto não precisa do prefixo que a sessão de tenant
+    precisa. Ficam registrados aqui para o contrato não divergir da implementação no
+    sentido oposto ao que motivou a **TI3**.
   - Testes: principal de plataforma é negado em toda ação de tenant, na borda e no SQL;
     sessão de plataforma não vira sessão de tenant; `criar_tenant` sem papel de plataforma
     é negado e auditado; identificador repetido falha; bootstrap é auditado e não repete

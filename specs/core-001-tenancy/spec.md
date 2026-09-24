@@ -235,6 +235,158 @@ O papel de plataforma tem a segunda e **não** tem a primeira: para ver a prote�
 tenant, ele precisa de um papel concedido dentro daquele tenant, como qualquer leitura de
 dado de tenant.
 
+### O primeiro operador de plataforma
+
+Criar o primeiro operador não tem operador que o autorize. É o terceiro ovo e galinha
+desta spec, e os dois anteriores — resolver token sob RLS, verificar associação no destino
+— foram resolvidos sem abrir superfície privilegiada. Este também.
+
+**O bootstrap não é endpoint.** Não existe caminho HTTP que o alcance, nunca. É operação
+local, executada com credencial de dono do banco, fora da aplicação. Um endpoint de
+bootstrap teria de ser desligado depois — e "desligado depois" é a categoria de regra que
+esta spec vem eliminando.
+
+Não confundir com o endpoint de bootstrap de **receptora** do
+[ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md): lá o token é emitido por
+uma control plane já autenticada, para uma máquina. Aqui não há ninguém para emitir nada.
+
+**Roda só enquanto não existir nenhum papel de plataforma**, e a condição é sobre o
+**estado atual**, não sobre o histórico. A diferença importa: uma marca de "já rodou"
+tornaria o sistema irrecuperável se todos os operadores fossem removidos por engano —
+ninguém poderia criar o primeiro de novo, e ninguém existiria para autorizar. Com a
+condição sobre o estado, zero operadores é zero operadores, e o bootstrap volta a valer.
+
+Isso não abre nada: ele já exige credencial de dono do banco, e quem a tem não precisa do
+bootstrap para fazer o que quiser.
+
+**É auditado como evento próprio**, `tenancy.plataforma_iniciada`, distinto de
+`tenancy.papel_concedido`. É o único ato do sistema **sem autor autenticado**, e registrá-lo
+como concessão comum esconderia exatamente isso — a linha diria que alguém concedeu, sem
+dizer que não havia quem concedesse.
+
+**O que ele cria é um operador, não um superpoder.** O primeiro operador tem o mesmo papel
+de plataforma que qualquer outro, e concede aos demais pelo caminho normal, com a
+auto-concessão distinguida como já está escrito.
+
+Uma consequência que serve de verificação: o bootstrap escreve em `usuarios`,
+`papel_plataforma` e `auditoria_plataforma` — **todas fora do eixo de tenant**. Se algum
+dia ele precisar tocar tabela com `tenant_id`, alguma coisa está errada no desenho, porque
+não existe tenant ainda.
+
+**A senha não tem padrão.** Vem de variável de ambiente exigida, como em
+`scripts/criar_papeis_db.py`: senha padrão que funciona é como credencial de laboratório
+chega em produção. Fica em aberto se o primeiro login deve forçar troca — é decisão de
+`core-007`, onde a interface existe.
+
+### Criar tenant: ele nasce com o primeiro admin, nunca vazio
+
+Quarto ovo e galinha: um tenant recém-criado não tem ninguém dentro, e quem
+concederia o primeiro papel nele seria o operador de plataforma — que não tem
+`tenant_id`, enquanto `associacao_tenant` tem RLS.
+
+**A resposta é não deixar o problema existir.** `criar_tenant` recebe o usuário que
+será o primeiro `admin` e cria as duas coisas na mesma transação. Tenant vazio não é um
+estado do sistema.
+
+Isso muda o que a pergunta "o operador de plataforma pode assumir contexto de tenant?"
+significa. Ele abre contexto **apenas dentro de `criar_tenant`, num tenant que acabou de
+criar, na mesma transação, antes de existir qualquer coisa lá dentro**. Não há o que
+vazar: o tenant está vazio porque nasceu naquele instante. O limite é de construção, não
+de disciplina — e não existe operação que abra contexto num tenant com dado dentro.
+
+O que **não** muda: o `Repositorio` continua recusando principal de plataforma na
+construção (T7). Não existe repositório de tenant para quem é de plataforma, então não
+existe caminho geral de leitura. A separação que `pode()` garante na borda e o
+`Repositorio` garante no acesso continua inteira.
+
+**`conceder_papel` continua com uma regra só: `admin` daquele tenant.** Não ganha um
+segundo caminho de autorização. Conceder o primeiro papel não é uma concessão com regra
+especial — é parte de criar o tenant, que é outra operação, com outro autor e outro
+evento. Duas regras para a mesma operação seria a coisa que emerge do código e ninguém
+consegue reler depois.
+
+#### A concessão inicial é auditada nos dois lugares
+
+Não em um. As duas linhas dizem coisas diferentes:
+
+| Onde | Evento | O que responde |
+| --- | --- | --- |
+| `auditoria_plataforma` | `tenancy.tenant_criado` | o operador da plataforma agiu |
+| `auditoria` **do tenant novo** | `tenancy.papel_concedido`, autor = o operador | o que aconteceu dentro daquele tenant |
+
+A segunda é a que importa para o cliente. Sem ela, o provedor poderia pôr alguém no
+tenant de um cliente sem que o cliente conseguisse ver — e num produto de DR vendido a
+terceiros essa é exatamente a pergunta que a auditoria do cliente vai fazer: *quem
+colocou essa pessoa aqui?*
+
+#### Auditoria não é autorização
+
+A distinção decide o esquema, e as duas metades apontam para lados opostos.
+
+`sessao` e `token_servico` **são autorizações vivas**, e por isso ganharam chave composta
+para `associacao_tenant`: perder o papel derruba as duas na hora. Registro histórico é o
+contrário — ele precisa **sobreviver à remoção de tudo que referencia**. Senão revogar
+alguém apaga a prova do que essa pessoa fez, que é a versão catastrófica do problema.
+
+Por isso `auditoria.usuario_id` e `servico_id` não têm chave estrangeira. É o que permite
+registrar como autor alguém que não é mais membro — ou que não é membro nenhum, como o
+operador de plataforma. Acrescentar essa chave "por consistência" quebraria a auditoria
+que o cliente mais precisa ler.
+
+**E sobreviver não basta: o registro precisa continuar legível.** Um `uuid` que não aponta
+para lugar nenhum não responde "quem fez". Cada linha guarda também o identificador do
+autor **no momento do ato** — cópia, nunca referência. Se o e-mail mudar depois, o registro
+continua dizendo quem era na hora, que é a pergunta da auditoria.
+
+**Uma exceção que fica registrada e não resolvida:** `auditoria.tenant_id` **tem** chave
+estrangeira para `tenants`, sem `on delete`. Na prática isso impede apagar um tenant que
+tenha histórico. Hoje não incomoda, porque apagar tenant não é operação desta spec. Quando
+for, a decisão é entre manter o bloqueio — histórico impede remoção — ou soltar a chave,
+como nas outras colunas. Pelo argumento acima, soltar é o mais coerente; decidir agora
+seria decidir sem o caso de uso na mão.
+
+E quando esse caso aparecer, **a parte difícil não vai ser técnica**:
+
+> Quem lê a auditoria de um tenant apagado, e por quanto tempo?
+
+Hoje as linhas ficariam existindo e inalcançáveis — a RLS filtra por um
+`tenant_id` que não corresponde mais a ninguém, e o operador de plataforma não
+abre `Repositorio` de tenant. Dado que existe e ninguém pode ler é o pior dos
+dois mundos: ocupa espaço e não serve de prova.
+
+Num produto de DR vendido a terceiros isso é pergunta de contrato — quando um
+cliente sai, o que acontece com o rastro dele e por quanto tempo há obrigação de
+guardá-lo. Quem for decidir a chave estrangeira precisa dessa resposta **antes**,
+não depois.
+
+#### Em aberto: o tenant que perdeu todos os admins
+
+Se o último `admin` de um tenant for removido, ninguém de dentro pode conceder e a
+plataforma não tem caminho — `criar_tenant` só vale na criação. É caso de suporte real e
+não está resolvido aqui.
+
+A assimetria que isso revela, dita em voz alta porque é ela que torna a lacuna concreta:
+
+| Situação | Recuperação |
+| --- | --- |
+| Plataforma sem operadores | o bootstrap volta a valer — condição sobre o estado |
+| Tenant sem `admin` | **nenhuma** |
+
+O que já fica decidido, para quem for resolver, **e o formato importa tanto quanto a
+recusa**: a saída **não** é afrouxar `conceder_papel` para aceitar operador de plataforma,
+porque isso devolve as duas regras na mesma operação — e é exatamente o que alguém vai
+reinventar daqui a três meses se só estiver escrito que não pode.
+
+A operação futura tem forma definida:
+
+- **nome próprio**, não um parâmetro a mais em `conceder_papel`;
+- **evento próprio**, distinto de `tenancy.papel_concedido`, porque é ato de provedor
+  dentro do tenant de um cliente;
+- **auditoria dupla**, nos dois lugares, com o operador como autor na auditoria do cliente
+  — a mesma regra da criação;
+- e, se possível, uma condição de estado que a limite, como o bootstrap tem: só quando não
+  houver nenhum `admin`.
+
 ### O que fica fora do eixo de tenant
 
 Decidir papel por tenant tem uma consequência no esquema: o usuário passa a existir
@@ -260,6 +412,37 @@ como se tivesse acontecido dentro de um tenant.
 `tests/invariants/check_tenant_id.py` espelha esta tabela, com a justificativa de cada
 exceção no código, e um teste falha se as duas listas divergirem. É o que dá força à regra:
 acrescentar exceção só no checador não passa na CI.
+
+## Conceder papel — e por que revogar não está aqui
+
+`conceder_papel` tem **uma** regra de autorização: `admin` daquele tenant. Ela concede e
+altera, na mesma operação e na mesma instrução, porque separar as duas obrigaria quem chama
+a primeiro **ler** se a associação existe para escolher qual usar — e entre a leitura e a
+escrita alguém pode conceder ou revogar. É corrida que o chamador não tem como ganhar, e o
+banco resolve atomicamente. O histórico continua distinguindo os dois casos por
+`papel_anterior` estar nulo ou não, e isso se consulta de uma tabela só.
+
+**Revogar papel está fora desta spec, e não por esquecimento.** Alguém vai tentar revogar
+concedendo papel nulo, e não pode conseguir.
+
+Revogação não é o inverso simétrico de conceder. Pela migração `0004` e pela chave composta
+de `token_servico`, tirar a associação **derruba a sessão viva e o token de serviço junto**
+— é operação destrutiva com raio de alcance, e cai em **P6**: confirmação humana explícita
+e auditoria. Não pode ser alcançável por um caminho cujo nome é "conceder", e por isso
+`papel` não aceita nulo.
+
+Quando existir, revogar é operação própria, com nome próprio, evento próprio, e a
+confirmação que P6 exige.
+
+### Auditar tentativa negada tem um preço conhecido
+
+Tentativa negada de concessão entra na auditoria do próprio tenant. Isso cria uma
+superfície: qualquer membro, inclusive `viewer`, pode encher a auditoria repetindo o
+pedido.
+
+Não é grave — são linhas de um tenant só, visíveis a ele — e a alternativa, não registrar
+tentativa negada, é pior. **A contenção é de `core-007`**, onde o limite por origem mora,
+junto com o limite de tentativa de senha. Fica escrito para não virar descoberta.
 
 ## Papéis dentro do tenant
 
@@ -343,7 +526,9 @@ previsto pela fronteira de `verificar_token`, não implementado aqui.
 
 Ciclo de vida de token de serviço (criar, listar, revogar, rotacionar): `core-007`.
 
-Limite de tentativa de senha **por IP ou origem**: `core-007`, onde o HTTP existe. O
+Revogar papel — operação destrutiva, com P6. Ver "Conceder papel".
+
+Limite de tentativa de senha **por IP ou origem**, e contenção de tentativa negada de concessão: `core-007`, onde o HTTP existe. O
 contador e o bloqueio por usuário são dado e ficam aqui, junto de `usuarios`. A distinção
 importa: com hash memory-hard, login sem limite é negação de serviço barata, e o controle
 que falta não pode ficar sem dono entre as duas specs.

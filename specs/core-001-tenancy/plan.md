@@ -255,12 +255,16 @@ class VerificadorLocal:           # unico implementador hoje
 
 def autenticar(email: str, senha: str, tenant: UUID) -> str: ...
 def trocar_tenant(sessao_atual: str, tenant_destino: UUID) -> str: ...
-def conceder_papel(quem: Principal, usuario: UUID, tenant: UUID, papel: Papel) -> None: ...
+def conceder_papel(conexao, quem: Principal, beneficiario: UUID, papel: Papel) -> None: ...
 ```
 
 `conceder_papel` é quem decide entre `tenancy.papel_concedido` e
 `tenancy.papel_autoconcedido`, comparando concedente e beneficiário. A decisão fica num
 único lugar, com teste, para não depender de cada chamador lembrar.
+
+Não há parâmetro de tenant: ele sai de `quem.tenant_id`. Um parâmetro que precisa ser
+igual ao do principal é um parâmetro que pode discordar dele — e a assinatura original,
+com `tenant` explícito, convidava exatamente a esse erro.
 
 O `Protocol` é a fronteira que a spec prometeu: um validador OIDC entra como segundo
 implementador sem tocar em quem consome `Principal`.

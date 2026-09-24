@@ -29,6 +29,11 @@ make db-up        # PostgreSQL local
 
 `make check` tem que passar antes de qualquer commit. Sem exceção.
 
+**Não canalize comando de verificação.** `make check | tail` devolve o código de saída
+do `tail`, não o do `make` — o comando reprova e o `&&` seguinte roda assim mesmo. Já
+aconteceu: um commit entrou com arquivo não formatado por causa disso. Se a saída é
+longa demais para ler, o problema é a saída, não a leitura.
+
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
 também — a CI roda os dois.
