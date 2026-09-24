@@ -1,0 +1,17 @@
+[project]
+name = "core-tenancy"
+version = "0.1.0"
+description = "Tenancy: papeis por tenant, sessao, token de servico."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# PEP 561: o marcador viaja com o pacote, senao quem importa `vzdr.*` de fora
+# do repositorio recebe Any em silencio (ignore_missing_imports e global).
+"*" = ["py.typed"]
