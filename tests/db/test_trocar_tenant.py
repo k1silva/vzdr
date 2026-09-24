@@ -209,6 +209,43 @@ def test_cadeia_profunda_cai_inteira(conexao, contas):
         assert cur.fetchone() == (0,)
 
 
+def test_revogar_o_papel_no_destino_mata_a_sessao_derivada(conexao, contas):
+    """A raiz sobrevive: o papel revogado foi o de B, não o de A."""
+    tenants, usuario, email = contas
+    token_a = autenticar(conexao, email, SENHA, tenants["a"])
+    token_b = trocar_tenant(conexao, token_a, tenants["b"])
+
+    with conexao.cursor() as cur:
+        cur.execute(
+            "delete from associacao_tenant where usuario_id = %s and tenant_id = %s",
+            (usuario, tenants["b"]),
+        )
+
+    with pytest.raises(TokenInvalidoError):
+        VerificadorLocal(conexao).verificar(token_b)
+    assert VerificadorLocal(conexao).verificar(token_a).tenant_id == tenants["a"]
+
+
+def test_revogar_o_papel_na_raiz_derruba_a_cadeia(conexao, contas):
+    """O papel que sustenta a raiz sustenta tudo que desceu dela — inclusive
+    sessões em tenants cujo papel continua valendo."""
+    tenants, usuario, email = contas
+    token_a = autenticar(conexao, email, SENHA, tenants["a"])
+    token_b = trocar_tenant(conexao, token_a, tenants["b"])
+
+    with conexao.cursor() as cur:
+        cur.execute(
+            "delete from associacao_tenant where usuario_id = %s and tenant_id = %s",
+            (usuario, tenants["a"]),
+        )
+        cur.execute("select count(*) from sessao")
+        assert cur.fetchone() == (0,)
+
+    for morto in (token_a, token_b):
+        with pytest.raises(TokenInvalidoError):
+            VerificadorLocal(conexao).verificar(morto)
+
+
 # --------------------------------------------------------------------------
 # Recusas.
 # --------------------------------------------------------------------------

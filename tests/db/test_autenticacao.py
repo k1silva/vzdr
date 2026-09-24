@@ -194,7 +194,14 @@ def test_o_papel_vem_da_associacao_e_nao_da_sessao(conexao, conta):
     assert VerificadorLocal(conexao).verificar(token).papel is Papel.VIEWER
 
 
-def test_perder_a_associacao_invalida_a_sessao(conexao, conta):
+def test_revogar_o_papel_mata_a_sessao_viva(conexao, conta):
+    """Não é só invalidar na próxima verificação: a linha some.
+
+    Antes da migração 0004, tirar o papel de alguém matava o token de serviço
+    na hora e deixava a sessão interativa valendo até expirar — até doze horas
+    de acesso a um tenant de onde a pessoa foi removida. Não havia motivo para
+    a diferença.
+    """
     tenant, usuario, email = conta
     token = autenticar(conexao, email, SENHA, tenant)
     with conexao.cursor() as cur:
@@ -202,7 +209,9 @@ def test_perder_a_associacao_invalida_a_sessao(conexao, conta):
             "delete from associacao_tenant where usuario_id = %s and tenant_id = %s",
             (usuario, tenant),
         )
-    with pytest.raises(SemAssociacaoNoTenantError):
+        cur.execute("select count(*) from sessao")
+        assert cur.fetchone() == (0,)
+    with pytest.raises(TokenInvalidoError):
         VerificadorLocal(conexao).verificar(token)
 
 
