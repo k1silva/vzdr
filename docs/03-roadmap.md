@@ -4,11 +4,34 @@ Seis marcos. Cada um termina com algo demonstrável e critério de saída objeti
 
 ## M0 — Fundação (2 semanas)
 
-Repo, `AGENTS.md`, constitution, CI com lint, testes e invariantes, VM de CI com libvirt
-9.5 e QEMU 8.2, esqueleto do núcleo, specs `core-001`, `core-002` e `dr-001` aprovadas.
+Repo, `AGENTS.md`, constitution, CI com lint, testes e invariantes, esqueleto do núcleo,
+specs `core-001`, `core-002` e `dr-001` aprovadas.
 
 **Sai quando:** `make check` verde na CI e uma spec passou pelo ciclo completo até `tasks`
 sem você reescrever à mão.
+
+### Estado em 2026-09-24
+
+| Item | Estado |
+| --- | --- |
+| Repo, `AGENTS.md`, constitution | feito |
+| CI com lint, tipos, testes e invariantes | feito — três jobs: `check`, `banco`, `alvo-py39` |
+| Esqueleto do núcleo | feito |
+| Spec `core-001` | **passou pelo ciclo completo**: spec, plano e tarefas; T1–T6b implementadas |
+| Spec `dr-001` | aprovada, com a telemetria por ciclo do ADR-0013 |
+| Spec `core-002` | **rascunho** — sem plano e sem tarefas |
+
+**Falta para fechar:** levar a `core-002` até `tasks`.
+
+O critério "VM de CI com libvirt 9.5 e QEMU 8.2" **saiu deste marco**. Ele nunca foi
+cumprido e não podia ser: `tests/integration` nunca rodou, e um marco com critério que
+ninguém consegue cumprir é um marco que ninguém usa. Virou item próprio em
+"Pré-requisitos de infraestrutura".
+
+O que isso **não** significa: a constituição proíbe mockar libvirt e QMP em teste de
+integração, e continua valendo. O mecanismo foi validado contra libvirt e QEMU reais, no
+cluster de laboratório, em 18 e 23 de setembro — à mão. Não é mock; é o mesmo teste sem
+automação. Ver [validações](validacao/).
 
 ## M1 — Núcleo testável (2 semanas)
 
@@ -64,6 +87,17 @@ Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage 
 ## Pré-requisitos de infraestrutura
 
 Bloqueiam o M3, não o início.
+
+- [ ] **VM de CI com libvirt 9.5 e QEMU 8.2**, para automatizar `tests/integration`.
+      Hoje esses testes rodam à mão contra o laboratório. Bloqueia o M2, cujo critério
+      de saída é uma VM replicando 72 h seguidas — fazer isso à mão não escala.
+
+      *Por que aqui e não em [`pendencias.md`](pendencias.md):* o critério de entrada de
+      lá exige as três coisas ao mesmo tempo, e falta a decisiva — **dono fora do
+      repositório**. Provisionar um runner é trabalho que controlamos. Ele atende as
+      outras duas (bloqueia critério de marco, citado em mais de um documento), e é bom
+      que o registro de pendências exclua alguma coisa: critério que aceita tudo vira
+      depósito.
 
 - [ ] Conta de serviço de API nos dois clusters
 - [ ] Capacidade confirmada no DC-2
