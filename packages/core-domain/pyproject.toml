@@ -16,3 +16,8 @@ where = ["src"]
 # A restricao e por pacote, nao do projeto inteiro — ver ADR-0007.
 extend = "../../pyproject.toml"
 target-version = "py39"
+
+[tool.setuptools.package-data]
+# PEP 561: o marcador viaja com o pacote, senao quem importa `vzdr.*` de fora
+# do repositorio recebe Any em silencio (ignore_missing_imports e global).
+"*" = ["py.typed"]

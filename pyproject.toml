@@ -31,27 +31,12 @@ disallow_untyped_defs = true
 ignore_missing_imports = true
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = ".:packages/core-domain/src:packages/core-connections/src:packages/core-jobs/src:packages/core-agents/src:packages/core-inventory/src:packages/core-events/src:packages/core-api/src:packages/tool-dr/src:packages/agent/src:packages/cli/src"
 
 [[tool.mypy.overrides]]
 module = "vzdr.core.domain.*"
 strict = true
 
 [tool.pytest.ini_options]
-# Os pacotes vivem em packages/*/src e nao sao instalados no venv.
-# Mesma lista de mypy_path, acima — se mudar la, mude aqui.
-pythonpath = [
-    "packages/core-domain/src",
-    "packages/core-connections/src",
-    "packages/core-jobs/src",
-    "packages/core-agents/src",
-    "packages/core-inventory/src",
-    "packages/core-events/src",
-    "packages/core-api/src",
-    "packages/tool-dr/src",
-    "packages/agent/src",
-    "packages/cli/src",
-]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = [

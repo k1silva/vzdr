@@ -10,3 +10,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# PEP 561: o marcador viaja com o pacote, senao quem importa `vzdr.*` de fora
+# do repositorio recebe Any em silencio (ignore_missing_imports e global).
+"*" = ["py.typed"]

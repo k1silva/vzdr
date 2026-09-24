@@ -4,12 +4,22 @@ VENV := .venv
 PIP := $(VENV)/bin/pip
 BIN := $(VENV)/bin
 
+# Raizes dos pacotes, derivadas do layout. Nao e uma lista para manter: se um
+# pacote novo aparecer em packages/, ele entra sozinho. O mypy precisa disto
+# porque `explicit_package_bases` so consegue montar o nome pontilhado de um
+# namespace package (PEP 420) a partir da raiz de origem. Sem isso o override
+# de `vzdr.core.domain.*` deixa de casar e o --strict do dominio cai calado.
+MYPY_SRC := $(shell ls -d packages/*/src 2>/dev/null | tr '\n' ':')
+
 setup:
 	python3 -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install ruff mypy pytest pytest-cov
 	# driver do Postgres: justificado em specs/core-001-tenancy/plan.md
 	$(PIP) install 'psycopg[binary]'
+	# Pacotes em modo editavel. E o que faz `import vzdr.*` funcionar no pytest
+	# e no mypy sem lista de caminhos no pyproject.toml.
+	for p in packages/*/; do $(PIP) install -q -e "$$p" || exit 1; done
 	@echo "pronto. ative com: source $(VENV)/bin/activate"
 
 lint:
@@ -21,11 +31,11 @@ fmt:
 	$(BIN)/ruff check --fix packages tests scripts
 
 typecheck:
-	$(BIN)/mypy packages scripts
+	MYPYPATH=$(MYPY_SRC) $(BIN)/mypy packages scripts
 	# mypy nao aceita python_version por modulo (e opcao global), entao o que roda no
 	# hypervisor passa por uma segunda invocacao. 3.10 e o piso que o mypy aceita —
 	# quem garante a sintaxe de 3.9 e o ruff. Ver ADR-0007.
-	$(BIN)/mypy --python-version 3.10 packages/agent packages/core-domain
+	MYPYPATH=$(MYPY_SRC) $(BIN)/mypy --python-version 3.10 packages/agent packages/core-domain
 
 test:
 	$(BIN)/pytest tests/unit
