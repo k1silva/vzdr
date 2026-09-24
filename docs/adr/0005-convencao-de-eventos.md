@@ -30,8 +30,28 @@ Todo evento se chama `dominio.acao`:
 tenancy.papel_concedido
 tenancy.papel_autoconcedido
 dr.ciclo_concluido
-conexoes.verificacao_falhou
+connections.verificacao_falhou
 ```
+
+### A forma é mista de propósito
+
+`connections.verificacao_falhou` **está certo**, e parece errado dos dois lados. Vale
+escrever por quê, porque quem chegar depois vai querer "normalizar":
+
+| Parte | Idioma | De onde vem |
+| --- | --- | --- |
+| `connections` | inglês | é o nome do **módulo** dono, e módulo é infraestrutura |
+| `verificacao_falhou` | português | é termo de negócio |
+
+É exatamente a regra do `AGENTS.md` — termo de negócio em português, o resto em inglês —
+aplicada a um nome que atravessa a fronteira. Normalizar para `conexoes.*` desalinha do
+módulo e quebra o checador, que deriva o domínio de `packages/*/src/**/py.typed`.
+Normalizar para `connections.verification_failed` traduz termo de negócio, que é o que a
+convenção recusa.
+
+Este exemplo dizia `conexoes` e **contradizia a própria decisão acima**. Passou
+despercebido porque, até o `check_eventos.py` existir, nada derivava nada deste documento:
+ele não casou com módulo nenhum e o erro apareceu.
 
 O prefixo é por módulo porque é por ele que `core-006` roteia e filtra — um assinante que
 quer tudo de DR assina `dr.*` sem enumerar evento por evento.

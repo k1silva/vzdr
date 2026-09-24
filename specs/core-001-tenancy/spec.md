@@ -480,6 +480,24 @@ Disparar failover é separado de operar porque é destrutivo e decide negócio.
 | Token de serviço sem usuário dono resolvível | 401, nada executa | Inalterado |
 | Consulta sem filtro de tenant | Falha em teste, build quebra | Não chega em produção |
 
+## Eventos
+
+O contrato da `core-001`. Nome de evento é contrato público: um assinante de webhook vive
+fora deste repositório, e renomear depois o quebra em silêncio (ADR-0005).
+
+Esta tabela é a **fonte**. `tests/invariants/check_eventos.py` confere que ela e o código
+dizem a mesma coisa, **nos dois sentidos** — declarado sem emissor e emitido sem contrato —,
+que cada um tem teste, e gera `docs/eventos.md` para quem consome.
+
+| Evento | Quando |
+| --- | --- |
+| `tenancy.papel_concedido` | Papel concedido ou alterado dentro de um tenant. Na criação do tenant, o autor é o operador de plataforma |
+| `tenancy.papel_autoconcedido` | Quem concede e quem recebe são o mesmo principal. Tipo próprio para permitir alerta sem varrer o log |
+| `tenancy.concessao_negada` | Tentativa de conceder papel sem ser `admin` daquele tenant |
+| `tenancy.tenant_criado` | Tenant criado pelo operador de plataforma, já com o primeiro `admin` |
+| `tenancy.plataforma_iniciada` | Primeiro operador de plataforma criado pelo bootstrap. Único ato do sistema sem autor autenticado |
+| `tenancy.tenant_trocado` | Sessão emitida para outro tenant a partir de uma válida, sem senha |
+
 ## Invariantes
 
 - **P9:** toda tabela que guarda dado de tenant tem `tenant_id`, desde a primeira migração.

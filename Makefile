@@ -1,4 +1,4 @@
-.PHONY: setup lint fmt typecheck test test-db test-int invariants check db-up db-papeis db-down clean
+.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean
 
 VENV := .venv
 PIP := $(VENV)/bin/pip
@@ -56,12 +56,17 @@ invariants:
 	$(BIN)/python tests/invariants/check_alvo_py39.py
 	$(BIN)/python tests/invariants/check_dsn_guardada.py
 	$(BIN)/python tests/invariants/check_pendencias.py
+	$(BIN)/python tests/invariants/check_eventos.py
 
 check: lint typecheck test invariants
 	@echo "tudo verde"
 
 db-up:
 	docker compose up -d postgres
+
+# Regera docs/eventos.md a partir das secoes `Eventos` das specs.
+eventos:
+	$(BIN)/python tests/invariants/check_eventos.py --gerar
 
 db-papeis:
 	$(BIN)/python -m scripts.criar_papeis_db
