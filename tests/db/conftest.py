@@ -11,31 +11,19 @@ import os
 
 import pytest
 
-from scripts.ambiente_db import (
-    dsn_app_de,
-    dsn_de,
-    mensagem_sem_banco,
-    verificar_alvo,
-)
+from scripts.ambiente_db import conectar, dsn_verificado, mensagem_sem_banco
 
 
 @pytest.fixture(scope="session")
 def dsn() -> str:
-    alvo = dsn_de(os.environ)
-    verificar_alvo(alvo, os.environ)
-    return alvo
+    return dsn_verificado(os.environ)
 
 
 @pytest.fixture()
 def conexao(dsn: str):
     """Conexao com o Postgres local, uma por teste, sempre fechada no fim."""
     try:
-        import psycopg
-    except ImportError as erro:  # pragma: no cover - so sem dependencia instalada
-        pytest.fail(f"psycopg nao esta instalado. Rode: make setup\n  Erro original: {erro!r}")
-
-    try:
-        conn = psycopg.connect(dsn)
+        conn = conectar(os.environ)
     except Exception as erro:
         pytest.fail(mensagem_sem_banco(dsn, erro))
 
@@ -68,9 +56,7 @@ def esquema_limpo(conexao):
 
 @pytest.fixture(scope="session")
 def dsn_app() -> str:
-    alvo = dsn_app_de(os.environ)
-    verificar_alvo(alvo, os.environ)
-    return alvo
+    return dsn_verificado(os.environ, app=True)
 
 
 @pytest.fixture()
@@ -80,14 +66,10 @@ def conexao_app(dsn_app: str, esquema_limpo: str):
     Nao e dono das tabelas e nao tem BYPASSRLS. Todo teste de privilegio ou de
     isolamento fala por aqui; `conexao` e o dono, e dono nao prova isolamento.
     """
-    import psycopg
-
     try:
-        conn = psycopg.connect(dsn_app)
+        conn = conectar(os.environ, app=True, autocommit=True)
     except Exception as erro:
         pytest.fail(mensagem_sem_banco(dsn_app, erro))
-
-    conn.autocommit = True
     try:
         with conn.cursor() as cur:
             cur.execute(f'set search_path to "{esquema_limpo}"')
