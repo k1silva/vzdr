@@ -278,6 +278,64 @@ não existe tenant ainda.
 chega em produção. Fica em aberto se o primeiro login deve forçar troca — é decisão de
 `core-007`, onde a interface existe.
 
+### Criar tenant: ele nasce com o primeiro admin, nunca vazio
+
+Quarto ovo e galinha: um tenant recém-criado não tem ninguém dentro, e quem
+concederia o primeiro papel nele seria o operador de plataforma — que não tem
+`tenant_id`, enquanto `associacao_tenant` tem RLS.
+
+**A resposta é não deixar o problema existir.** `criar_tenant` recebe o usuário que
+será o primeiro `admin` e cria as duas coisas na mesma transação. Tenant vazio não é um
+estado do sistema.
+
+Isso muda o que a pergunta "o operador de plataforma pode assumir contexto de tenant?"
+significa. Ele abre contexto **apenas dentro de `criar_tenant`, num tenant que acabou de
+criar, na mesma transação, antes de existir qualquer coisa lá dentro**. Não há o que
+vazar: o tenant está vazio porque nasceu naquele instante. O limite é de construção, não
+de disciplina — e não existe operação que abra contexto num tenant com dado dentro.
+
+O que **não** muda: o `Repositorio` continua recusando principal de plataforma na
+construção (T7). Não existe repositório de tenant para quem é de plataforma, então não
+existe caminho geral de leitura. A separação que `pode()` garante na borda e o
+`Repositorio` garante no acesso continua inteira.
+
+**`conceder_papel` continua com uma regra só: `admin` daquele tenant.** Não ganha um
+segundo caminho de autorização. Conceder o primeiro papel não é uma concessão com regra
+especial — é parte de criar o tenant, que é outra operação, com outro autor e outro
+evento. Duas regras para a mesma operação seria a coisa que emerge do código e ninguém
+consegue reler depois.
+
+#### A concessão inicial é auditada nos dois lugares
+
+Não em um. As duas linhas dizem coisas diferentes:
+
+| Onde | Evento | O que responde |
+| --- | --- | --- |
+| `auditoria_plataforma` | `tenancy.tenant_criado` | o operador da plataforma agiu |
+| `auditoria` **do tenant novo** | `tenancy.papel_concedido`, autor = o operador | o que aconteceu dentro daquele tenant |
+
+A segunda é a que importa para o cliente. Sem ela, o provedor poderia pôr alguém no
+tenant de um cliente sem que o cliente conseguisse ver — e num produto de DR vendido a
+terceiros essa é exatamente a pergunta que a auditoria do cliente vai fazer: *quem
+colocou essa pessoa aqui?*
+
+Isso depende de um detalhe do esquema que parece descuido e não é: **`auditoria.usuario_id`
+não tem chave estrangeira para `associacao_tenant`**. É o que permite registrar como autor
+alguém que não é membro do tenant — exatamente o caso do operador de plataforma.
+Acrescentar essa chave "por consistência" quebraria a auditoria que o cliente mais precisa
+ler.
+
+#### Em aberto: o tenant que perdeu todos os admins
+
+Se o último `admin` de um tenant for removido, ninguém de dentro pode conceder e a
+plataforma não tem caminho — `criar_tenant` só vale na criação. É caso de suporte real e
+não está resolvido aqui.
+
+O que já fica decidido, para quem for resolver: a saída **não** é afrouxar
+`conceder_papel` para aceitar operador de plataforma, porque isso devolve as duas regras
+na mesma operação. Seria operação própria, com nome próprio, evento próprio, e a mesma
+auditoria dupla — visível ao cliente, sempre.
+
 ### O que fica fora do eixo de tenant
 
 Decidir papel por tenant tem uma consequência no esquema: o usuário passa a existir

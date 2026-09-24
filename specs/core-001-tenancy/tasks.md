@@ -162,9 +162,16 @@ caminho de falha.
 - [ ] **T12** — Papel de plataforma, `sessao_plataforma`, `criar_tenant()` e bootstrap
   - Sessão de plataforma em tabela própria, sem `tenant_id`: um principal de plataforma não
     tem onde carregar tenant, então a invariante deixa de depender de revisão.
-  - `criar_tenant(quem, nome, identificador)` — o passo 1 do comportamento normal da spec,
-    que não tinha dono em nenhuma tarefa. Exige papel de plataforma, audita em
-    `auditoria_plataforma`, identificador único.
+  - `criar_tenant(quem, nome, identificador, primeiro_admin)` — o passo 1 do comportamento
+    normal da spec, que não tinha dono em nenhuma tarefa. Exige papel de plataforma,
+    identificador único, e **cria o tenant e a primeira associação na mesma transação**:
+    tenant vazio não é estado do sistema. Auditado nos **dois** lugares —
+    `tenancy.tenant_criado` em `auditoria_plataforma` e `tenancy.papel_concedido` na
+    auditoria do tenant novo, com o operador como autor. Ver a spec, seção "Criar tenant:
+    ele nasce com o primeiro admin".
+  - Testes adicionais: tenant nunca existe sem associação; a concessão inicial aparece na
+    auditoria do tenant com o operador como autor; `conceder_papel` continua recusando
+    principal de plataforma (uma regra só).
   - Bootstrap cria o primeiro papel de plataforma e registra em `auditoria_plataforma`
     como `tenancy.plataforma_iniciada` — evento próprio, porque é o único ato sem autor
     autenticado. Vem junto de `criar_tenant()` porque bootstrap sem tenant nenhum não tem
