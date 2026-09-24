@@ -1,4 +1,4 @@
-.PHONY: setup lint fmt typecheck test test-db test-int invariants check db-up db-down clean
+.PHONY: setup lint fmt typecheck test test-db test-int invariants check db-up db-papeis db-down clean
 
 VENV := .venv
 PIP := $(VENV)/bin/pip
@@ -31,17 +31,19 @@ fmt:
 	$(BIN)/ruff check --fix packages tests scripts
 
 typecheck:
-	MYPYPATH=$(MYPY_SRC) $(BIN)/python scripts/checar_mypy.py packages scripts
+	MYPYPATH=$(MYPY_SRC) $(BIN)/python -m scripts.checar_mypy packages scripts
 	# mypy nao aceita python_version por modulo (e opcao global), entao o que roda no
 	# hypervisor passa por uma segunda invocacao. 3.10 e o piso que o mypy aceita —
 	# quem garante a sintaxe de 3.9 e o ruff. Ver ADR-0007.
-	MYPYPATH=$(MYPY_SRC) $(BIN)/python scripts/checar_mypy.py \
+	MYPYPATH=$(MYPY_SRC) $(BIN)/python -m scripts.checar_mypy \
 		--python-version 3.10 packages/agent packages/core-domain
 
 test:
 	$(BIN)/pytest tests/unit
 
-test-db:
+# Garante o papel da aplicacao antes de testar: sem ele, o teste de isolamento
+# rodaria como dono das tabelas e nao provaria nada (ADR-0006).
+test-db: db-papeis
 	$(BIN)/pytest tests/db -m db
 
 test-int:
@@ -58,6 +60,9 @@ check: lint typecheck test invariants
 
 db-up:
 	docker compose up -d postgres
+
+db-papeis:
+	$(BIN)/python -m scripts.criar_papeis_db
 
 db-down:
 	docker compose down
