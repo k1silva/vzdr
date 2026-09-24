@@ -47,6 +47,19 @@ class PrincipalSemTenantError(Exception):
     """
 
 
+class ForaDeTransacaoError(Exception):
+    """Consulta pedida fora de `transacao()`, sem contexto de tenant.
+
+    Sem o contexto, a RLS devolve ZERO LINHA em vez de erro — por desenho
+    (ADR-0006). No nivel do dado isso e a mesma armadilha de sempre: resultado
+    vazio e indistinguivel de "nao ha nada", e quem escreveu a consulta vai
+    depurar a consulta, nunca o contexto.
+
+    Entao o repositorio falha alto, na construcao da consulta, em vez de
+    devolver um vazio plausivel.
+    """
+
+
 class TenantAlheioError(Exception):
     """Escrita com tenant_id diferente do principal.
 
@@ -66,6 +79,9 @@ class Repositorio:
             )
         self._conexao = conexao
         self._principal = principal
+        # Conta aninhamento: `transacao()` dentro de `transacao()` e savepoint,
+        # e o contexto continua valendo ate a mais externa fechar.
+        self._profundidade = 0
 
     @property
     def principal(self) -> Principal:
@@ -88,7 +104,20 @@ class Repositorio:
                 "select set_config(%s, %s, true)",
                 (VARIAVEL_DE_CONTEXTO, str(self.tenant_id)),
             )
-            yield self
+            self._profundidade += 1
+            try:
+                yield self
+            finally:
+                self._profundidade -= 1
+
+    def _exigir_contexto(self, operacao: str) -> None:
+        if self._profundidade == 0:
+            raise ForaDeTransacaoError(
+                f"{operacao} pedido fora de transacao(). Sem contexto de tenant a "
+                f"RLS devolve zero linha em vez de erro, e um vazio plausivel "
+                f"manda voce depurar a consulta em vez do contexto. "
+                f"Envolva em `with repositorio.transacao() as r:`."
+            )
 
     def selecionar(
         self,
@@ -98,6 +127,7 @@ class Repositorio:
         parametros: Sequence[Any] = (),
     ) -> list[tuple[Any, ...]]:
         """Sempre com `tenant_id = <do principal>`. Nao ha como pedir sem."""
+        self._exigir_contexto("select")
         consulta = sql.SQL("select {cols} from {tab} where tenant_id = %s").format(
             cols=sql.SQL(", ").join(sql.Identifier(c) for c in colunas),
             tab=sql.Identifier(tabela),
@@ -112,6 +142,7 @@ class Repositorio:
 
     def inserir(self, tabela: str, valores: Mapping[str, Any]) -> None:
         """O `tenant_id` vem do principal, nunca do chamador."""
+        self._exigir_contexto("insert")
         alheio = valores.get("tenant_id")
         if alheio is not None and str(alheio) != str(self.tenant_id):
             raise TenantAlheioError(

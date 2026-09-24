@@ -37,7 +37,8 @@ def contar(conexao, tabela):
 
 def test_ato_de_tenant_vai_para_auditoria_e_nao_para_a_de_plataforma(conexao, tenant):
     repo = Repositorio(conexao, Principal.de_usuario(uuid.uuid4(), tenant, Papel.ADMIN))
-    registrar(repo, "tenancy.papel_concedido", "usuario:x")
+    with repo.transacao() as r:
+        registrar(r, "tenancy.papel_concedido", "usuario:x")
     assert contar(conexao, "auditoria") == 1
     assert contar(conexao, "auditoria_plataforma") == 0
 
@@ -52,8 +53,9 @@ def test_ato_de_plataforma_vai_para_a_outra_tabela(conexao, tenant):  # noqa: AR
 
 def test_o_tenant_da_linha_vem_do_principal(conexao, tenant):
     repo = Repositorio(conexao, Principal.de_usuario(uuid.uuid4(), tenant, Papel.ADMIN))
-    registrar(repo, "tenancy.papel_concedido", "usuario:x")
-    linhas = repo.selecionar("auditoria", ["tenant_id"])
+    with repo.transacao() as r:
+        registrar(r, "tenancy.papel_concedido", "usuario:x")
+        linhas = r.selecionar("auditoria", ["tenant_id"])
     assert [linha[0] for linha in linhas] == [tenant]
 
 
@@ -62,16 +64,18 @@ def test_acao_por_token_de_servico_grava_servico_e_dono(conexao, tenant):
     emprestada. É a pergunta que alguém faz quando um assistente de IA agiu."""
     dono, servico = uuid.uuid4(), uuid.uuid4()
     repo = Repositorio(conexao, Principal.de_servico(dono, servico, tenant, Papel.ADMIN))
-    registrar(repo, "dr.ciclo_concluido", "vm:jau-server01")
-    linhas = repo.selecionar("auditoria", ["usuario_id", "servico_id"])
+    with repo.transacao() as r:
+        registrar(r, "dr.ciclo_concluido", "vm:jau-server01")
+        linhas = r.selecionar("auditoria", ["usuario_id", "servico_id"])
     assert linhas == [(dono, servico)]
 
 
 def test_acao_por_usuario_nao_inventa_servico(conexao, tenant):
     usuario = uuid.uuid4()
     repo = Repositorio(conexao, Principal.de_usuario(usuario, tenant, Papel.ADMIN))
-    registrar(repo, "dr.ciclo_concluido", "vm:x")
-    assert repo.selecionar("auditoria", ["usuario_id", "servico_id"]) == [(usuario, None)]
+    with repo.transacao() as r:
+        registrar(r, "dr.ciclo_concluido", "vm:x")
+        assert r.selecionar("auditoria", ["usuario_id", "servico_id"]) == [(usuario, None)]
 
 
 def test_principal_de_tenant_nao_registra_ato_de_plataforma(conexao, tenant):
@@ -85,17 +89,19 @@ def test_principal_de_tenant_nao_registra_ato_de_plataforma(conexao, tenant):
 
 def test_detalhe_vira_jsonb_consultavel(conexao, tenant):
     repo = Repositorio(conexao, Principal.de_usuario(uuid.uuid4(), tenant, Papel.ADMIN))
-    registrar(repo, "tenancy.papel_autoconcedido", "usuario:x", {"papel": "admin"})
-    linhas = repo.selecionar(
-        "auditoria", ["evento"], onde="detalhe ->> 'papel' = %s", parametros=("admin",)
-    )
+    with repo.transacao() as r:
+        registrar(r, "tenancy.papel_autoconcedido", "usuario:x", {"papel": "admin"})
+        linhas = r.selecionar(
+            "auditoria", ["evento"], onde="detalhe ->> 'papel' = %s", parametros=("admin",)
+        )
     assert [linha[0] for linha in linhas] == ["tenancy.papel_autoconcedido"]
 
 
 def test_sem_detalhe_a_coluna_fica_nula(conexao, tenant):
     repo = Repositorio(conexao, Principal.de_usuario(uuid.uuid4(), tenant, Papel.ADMIN))
-    registrar(repo, "dr.ciclo_concluido", "vm:x")
-    assert repo.selecionar("auditoria", ["detalhe"]) == [(None,)]
+    with repo.transacao() as r:
+        registrar(r, "dr.ciclo_concluido", "vm:x")
+        assert r.selecionar("auditoria", ["detalhe"]) == [(None,)]
 
 
 def test_a_aplicacao_registra_e_nao_reescreve(conexao, conexao_app, tenant):

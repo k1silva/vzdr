@@ -23,6 +23,7 @@ import pytest
 
 from vzdr.core.domain.tenancy import Papel, Principal
 from vzdr.core.tenancy.repositorio import (
+    ForaDeTransacaoError,
     PrincipalSemTenantError,
     Repositorio,
     TenantAlheioError,
@@ -97,10 +98,16 @@ def test_o_dono_ignora_a_rls(conexao):
 
 
 def test_o_filtro_do_repositorio_sozinho_isola(cenario, conexao):
-    """Pela conexão do dono a RLS não vale. O que sobra é este filtro."""
+    """Pela conexão do dono a RLS não vale. O que sobra é este filtro.
+
+    `transacao()` aparece aqui só porque o repositório exige contexto. Para o
+    dono, que é superusuário, o contexto não muda nada — ele ignora a política
+    de qualquer jeito. Quem isola neste teste é o `where tenant_id`.
+    """
     a, b = cenario
     repo = Repositorio(conexao, principal_de(a))
-    linhas = repo.selecionar("auditoria", ["tenant_id"])
+    with repo.transacao() as r:
+        linhas = r.selecionar("auditoria", ["tenant_id"])
     assert {linha[0] for linha in linhas} == {a}
     assert b not in {linha[0] for linha in linhas}
 
@@ -108,16 +115,21 @@ def test_o_filtro_do_repositorio_sozinho_isola(cenario, conexao):
 def test_o_filtro_vale_tambem_no_outro_tenant(cenario, conexao):
     a, b = cenario
     repo = Repositorio(conexao, principal_de(b))
-    assert {linha[0] for linha in repo.selecionar("auditoria", ["tenant_id"])} == {b}
+    with repo.transacao() as r:
+        assert {linha[0] for linha in r.selecionar("auditoria", ["tenant_id"])} == {b}
 
 
 def test_condicao_extra_nao_remove_o_filtro(cenario, conexao):
     """`onde` é acrescentado com `and`, nunca substitui o filtro de tenant."""
     a, _ = cenario
     repo = Repositorio(conexao, principal_de(a))
-    linhas = repo.selecionar(
-        "auditoria", ["tenant_id"], onde="evento = %s", parametros=("tenancy.papel_concedido",)
-    )
+    with repo.transacao() as r:
+        linhas = r.selecionar(
+            "auditoria",
+            ["tenant_id"],
+            onde="evento = %s",
+            parametros=("tenancy.papel_concedido",),
+        )
     assert {linha[0] for linha in linhas} == {a}
 
 
@@ -125,8 +137,9 @@ def test_inserir_usa_o_tenant_do_principal(cenario, conexao):
     a, _ = cenario
     repo = Repositorio(conexao, principal_de(a))
     usuario = criar_usuario(conexao)
-    repo.inserir("auditoria", {"evento": "teste", "usuario_id": usuario, "alvo": "x"})
-    linhas = repo.selecionar("auditoria", ["tenant_id"], onde="evento = %s", parametros=("teste",))
+    with repo.transacao() as r:
+        r.inserir("auditoria", {"evento": "teste", "usuario_id": usuario, "alvo": "x"})
+        linhas = r.selecionar("auditoria", ["tenant_id"], onde="evento = %s", parametros=("teste",))
     assert [linha[0] for linha in linhas] == [a]
 
 
@@ -135,8 +148,8 @@ def test_inserir_com_tenant_alheio_e_recusado_pelo_codigo(cenario, conexao):
     a, b = cenario
     repo = Repositorio(conexao, principal_de(a))
     usuario = criar_usuario(conexao)
-    with pytest.raises(TenantAlheioError) as erro:
-        repo.inserir(
+    with repo.transacao() as r, pytest.raises(TenantAlheioError) as erro:
+        r.inserir(
             "auditoria",
             {"tenant_id": b, "evento": "teste", "usuario_id": usuario, "alvo": "x"},
         )
@@ -147,6 +160,56 @@ def test_principal_de_plataforma_nao_abre_repositorio(conexao):
     """A segunda invariante da spec, em código: plataforma não lê dado de tenant."""
     with pytest.raises(PrincipalSemTenantError):
         Repositorio(conexao, Principal.de_plataforma(uuid.uuid4()))
+
+
+def test_consultar_fora_de_transacao_falha_alto(cenario, conexao_app):
+    """Sem contexto a RLS devolve zero linha, não erro. Vazio plausível manda
+    depurar a consulta em vez do contexto — então o repositório falha antes."""
+    a, _ = cenario
+    repo = Repositorio(conexao_app, principal_de(a))
+    with pytest.raises(ForaDeTransacaoError) as erro:
+        repo.selecionar("auditoria", ["id"])
+    assert "zero linha" in str(erro.value)
+    assert "transacao()" in str(erro.value)
+
+
+def test_inserir_fora_de_transacao_falha_alto(cenario, conexao_app):
+    a, _ = cenario
+    repo = Repositorio(conexao_app, principal_de(a))
+    with pytest.raises(ForaDeTransacaoError):
+        repo.inserir("auditoria", {"evento": "x", "usuario_id": uuid.uuid4(), "alvo": "y"})
+
+
+def test_a_guarda_vale_tambem_para_o_dono(cenario, conexao):
+    """Pelo dono a consulta funcionaria — superusuário ignora RLS. A guarda
+    existe para o hábito, não só para o sintoma: quem escreve assim e testa
+    com o dono descobriria o buraco só em produção."""
+    a, _ = cenario
+    repo = Repositorio(conexao, principal_de(a))
+    with pytest.raises(ForaDeTransacaoError):
+        repo.selecionar("auditoria", ["id"])
+
+
+def test_depois_da_transacao_a_guarda_volta(cenario, conexao_app):
+    a, _ = cenario
+    repo = Repositorio(conexao_app, principal_de(a))
+    with repo.transacao() as r:
+        r.selecionar("auditoria", ["id"])
+    with pytest.raises(ForaDeTransacaoError):
+        repo.selecionar("auditoria", ["id"])
+
+
+def test_transacao_aninhada_mantem_o_contexto(cenario, conexao_app):
+    """`transacao()` dentro de `transacao()` é savepoint: o contexto vale até a
+    mais externa fechar, e a guarda tem que acompanhar isso."""
+    a, _ = cenario
+    repo = Repositorio(conexao_app, principal_de(a))
+    with repo.transacao() as r:
+        with r.transacao() as interno:
+            assert len(interno.selecionar("auditoria", ["id"])) == 1
+        assert len(r.selecionar("auditoria", ["id"])) == 1
+    with pytest.raises(ForaDeTransacaoError):
+        repo.selecionar("auditoria", ["id"])
 
 
 # --------------------------------------------------------------------------
