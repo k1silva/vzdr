@@ -109,6 +109,33 @@ dela, porque o `on delete cascade` é recursivo.
 Quem revoga precisa saber o que cai junto: **cai tudo que foi derivado**, direta ou
 indiretamente.
 
+A chave composta também trava o `expira_em` da mãe: qualquer `update` nele violaria a
+referência das filhas. Por isso `on update cascade`, e não por simetria — **esta spec não
+descarta renovação de sessão**, e no dia em que alguém implementar expiração deslizante o
+comportamento certo é renovar a cadeia junto. Sem a cláusula, essa pessoa encontraria um
+`ForeignKeyViolation` que não explica nada e "consertaria" a restrição.
+
+#### O tamanho da cadeia
+
+Trocar de tenant **sempre cria um nível**; não há reuso de sessão existente. E não há por
+uma razão técnica, não por escolha: o banco guarda só o SHA-256 do token, então "reusar"
+não poderia devolver o token de volta — ele não é recuperável. Alternar entre dois tenants
+cinquenta vezes cria cinquenta linhas, e voltar a A deixa a segunda sessão de A como neta
+da primeira, no mesmo tenant.
+
+Isso é inofensivo por três motivos, e vale dizer quais são para o dia em que parecer que
+não é:
+
+1. o crescimento é limitado pela vida da raiz — toda a cadeia morre com o login, e a raiz
+   dura 12 horas;
+2. **nenhuma consulta percorre a cadeia.** `sessao_pai_id` não aparece em nenhuma consulta
+   deste repositório: quem o segue é o `on delete cascade` do PostgreSQL, iterativo e do
+   lado do banco;
+3. a linha é pequena e o índice é por `token_hash`, não por profundidade.
+
+Se algum dia a profundidade incomodar, o limite é uma coluna de profundidade com `check`,
+não um percurso. Enquanto não houver medição de que incomoda, não existe.
+
 **A verificação do destino usa o próprio destino.** Conferir se o usuário tem papel em B
 exige ler `associacao_tenant`, que tem RLS — e no contexto de A a linha de B está
 escondida. A saída é que o destino é conhecido: o usuário pediu para ir a B. Abre-se o
@@ -120,6 +147,14 @@ A linha filha vive no tenant de destino e aponta para uma mãe no tenant de orig
 atravessa a fronteira de tenant de propósito, e funciona porque **verificação de
 integridade referencial ignora RLS** no PostgreSQL — é o que faz o cascade alcançar
 descendentes em outros tenants. Verificado, não suposto.
+
+**O que esse fato custa.** Se a integridade referencial ignora RLS, a chave estrangeira é
+um oráculo de existência entre tenants: um `insert` que passa prova que existe sessão com
+aquele par `(id, expira_em)` em **algum** tenant, mesmo que o autor não possa vê-la.
+
+Na prática é inexplorável — exige acertar um UUID v4 e o instante exato junto, e o retorno
+é um bit. Fica escrito pelo mesmo motivo que o prefixo do token: é consequência real do
+desenho, e quem for mexer nisto depois precisa saber que existe, em vez de descobrir.
 
 Token de serviço **não** troca de tenant: é emitido para um e nele fica. Automação que
 atende dois tenants tem dois tokens, e isso é desejável — a auditoria diz qual agiu.
