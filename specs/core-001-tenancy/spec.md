@@ -41,6 +41,20 @@ implementador, sem tocar em quem consome o principal.
 
 Não depender de IdP externo mantém M0 e a CI de pé com `make db-up` e nada mais.
 
+**O token de sessão de tenant é `<tenant_id>.<segredo>`.** A spec dizia apenas "token
+próprio"; o prefixo apareceu ao implementar. `sessao` tem `tenant_id`, logo tem RLS, e ler
+a linha exige o contexto de tenant — que só se saberia lendo a linha. As alternativas eram
+piores: dar ao verificador uma conexão sem RLS, tirar a RLS de `sessao`, ou criar uma
+função `security definer` que a contorna. Todas trocam um problema de bootstrap por uma
+superfície privilegiada nova.
+
+Trocar o prefixo não abre nada: o hash guardado é do token inteiro, então prefixo
+diferente dá hash diferente — e a RLS do tenant trocado esconderia a linha de qualquer
+forma. O que o prefixo revela é o tenant de quem já tem o token.
+
+Sessão de plataforma não tem esse problema: `sessao_plataforma` não tem `tenant_id` nem
+RLS, e o token dela é opaco inteiro.
+
 ### Papel é por tenant
 
 A associação `(usuario, tenant, papel)` é uma tabela própria, não uma coluna em `usuario`.
@@ -50,6 +64,17 @@ papel é resolvido na autenticação para aquele tenant.
 A fronteira de permissão e a fronteira de dados têm que ser a mesma. Com papel global, o
 teste de isolamento entre tenants não teria como existir: faltaria o usuário que pertence
 aos dois.
+
+### Senha: o algoritmo mora na linha, e a migração acontece no login
+
+`senha_params` guarda algoritmo, parâmetros e salt, nessa ordem. Quem valida lê o
+algoritmo que a linha declara e **nunca** assume a política vigente.
+
+Isso sozinho não migra nada. **Login bem-sucedido cuja linha está defasada re-hasheia na
+hora** — é o único momento em que a senha em claro existe. Sem essa regra, "adotar outro
+algoritmo depois é aditivo" é plano que nunca executa: os parâmetros ficam gravados,
+ninguém migra, e daqui a dois anos o parque inteiro continua no original. Vale igual para
+subir o custo sem trocar de algoritmo, que é o caso mais provável.
 
 ### Token de serviço
 
@@ -174,7 +199,8 @@ Disparar failover é separado de operar porque é destrutivo e decide negócio.
 
 | Falha | O que acontece | Estado resultante |
 | --- | --- | --- |
-| Token inválido ou expirado | 401, nada executa | Inalterado |
+| Token inválido ou malformado | 401, nada executa | Inalterado |
+| Token expirado | 401, nada executa — **erro distinto do inválido**, porque a interface diz "entre de novo", não "token errado" | Inalterado |
 | Papel insuficiente | 403, registra tentativa na auditoria | Inalterado |
 | Usuário sem associação ao tenant pedido | 403, registra tentativa na auditoria | Inalterado |
 | Papel de plataforma pede dado de tenant | 403, registra tentativa na auditoria | Inalterado |
@@ -214,6 +240,8 @@ Disparar failover é separado de operar porque é destrutivo e decide negócio.
 - [ ] Conceder papel a si mesmo aparece na auditoria como `tenancy.papel_autoconcedido`,
       distinguível por consulta sem ler o resto do log
 - [ ] Nenhuma tabela nova sem `tenant_id` fora da lista de exceções desta spec, com checador
+- [ ] Login com senha defasada re-hasheia na hora, e a senha continua valendo
+- [ ] Autenticar usuário inexistente executa o mesmo trabalho de hash que um existente
 - [ ] Cada papel tem teste de permissão concedida e negada
 - [ ] Token de serviço tem o papel do dono; rebaixar o dono rebaixa o token, com teste
 - [ ] Ação por token de serviço aparece na auditoria com serviço e usuário dono

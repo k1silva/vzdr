@@ -109,6 +109,12 @@ Itens que merecem virar trabalho, mas ainda não têm data.
 - **Separar a decisão 3 do ADR-0012 num ADR próprio**, com status `proposto`. Aquele
   documento empacota três decisões de maturidade diferente, e foi por isso que ele não
   coube no vocabulário de status do `template.md`. A nota no topo é remendo, não conserto.
+- **Uma *view* nomeando "ação veio por token"** na auditoria. Hoje o fato está lá e é
+  inequívoco — `servico_id` é preenchido se, e somente se, a origem é serviço, garantido
+  no `Principal` desde a T4 — mas a consulta exige que quem lê conheça o truque. Uma view
+  chamada `auditoria_por_servico` (ou coluna derivada) paga-se quando existir tela de
+  leitura de auditoria, em `core-007`. **Não** é coluna nova: `origem` seria segunda fonte
+  de verdade para algo já inequívoco, e duas fontes podem discordar.
 - **Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
   e foi o que tornou a ausência de `py.typed` invisível. Registrada como TI2 em
   `specs/core-001-tenancy/tasks.md`.
