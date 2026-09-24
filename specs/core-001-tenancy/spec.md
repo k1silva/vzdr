@@ -235,6 +235,49 @@ O papel de plataforma tem a segunda e **não** tem a primeira: para ver a prote�
 tenant, ele precisa de um papel concedido dentro daquele tenant, como qualquer leitura de
 dado de tenant.
 
+### O primeiro operador de plataforma
+
+Criar o primeiro operador não tem operador que o autorize. É o terceiro ovo e galinha
+desta spec, e os dois anteriores — resolver token sob RLS, verificar associação no destino
+— foram resolvidos sem abrir superfície privilegiada. Este também.
+
+**O bootstrap não é endpoint.** Não existe caminho HTTP que o alcance, nunca. É operação
+local, executada com credencial de dono do banco, fora da aplicação. Um endpoint de
+bootstrap teria de ser desligado depois — e "desligado depois" é a categoria de regra que
+esta spec vem eliminando.
+
+Não confundir com o endpoint de bootstrap de **receptora** do
+[ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md): lá o token é emitido por
+uma control plane já autenticada, para uma máquina. Aqui não há ninguém para emitir nada.
+
+**Roda só enquanto não existir nenhum papel de plataforma**, e a condição é sobre o
+**estado atual**, não sobre o histórico. A diferença importa: uma marca de "já rodou"
+tornaria o sistema irrecuperável se todos os operadores fossem removidos por engano —
+ninguém poderia criar o primeiro de novo, e ninguém existiria para autorizar. Com a
+condição sobre o estado, zero operadores é zero operadores, e o bootstrap volta a valer.
+
+Isso não abre nada: ele já exige credencial de dono do banco, e quem a tem não precisa do
+bootstrap para fazer o que quiser.
+
+**É auditado como evento próprio**, `tenancy.plataforma_iniciada`, distinto de
+`tenancy.papel_concedido`. É o único ato do sistema **sem autor autenticado**, e registrá-lo
+como concessão comum esconderia exatamente isso — a linha diria que alguém concedeu, sem
+dizer que não havia quem concedesse.
+
+**O que ele cria é um operador, não um superpoder.** O primeiro operador tem o mesmo papel
+de plataforma que qualquer outro, e concede aos demais pelo caminho normal, com a
+auto-concessão distinguida como já está escrito.
+
+Uma consequência que serve de verificação: o bootstrap escreve em `usuarios`,
+`papel_plataforma` e `auditoria_plataforma` — **todas fora do eixo de tenant**. Se algum
+dia ele precisar tocar tabela com `tenant_id`, alguma coisa está errada no desenho, porque
+não existe tenant ainda.
+
+**A senha não tem padrão.** Vem de variável de ambiente exigida, como em
+`scripts/criar_papeis_db.py`: senha padrão que funciona é como credencial de laboratório
+chega em produção. Fica em aberto se o primeiro login deve forçar troca — é decisão de
+`core-007`, onde a interface existe.
+
 ### O que fica fora do eixo de tenant
 
 Decidir papel por tenant tem uma consequência no esquema: o usuário passa a existir

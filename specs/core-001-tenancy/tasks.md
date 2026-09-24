@@ -66,6 +66,17 @@ caminho de falha.
     própria em vez de contaminar uma tarefa de produto.
   - Arquivos: `pyproject.toml`
 
+- [ ] **TI3** — `check_eventos.py`: evento declarado tem que ser emitido
+  - Todo evento nomeado numa spec ou numa `tasks.md` precisa ter emissor no código e
+    teste que o exercite. Evento declarado e nunca emitido reprova o build.
+  - Motivo: `tenancy.tenant_trocado` foi exigido pela T11 e não implementado, e **passou
+    na revisão porque ninguém olha o que não está no diff**. Um diff não consegue mostrar
+    ausência; nem quem escreve nem quem revisa alcança essa classe.
+  - Testes: evento na spec sem emissor reprova; emissor sem teste reprova; evento emitido
+    e testado passa; evento citado em prosa e não como nome de evento não conta
+  - **Antes de a `core-001` fechar** — ela é a spec com mais eventos declarados.
+  - Arquivos: `tests/invariants/check_eventos.py`, `tests/unit/test_check_eventos.py`
+
 - [ ] **T5** — ADR-0006: isolamento de tenant com RLS
   - Decisão, alternativa (só repositório injetando filtro), e o custo real: `SET LOCAL` por
     transação, papel de banco sem `BYPASSRLS`, `FORCE ROW LEVEL SECURITY`.
@@ -154,9 +165,13 @@ caminho de falha.
   - `criar_tenant(quem, nome, identificador)` — o passo 1 do comportamento normal da spec,
     que não tinha dono em nenhuma tarefa. Exige papel de plataforma, audita em
     `auditoria_plataforma`, identificador único.
-  - Bootstrap cria o primeiro papel de plataforma e registra em `auditoria_plataforma`.
-    Vem junto de `criar_tenant()` porque bootstrap sem tenant nenhum não tem o que fazer
-    depois. Roda fora da API e nunca por agente de IA (**P6**).
+  - Bootstrap cria o primeiro papel de plataforma e registra em `auditoria_plataforma`
+    como `tenancy.plataforma_iniciada` — evento próprio, porque é o único ato sem autor
+    autenticado. Vem junto de `criar_tenant()` porque bootstrap sem tenant nenhum não tem
+    o que fazer depois. **Não é endpoint**, roda local com credencial de dono do banco, e
+    nunca por agente de IA (**P6**). Recusa rodar se já existir qualquer papel de
+    plataforma — condição sobre o estado atual, não sobre o histórico. Senha por variável
+    de ambiente exigida, sem padrão. Ver a spec, seção "O primeiro operador de plataforma".
   - O script novo é `scripts/criar-operador-plataforma.py`. **Não** reusar
     `scripts/bootstrap.sh`, que já existe e prepara o ambiente de desenvolvimento.
   - Testes: principal de plataforma é negado em toda ação de tenant, na borda e no SQL;
