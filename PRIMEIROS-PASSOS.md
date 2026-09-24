@@ -74,7 +74,7 @@ A constitution já está escrita em `.specify/memory/constitution.md`. Não prec
 A Fase 0 de medição não depende de código nenhum e dimensiona o projeto inteiro:
 
 ```bash
-./scripts/censo-formatos.sh                        # em cada hypervisor
+./scripts/censo-discos.sh                          # em cada hypervisor
 ./scripts/medir-taxa-mudanca.sh <dominio> 300      # em 20-30 VMs, por 48h
 ```
 

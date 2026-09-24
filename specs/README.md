@@ -24,6 +24,7 @@ Núcleo e feature intercalados: cada capacidade do núcleo nasce quando o DR pre
 | core-006 | Eventos e webhooks | Barramento de eventos, assinatura externa, entrega com retry | core-003 | M4 |
 | core-007 | API e auditoria | FastAPI, OpenAPI, autenticação, RBAC, log imutável | core-001, core-003 | M4 |
 | dr-009 | Plano de failover | Mapeamento DC1→DC2, preflight, dry-run | core-005 | M4 |
+| dr-012 | Preparar ambiente de DR | Wizard de par de sites: projeto, rede, floating IP, receptora, bootstrap, orçamento de banda | core-002, core-003, core-007 | M4 |
 | dr-010 | Failover e test-failover | Clone isolado, portas, VMs, ordem de boot | dr-007, dr-009 | M5 |
 | dr-011 | Failback | Reversão do fluxo, só o delta do período de desastre | dr-010 | M5 |
 

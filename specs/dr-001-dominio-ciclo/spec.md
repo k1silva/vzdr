@@ -41,11 +41,35 @@ recuperação, e decidindo as transições. Testável em milissegundos num lapto
 | Divergência na reconciliação | Ciclo não executa | `precisa resync`, com o motivo |
 | Um volume falha numa VM multi-disco | Ponto de recuperação inteiro descartado | Nenhum snapshot registrado |
 
+## Telemetria do ciclo
+
+Todo ciclo e todo resync **registra**, ao terminar — bem ou mal. É requisito, não
+observabilidade opcional: sem estes campos as medições M1 e M3 do
+[ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md) não existem, e a decisão do
+resync diferencial fica sem os números que a fecham.
+
+| Campo | Para quê |
+| --- | --- |
+| `bytes_transferidos` | Volume real por ciclo, que é a base de tudo |
+| `duracao_por_fase` | Onde o tempo vai: checkpoint, cópia, commit |
+| `vazao_media` e `vazao_pico` | Capacidade real do enlace, sem campanha de medição |
+| `vazao_leitura_origem` | Dimensiona o resync diferencial (M1 do ADR-0012) |
+| `throttle_vigente` | Separa "lento porque o link é ruim" de "lento porque foi limitado" |
+| `motivo` | `ciclo`, `resync`, `seed` — e, no resync, por quê |
+
+A diferença que isso faz: M1 e M3 deixam de ser campanha de laboratório e passam a ser
+consulta ao banco depois de uma semana rodando, **com números do ambiente real do cliente
+em vez de um teste sintético** ([ADR-0013](../../docs/adr/0013-orcamento-de-banda-e-janelas.md)).
+
+Ciclo que falha registra igual, com o que conseguiu medir. Telemetria só do caminho feliz
+descreveria um sistema que não existe.
+
 ## Invariantes
 
 - **P2:** janela só é liberada após confirmação de gravação no destino.
 - **P4:** falha nunca leva a resync silencioso nem a estado parcial aceito.
 - **P5:** ponto de recuperação é atômico por VM, nunca por volume.
+- Ciclo encerrado sem registro de telemetria é ciclo incompleto, inclusive quando falhou.
 
 ## Critério de aceite
 
@@ -53,6 +77,7 @@ recuperação, e decidindo as transições. Testável em milissegundos num lapto
 - [ ] Cada linha da tabela de falhas tem um teste
 - [ ] Nenhum import de IO em `vzdr.core.domain` — verificado na CI
 - [ ] Suíte roda em menos de 2 segundos
+- [ ] Ciclo concluído e ciclo falho produzem telemetria, com teste para os dois
 
 ## Fora de escopo
 

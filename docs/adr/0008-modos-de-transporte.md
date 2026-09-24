@@ -58,15 +58,25 @@ uma escrita pelo export é recusada.
 
 ### Seed offline não é otimização
 
-Estimativas de referência para a carga inicial:
+Estimativas de referência para a carga inicial. **São duas escalas diferentes e não devem
+ser lidas como uma faixa:**
 
-| Link | 15 TB reais | 40 TB |
+- **11,83 TiB** é o laboratório da 4EDGE, medido em 2026-09-23 nos três nós
+  ([censo](../validacao/2026-09-23-censo-do-parque.md));
+- **40 TB** é a ordem de grandeza do **cliente-alvo**, cuja distribuição ainda é
+  desconhecida — medição M2 do [ADR-0012](0012-resposta-a-perda-de-bitmap.md).
+
+| Link | 11,83 TiB (laboratório, medido) | 40 TB (cliente, estimado) |
 |---|---|---|
-| 1 Gbps a 100% (irreal) | ~1,5 dia | ~4 dias |
-| 1 Gbps realista (~40%) | ~4 dias | ~10 dias |
-| 200 Mbps | ~7 dias | ~19 dias |
+| 1 Gbps a 100% (irreal) | ~1,2 dia | ~4 dias |
+| 1 Gbps realista (~40%) | ~3 dias | ~10 dias |
+| 200 Mbps | ~5,5 dias | ~19 dias |
 
-Nenhum é aceitável para onboarding. O bitmap não sabe como o seed chegou ao destino, então
+A coluna do laboratório é tamanho medido com vazão arbitrada; a do cliente é tamanho
+estimado com vazão arbitrada. Nenhuma das duas vira promessa antes da M1 do ADR-0012, que
+é a vazão real de seed entre os datacenters.
+
+Nenhum dos tempos é aceitável para onboarding. O bitmap não sabe como o seed chegou ao destino, então
 mídia física seguida do primeiro ciclo incremental é suportada pelo mecanismo sem uma linha
 de código a mais.
 
