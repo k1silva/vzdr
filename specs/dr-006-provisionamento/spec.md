@@ -28,9 +28,13 @@ Tudo o que está acima é consequência.
 **Dentro:** provisionamento do destino para uma VM protegida, registro no catálogo,
 disparo do seed, entrada no ciclo.
 
-**Fora:** onboarding de site (par de datacenters, credenciais, modo de transporte, relé,
-CA, receptora — é `core-002` mais o ADR-0011); descoberta dos discos da origem (`dr-002`);
-failover, test-failover e failback.
+**Fora:** onboarding de site — a **conexão** com cada cluster é `core-002`; o **par de
+sites** (modo de transporte, relé, CA, floating IP, receptora, orçamento de banda) é
+`dr-012`. Também fora: descoberta dos discos da origem (`dr-002`); failover,
+test-failover e failback.
+
+Em M3 o par de sites é preparado à mão, como o laboratório fez; a `dr-012` automatiza isso
+em M4. Esta spec pressupõe o par pronto, não importa como.
 
 ## Fronteira: o que a plataforma faz e o que continua humano
 
@@ -58,6 +62,16 @@ número 40 não toca em rede nenhuma.
 
 **R1 — Idempotência.** Repetir "Proteger" para a mesma VM não cria recurso duplicado.
 
+**R1b — Config drive não é dado de cliente.** Discos `raw` são excluídos da replicação
+**por desenho**, não por limitação do mecanismo. O censo de 2026-09-23 mediu: os 24 discos
+`raw` do parque somam 1,5 GiB, têm 0,06 GiB cada, estão todos no target `sda` e são config
+drives gerados pelo Nova — no failover o catálogo recria a VM e o Nova gera um novo. Os 115
+discos de dado são qcow2 e suportam checkpoint, então o escopo do mecanismo é o parque
+inteiro. Ver [censo](../../docs/validacao/2026-09-23-censo-do-parque.md).
+
+Um disco `raw` que **não** seja config drive é divergência, tratada como R3: para e
+reporta, em vez de replicar pela metade ou excluir em silêncio.
+
 **R2 — Retomabilidade.** Um provisionamento interrompido em qualquer passo é retomado do
 ponto onde parou. O retry nunca cria um segundo volume.
 
@@ -84,6 +98,15 @@ bitmap. Remoção de proteção é fluxo separado, com confirmação humana expl
 **R9 — Conjunto de discos é atômico.** Uma VM de vários discos só entra em `protegida`
 quando todos os seus volumes concluíram o mesmo ciclo. Conjunto parcial não vira ponto de
 recuperação e é descartado inteiro (ADR-0010, P5).
+
+**R10 — Orçamento de banda é do par de sites, não do job.** O seed disparado aqui entra
+no orçamento vigente do par e é reajustado quando a janela vira, sem recomeçar
+(ADR-0013). **Não existe percentual por job:** cinco jobs a 20% cada saturam o enlace
+enquanto cada um se comporta "educadamente". O agente divide o orçamento do par entre os
+jobs ativos e aplica com `block-job-set-speed`; job que entra ou sai redivide o restante.
+
+Um seed é o job mais pesado que este fluxo cria, então disparar proteção em massa no meio
+do expediente é exatamente o caso que a regra existe para conter.
 
 ## Estados
 
@@ -116,9 +139,6 @@ pendente → provisionando → semeando → protegida
 
 ## Em aberto
 
-- **Origem `raw`.** Volumes `raw` não suportam checkpoint ("checkpoint for disk vda
-  unsupported for storage type raw"). O censo mostrou incidência baixa. Proposta: recusar
-  com mensagem clara e marcar a VM como não-protegível. Confirmar em `/speckit.clarify`.
 - **Guest agent ausente.** Metade do parque não tem agente ativo, o que significa
   consistência de crash em vez de consistência de aplicação. Flag por VM, e o ponto de
   recuperação carrega a marca.

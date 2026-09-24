@@ -1,0 +1,167 @@
+#cloud-config
+# vzdr — user-data do receptor.
+#
+# Template. Os campos {{ ... }} são substituídos pela control plane no momento
+# de criar a instância, por site e por receptora.
+#
+# REGRA QUE NÃO SE NEGOCIA (ADR-0011): este arquivo é legível pela API do Nova
+# por quem tiver leitura no projeto. Nenhuma chave privada, nenhum certificado,
+# nenhuma senha entra aqui. Só o token de bootstrap, de uso único e vida curta.
+
+package_update: true
+packages:
+  - qemu-utils
+  - libnbd-bin
+  - ca-certificates
+  - curl
+  - jq
+
+write_files:
+
+  - path: /etc/vzdr/bootstrap.env
+    permissions: '0600'
+    owner: root:root
+    content: |
+      VZDR_CONTROL_PLANE={{ control_plane_url }}
+      VZDR_BOOTSTRAP_TOKEN={{ bootstrap_token }}
+      VZDR_TENANT_ID={{ tenant_id }}
+      VZDR_SITE_ID={{ site_id }}
+      VZDR_RECEPTOR_ID={{ receptor_id }}
+
+  - path: /usr/local/bin/vzdr-bootstrap
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      # Troca o token de bootstrap pelas credenciais reais e queima o token.
+      # Roda uma vez. Se falhar, a unit reinicia com backoff até o token expirar;
+      # a control plane então destrói a receptora e provisiona outra (ADR-0011).
+      set -euo pipefail
+      set -o pipefail
+
+      . /etc/vzdr/bootstrap.env
+
+      install -d -m 0755 /etc/pki/qemu
+      install -d -m 0755 /etc/vzdr
+      install -d -m 0700 /etc/vzdr/ssh
+      install -d -m 0750 /run/vzdr
+
+      resp=$(mktemp) ; trap 'rm -f "$resp"' EXIT
+
+      curl --fail --silent --show-error --retry 3 --retry-delay 5 --max-time 60 \
+        -X POST "${VZDR_CONTROL_PLANE}/v1/receptores/bootstrap" \
+        -H 'Content-Type: application/json' \
+        -d "{\"token\":\"${VZDR_BOOTSTRAP_TOKEN}\",
+             \"tenant_id\":\"${VZDR_TENANT_ID}\",
+             \"site_id\":\"${VZDR_SITE_ID}\",
+             \"receptor_id\":\"${VZDR_RECEPTOR_ID}\"}" \
+        -o "$resp"
+
+      # Resposta esperada (JSON):
+      #   ca_cert, server_cert, server_key  -> PKI do export NBD
+      #   client_cn                         -> CN autorizado no authz
+      #   relay_host, relay_port, relay_user, relay_key, tunnel_port
+      umask 077
+      jq -r '.ca_cert'     "$resp" > /etc/pki/qemu/ca-cert.pem
+      jq -r '.server_cert' "$resp" > /etc/pki/qemu/server-cert.pem
+      jq -r '.server_key'  "$resp" > /etc/pki/qemu/server-key.pem
+      jq -r '.relay_key'   "$resp" > /etc/vzdr/ssh/id_relay
+
+      chmod 0644 /etc/pki/qemu/ca-cert.pem /etc/pki/qemu/server-cert.pem
+      chmod 0600 /etc/pki/qemu/server-key.pem /etc/vzdr/ssh/id_relay
+
+      {
+        echo "VZDR_CLIENT_CN=$(jq -r '.client_cn'    "$resp")"
+        echo "VZDR_RELAY_HOST=$(jq -r '.relay_host'  "$resp")"
+        echo "VZDR_RELAY_PORT=$(jq -r '.relay_port'  "$resp")"
+        echo "VZDR_RELAY_USER=$(jq -r '.relay_user'  "$resp")"
+        echo "VZDR_TUNNEL_PORT=$(jq -r '.tunnel_port' "$resp")"
+      } > /etc/vzdr/receptor.env
+      chmod 0600 /etc/vzdr/receptor.env
+
+      # O token já foi queimado no servidor. Aqui é higiene.
+      shred -u /etc/vzdr/bootstrap.env 2>/dev/null || rm -f /etc/vzdr/bootstrap.env
+
+      systemctl daemon-reload
+      systemctl enable --now vzdr-receptor.service
+      systemctl enable --now vzdr-tunel.service
+
+      systemctl disable vzdr-bootstrap.service
+
+  - path: /etc/systemd/system/vzdr-bootstrap.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=vzdr — troca o token de bootstrap pelas credenciais
+      After=network-online.target cloud-final.service
+      Wants=network-online.target
+      ConditionPathExists=/etc/vzdr/bootstrap.env
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/vzdr-bootstrap
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/vzdr-receptor.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=vzdr — receptor (qemu-storage-daemon)
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=/etc/pki/qemu/server-key.pem
+
+      [Service]
+      EnvironmentFile=/etc/vzdr/receptor.env
+      RuntimeDirectory=vzdr
+      RuntimeDirectoryMode=0750
+      # Sem export nenhum no start: os exports entram e saem por QMP,
+      # conforme a control plane provisiona discos (ADR-0010).
+      ExecStart=/usr/bin/qemu-storage-daemon \
+        --object tls-creds-x509,id=tls0,endpoint=server,dir=/etc/pki/qemu,verify-peer=on \
+        --object authz-simple,id=authz0,identity=${VZDR_CLIENT_CN} \
+        --nbd-server addr.type=inet,addr.host=0.0.0.0,addr.port=10809,tls-creds=tls0,tls-authz=authz0 \
+        --chardev socket,path=/run/vzdr/qmp.sock,server=on,wait=off,id=qmp0 \
+        --monitor chardev=qmp0
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/vzdr-tunel.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=vzdr — túnel de saída para o relé
+      After=network-online.target vzdr-receptor.service
+      Wants=network-online.target
+      ConditionPathExists=/etc/vzdr/ssh/id_relay
+
+      [Service]
+      EnvironmentFile=/etc/vzdr/receptor.env
+      # A porta abrir é o sinal de vida da receptora (ADR-0011).
+      # A control plane alcança o QMP por aqui; nada além da 22 do relé
+      # precisa estar exposto.
+      ExecStart=/usr/bin/ssh -N \
+        -o ExitOnForwardFailure=yes \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
+        -o StrictHostKeyChecking=accept-new \
+        -i /etc/vzdr/ssh/id_relay \
+        -R ${VZDR_TUNNEL_PORT}:/run/vzdr/qmp.sock \
+        -p ${VZDR_RELAY_PORT} \
+        ${VZDR_RELAY_USER}@${VZDR_RELAY_HOST}
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, vzdr-bootstrap.service ]
