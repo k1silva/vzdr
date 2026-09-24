@@ -55,6 +55,7 @@ invariants:
 	$(BIN)/python tests/invariants/check_tenant_id.py
 	$(BIN)/python tests/invariants/check_alvo_py39.py
 	$(BIN)/python tests/invariants/check_dsn_guardada.py
+	$(BIN)/python tests/invariants/check_pendencias.py
 
 check: lint typecheck test invariants
 	@echo "tudo verde"

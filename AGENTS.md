@@ -121,6 +121,9 @@ from vzdr.tools.dr import ...
 - Nenhum módulo do núcleo importa de `vzdr.tools.*`. O núcleo não conhece as features.
 - Uma feature não importa de outra feature. Conversam por eventos.
 - O agente não fala com o banco. Fala com a API.
+- Pendência de `docs/pendencias.md` com data de revisão vencida falha o build. É o
+  único checador que falha por tempo passar, e não pelo que você mudou — o conserto
+  legítimo é mudar o estado ou mudar a data com motivo.
 - `tenant_id` em toda tabela que guarda dado de tenant, desde a primeira migração.
   A lista de exceções é fechada e justificada em `specs/core-001-tenancy/spec.md`;
   acrescentar exceção é alterar a spec, não editar o checador.
