@@ -247,6 +247,52 @@ def test_revogar_o_papel_na_raiz_derruba_a_cadeia(conexao, contas):
 
 
 # --------------------------------------------------------------------------
+# Auditoria.
+# --------------------------------------------------------------------------
+
+
+def auditoria(conexao, tenant):
+    with conexao.cursor() as cur:
+        cur.execute(
+            "select evento, detalhe ->> 'tenant_de_origem' from auditoria where tenant_id = %s",
+            (tenant,),
+        )
+        return cur.fetchall()
+
+
+def test_a_troca_e_auditada_no_tenant_de_destino(conexao, contas):
+    """É lá que o acesso passa a valer, e a origem vai no detalhe."""
+    tenants, _, email = contas
+    token_a = autenticar(conexao, email, SENHA, tenants["a"])
+    trocar_tenant(conexao, token_a, tenants["b"])
+
+    assert auditoria(conexao, tenants["b"]) == [("tenancy.tenant_trocado", str(tenants["a"]))]
+    assert auditoria(conexao, tenants["a"]) == []
+
+
+def test_trocar_para_o_mesmo_tenant_nao_audita(conexao, contas):
+    """Nada mudou. Auditoria que descreve o que não aconteceu é pior que
+    auditoria ausente — quem investiga passa a ter de filtrar o ruído."""
+    tenants, _, email = contas
+    token_a = autenticar(conexao, email, SENHA, tenants["a"])
+    trocar_tenant(conexao, token_a, tenants["a"])
+    assert auditoria(conexao, tenants["a"]) == []
+
+
+def test_troca_recusada_nao_audita(conexao, contas):
+    tenants, usuario, email = contas
+    token_a = autenticar(conexao, email, SENHA, tenants["a"])
+    with conexao.cursor() as cur:
+        cur.execute(
+            "delete from associacao_tenant where usuario_id = %s and tenant_id = %s",
+            (usuario, tenants["b"]),
+        )
+    with pytest.raises(SemAssociacaoNoTenantError):
+        trocar_tenant(conexao, token_a, tenants["b"])
+    assert auditoria(conexao, tenants["b"]) == []
+
+
+# --------------------------------------------------------------------------
 # Recusas.
 # --------------------------------------------------------------------------
 

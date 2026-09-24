@@ -30,6 +30,8 @@ import secrets
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from vzdr.core.audit import registrar
+from vzdr.core.domain.tenancy import Papel, Principal
 from vzdr.core.tenancy.autenticacao import (
     SemAssociacaoNoTenantError,
     TokenExpiradoError,
@@ -37,6 +39,7 @@ from vzdr.core.tenancy.autenticacao import (
     _abrir_contexto,
     _hash_do_token,
 )
+from vzdr.core.tenancy.repositorio import Repositorio
 
 if TYPE_CHECKING:
     import psycopg
@@ -69,6 +72,11 @@ def trocar_tenant(conexao: Conexao, token: str, tenant_destino: UUID) -> str:
     if origem_id == tenant_destino:
         # Nao e erro nem operacao: devolver a mesma sessao seria mentir sobre
         # ter criado uma, e criar um nivel a toa engordaria a cadeia por nada.
+        #
+        # E NAO e auditado, de proposito: nada mudou. Registrar
+        # `tenancy.tenant_trocado` aqui contaria uma troca que nao houve, e
+        # auditoria que descreve o que nao aconteceu e pior que auditoria
+        # ausente — quem investiga passa a ter de filtrar o ruido.
         return token
 
     with conexao.transaction(), conexao.cursor() as cur:
@@ -118,6 +126,21 @@ def trocar_tenant(conexao: Conexao, token: str, tenant_destino: UUID) -> str:
             # `expira_em` e o da mae. Passar outro valor e recusado pelo banco.
             (_hash_do_token(novo_token), usuario_id, tenant_destino, expira_em, mae_id),
         )
+
+        # A troca e auditada no tenant de DESTINO, com a origem no detalhe: e
+        # la que o acesso passa a valer. O contexto ja e o do destino.
+        (papel,) = associacao
+        repositorio = Repositorio(
+            conexao, Principal.de_usuario(usuario_id, tenant_destino, Papel(papel))
+        )
+        with repositorio.transacao() as r:
+            registrar(
+                r,
+                "tenancy.tenant_trocado",
+                f"tenant:{tenant_destino}",
+                {"tenant_de_origem": str(origem_id)},
+            )
+
         return novo_token
 
 
