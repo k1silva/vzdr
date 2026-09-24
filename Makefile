@@ -31,11 +31,12 @@ fmt:
 	$(BIN)/ruff check --fix packages tests scripts
 
 typecheck:
-	MYPYPATH=$(MYPY_SRC) $(BIN)/mypy packages scripts
+	MYPYPATH=$(MYPY_SRC) $(BIN)/python scripts/checar_mypy.py packages scripts
 	# mypy nao aceita python_version por modulo (e opcao global), entao o que roda no
 	# hypervisor passa por uma segunda invocacao. 3.10 e o piso que o mypy aceita —
 	# quem garante a sintaxe de 3.9 e o ruff. Ver ADR-0007.
-	MYPYPATH=$(MYPY_SRC) $(BIN)/mypy --python-version 3.10 packages/agent packages/core-domain
+	MYPYPATH=$(MYPY_SRC) $(BIN)/python scripts/checar_mypy.py \
+		--python-version 3.10 packages/agent packages/core-domain
 
 test:
 	$(BIN)/pytest tests/unit

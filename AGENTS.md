@@ -96,6 +96,10 @@ from vzdr.tools.dr import ...
   O termo de negócio continua em português; `Error` é marcador de tipo, não palavra
   de negócio. É a regra `N818` do ruff, e ela fica ligada: um `ignore` de regra de
   estilo vira imposto de leitura para quem chegar depois perguntando o porquê.
+- Seção de configuração do `mypy` que não casa com nenhum módulo **falha o build**.
+  O `mypy` trata isso como nota e sai com código 0, então a regra daquela seção
+  simplesmente deixa de ser aplicada sem ninguém ver. `scripts/checar_mypy.py`
+  transforma a nota em erro.
 - Nenhuma dependência nova sem justificativa na spec ou num ADR.
 
 ## Fronteiras — a CI verifica
