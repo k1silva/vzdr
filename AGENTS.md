@@ -96,6 +96,13 @@ from vzdr.tools.dr import ...
   O termo de negócio continua em português; `Error` é marcador de tipo, não palavra
   de negócio. É a regra `N818` do ruff, e ela fica ligada: um `ignore` de regra de
   estilo vira imposto de leitura para quem chegar depois perguntando o porquê.
+- **Caminho que nunca executa onde você testa precisa de teste que o force.**
+  `CREATE ROLE` com senha só roda quando o papel ainda não existe; localmente ele
+  existia desde a primeira execução, e o bug foi para a CI. Apague o estado e rode de
+  novo, ou escreva o teste que cria a condição.
+- **Erro que não distingue causas mente sobre o diagnóstico.** Um `except` que trata
+  toda falha do driver como "banco fora do ar" transforma erro de sintaxe em caça ao
+  PostgreSQL. Separe falha de conexão de falha de execução, e preserve o erro cru (P8).
 - **Verificação que não verifica é pior que verificação ausente**, porque dá confiança.
   Dois casos já mordidos: em Postgres, `rolsuper` e `rolbypassrls` têm que ser checados
   **juntos** — `FORCE ROW LEVEL SECURITY` não alcança superusuário, então um papel

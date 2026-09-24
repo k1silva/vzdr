@@ -10,11 +10,30 @@ Logica pura, sem conectar — o comportamento em falha e testavel sem banco nenh
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:  # o driver so e preciso para conectar
+    import psycopg
 
 VARIAVEL = "VZDR_DATABASE_URL"
 VARIAVEL_APP = "VZDR_DATABASE_URL_APP"
 VARIAVEL_REMOTO = "VZDR_PERMITIR_BANCO_REMOTO"
+
+# ATENCAO ao "consertar" isto.
+#
+# Sim, ha uma senha de laboratorio escrita aqui. Ela e segura por um motivo
+# estreito: estas DSN apontam para localhost, e nada neste repositorio abre
+# conexao sem passar por `verificar_alvo`, que recusa host que nao seja esta
+# maquina. Uma credencial que so alcanca o proprio laptop nao da acesso a nada.
+#
+# Mover isto para variavel de ambiente PARECE mais seguro e e o contrario: a
+# DSN passa a poder apontar para um banco real, e a senha de laboratorio vira
+# a senha que alguem tentou em producao. Se for preciso mudar, mude junto a
+# guarda, nao so o valor.
+#
+# Quem garante que nao ha atalho: tests/invariants/check_dsn_guardada.py, que
+# falha se qualquer arquivo fora deste abrir conexao por conta propria.
 
 # O mesmo que o docker-compose.yml sobe com `make db-up`.
 DSN_LOCAL = "postgresql://vzdr:dev@localhost:5432/vzdr"
@@ -31,14 +50,37 @@ class BancoRecusadoError(Exception):
     """O DSN aponta para fora da maquina e ninguem autorizou."""
 
 
-def dsn_de(ambiente: Mapping[str, str]) -> str:
-    """O DSN do ambiente, ou o local do docker-compose."""
+def _resolver(ambiente: Mapping[str, str], app: bool) -> str:
+    """So resolve, sem verificar. Privada de proposito: ver dsn_verificado."""
+    if app:
+        return ambiente.get(VARIAVEL_APP) or DSN_LOCAL_APP
     return ambiente.get(VARIAVEL) or DSN_LOCAL
 
 
-def dsn_app_de(ambiente: Mapping[str, str]) -> str:
-    """O DSN do papel da aplicacao."""
-    return ambiente.get(VARIAVEL_APP) or DSN_LOCAL_APP
+def dsn_verificado(ambiente: Mapping[str, str], *, app: bool = False) -> str:
+    """O DSN a usar, ja verificado.
+
+    Resolver e verificar sao a MESMA operacao aqui, de proposito. Enquanto
+    eram duas funcoes, "chamar a guarda" era disciplina de quem escrevia o
+    proximo `main()` — e disciplina e exatamente o que falha quando um caminho
+    novo aparece.
+    """
+    dsn = _resolver(ambiente, app)
+    verificar_alvo(dsn, ambiente)
+    return dsn
+
+
+def conectar(
+    ambiente: Mapping[str, str], *, app: bool = False, autocommit: bool = False
+) -> psycopg.Connection[Any]:
+    """A unica porta para abrir conexao neste repositorio.
+
+    O checador de invariante recusa `psycopg.connect` em qualquer outro
+    arquivo, entao nao existe caminho que escape de `verificar_alvo`.
+    """
+    import psycopg  # tardio: a logica acima e testavel sem o driver
+
+    return psycopg.connect(dsn_verificado(ambiente, app=app), autocommit=autocommit)
 
 
 def host_de(dsn: str) -> str | None:

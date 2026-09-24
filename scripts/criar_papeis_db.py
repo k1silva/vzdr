@@ -16,9 +16,9 @@ import sys
 
 from scripts.ambiente_db import (
     BancoRecusadoError,
-    dsn_de,
+    conectar,
+    dsn_verificado,
     mensagem_sem_banco,
-    verificar_alvo,
 )
 
 PAPEL = "vzdr_app"
@@ -65,15 +65,14 @@ def senha_para_criar(senha: str | None) -> str:
 def main() -> int:
     import psycopg
 
-    dsn = dsn_de(os.environ)
     try:
-        verificar_alvo(dsn, os.environ)
+        dsn = dsn_verificado(os.environ)
     except BancoRecusadoError as erro:
         print(f"criar_papeis_db: {erro}", file=sys.stderr)
         return 2
 
     try:
-        conexao = psycopg.connect(dsn, autocommit=True)
+        conexao = conectar(os.environ, autocommit=True)
     except psycopg.Error as erro:
         print(mensagem_sem_banco(dsn, erro), file=sys.stderr)
         return 1

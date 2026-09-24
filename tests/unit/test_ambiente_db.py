@@ -8,26 +8,30 @@ import pytest
 
 from scripts.ambiente_db import (
     DSN_LOCAL,
+    DSN_LOCAL_APP,
+    HOSTS_LOCAIS,
     VARIAVEL,
+    VARIAVEL_APP,
     VARIAVEL_REMOTO,
     BancoRecusadoError,
-    dsn_de,
+    dsn_verificado,
+    host_de,
     mensagem_sem_banco,
     verificar_alvo,
 )
 
 
 def test_sem_variavel_usa_o_banco_do_compose():
-    assert dsn_de({}) == DSN_LOCAL
+    assert dsn_verificado({}) == DSN_LOCAL
 
 
 def test_variavel_vence():
     dsn = "postgresql://outro:x@localhost:5433/outro"
-    assert dsn_de({VARIAVEL: dsn}) == dsn
+    assert dsn_verificado({VARIAVEL: dsn}) == dsn
 
 
 def test_variavel_vazia_cai_no_padrao():
-    assert dsn_de({VARIAVEL: ""}) == DSN_LOCAL
+    assert dsn_verificado({VARIAVEL: ""}) == DSN_LOCAL
 
 
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]"])
@@ -63,3 +67,28 @@ def test_mensagem_sem_banco_preserva_o_erro_cru():
     assert "make db-up" in msg
     assert "Connection refused" in msg
     assert DSN_LOCAL in msg
+
+
+def test_resolver_e_verificar_sao_a_mesma_operacao():
+    """Não há como obter uma DSN sem a guarda: pedir uma remota levanta.
+
+    Enquanto eram duas funções, chamar a guarda era disciplina de quem
+    escrevesse o próximo `main()`.
+    """
+    with pytest.raises(BancoRecusadoError):
+        dsn_verificado({VARIAVEL: "postgresql://vzdr:dev@db-prod.interno:5432/vzdr"})
+
+
+def test_dsn_do_papel_da_aplicacao_tambem_passa_pela_guarda():
+    with pytest.raises(BancoRecusadoError):
+        dsn_verificado(
+            {VARIAVEL_APP: "postgresql://vzdr_app:dev@db-prod.interno:5432/vzdr"},
+            app=True,
+        )
+
+
+def test_a_senha_de_laboratorio_so_aparece_em_dsn_local():
+    """Se alguém mover as DSN para variável de ambiente, a senha escrita aqui
+    passa a poder alcançar um banco real. Este teste amarra as duas coisas."""
+    for dsn in (DSN_LOCAL, DSN_LOCAL_APP):
+        assert host_de(dsn) in HOSTS_LOCAIS

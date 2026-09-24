@@ -32,9 +32,9 @@ from typing import TYPE_CHECKING, Any
 
 from scripts.ambiente_db import (
     BancoRecusadoError,
-    dsn_de,
+    conectar,
+    dsn_verificado,
     mensagem_sem_banco,
-    verificar_alvo,
 )
 
 if TYPE_CHECKING:  # o driver so e preciso para aplicar; a decisao e pura
@@ -181,21 +181,19 @@ def migrar(conexao: Conexao, pasta: Path = PASTA) -> list[str]:
 def main() -> int:
     import psycopg
 
-    dsn = dsn_de(os.environ)
     try:
-        verificar_alvo(dsn, os.environ)
+        dsn = dsn_verificado(os.environ)
     except BancoRecusadoError as erro:
         print(f"migrar: {erro}", file=sys.stderr)
         return 2
 
     try:
-        conexao = psycopg.connect(dsn)
+        # Uma transacao por arquivo depende do autocommit.
+        # Ver ConexaoSemAutocommitError.
+        conexao = conectar(os.environ, autocommit=True)
     except psycopg.Error as erro:
         print(mensagem_sem_banco(dsn, erro), file=sys.stderr)
         return 1
-
-    # Uma transacao por arquivo depende disto. Ver ConexaoSemAutocommitError.
-    conexao.autocommit = True
 
     try:
         aplicadas = migrar(conexao)
