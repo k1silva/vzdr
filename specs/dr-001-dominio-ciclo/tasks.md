@@ -12,7 +12,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     da RLS. A T3 implementa o que ele decide.
   - Arquivos: `docs/adr/0015-efeito-como-valor.md`
 
-- [ ] **T2** — Identidade do ciclo
+- [x] **T2** — Identidade do ciclo
   - `nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id)`,
     puras e determinísticas. O export entrou pelo cercamento: nome fixo por disco faz um
     cercamento atrasado derrubar o export do ciclo seguinte.
