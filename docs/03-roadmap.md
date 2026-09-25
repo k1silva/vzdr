@@ -41,6 +41,29 @@ estado durável. Nada ainda copia byte.
 **Sai quando:** a máquina de estados cobre todos os cenários de falha, com teste para cada
 um, rodando sem hypervisor em menos de 2 segundos.
 
+### Fatia de manutenção, entre a `dr-001` e a `dr-002`
+
+Quatro checadores, em commit próprio, antes de a `dr-002` começar. Três vieram da varredura
+de fronteiras: são lugares onde um documento afirma que algo é verificado e nada verifica.
+
+- [ ] **Meta-checador bidirecional de coerência documento↔realidade.** Afirmar que algo é
+      verificado exige o mecanismo existir; afirmar que **não** é exige que ele não exista.
+      Declaração estrutural, não textual — lista de exceção datada é o que se quer evitar
+- [ ] **Todo arquivo de `tests/integration` referencia a fixture da conexão real.** Repare
+      que a asserção é **positiva**. Procurar `unittest.mock` pega a forma óbvia e passa
+      reto na que importa: uma classe `FakeQMP` escrita à mão, sem importar nada, satisfaz a
+      mesma interface. Ausência de mock é impossível de provar; presença da conexão real é
+      trivial de verificar, e um duplo escrito à mão não passa a satisfazê-la por acidente.
+      Inofensivo hoje, porque a pasta está vazia; morde na `dr-002`
+- [ ] **`gitleaks` na CI, mais checador próprio só para a regra do projeto** — DSN com senha
+      fora de `scripts/ambiente_db.py`. Não reescrever scanner de segredo: a parte genérica
+      é problema resolvido, e mal resolvido de novo é pior que ausente
+- [ ] **`check_alvo_py39` varrendo também os blocos `python` de `specs/**/*.md` e
+      `docs/**/*.md`.** Um `X | Y` passou pelo checador e pelo job `alvo-py39` porque estava
+      num `.md`, não num `.py`. Isso é pior que um deslize de sintaxe: o plano é o que
+      alguém copia, e a sintaxe errada não entra digitada no módulo — entra copiada de um
+      documento que ninguém verifica
+
 ## M2 — Ciclo real (3 a 4 semanas)
 
 `dr-003`, `dr-004`, `dr-005`, `core-004`. O agente replica de verdade, multi-disco, com

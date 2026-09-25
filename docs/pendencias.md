@@ -18,9 +18,9 @@ Nenhum dos dois sustenta um item com estas três características ao mesmo tempo
 - **ele aparece em mais de um documento**, e some justamente por isso: cada documento
   supõe que outro está cuidando.
 
-**O que não entra, e o critério existe para isto.** Trabalho nosso, com relógio nosso, não
-é pendência: medição de laboratório, dívida técnica, checador a escrever. Isso mora na fase
-0 do [roadmap](03-roadmap.md) ou nas tarefas de uma spec. A distinção não é burocracia — é o
+**O que não entra em "Abertas", e o critério existe para isto.** Trabalho nosso, com
+relógio nosso, não é pendência: medição de laboratório, dívida técnica, checador a escrever.
+Isso mora na fase 0 do [roadmap](03-roadmap.md) ou nas tarefas de uma spec. A distinção não é burocracia — é o
 que faz este arquivo responder a uma pergunta só, e ela é *o que precisamos cobrar de
 fora*. Um item nosso misturado aqui não fica mais visível; ele apaga o sinal dos outros.
 
@@ -116,7 +116,11 @@ mudariam a conclusão inteira. É a medição que falta e que não está no labo
 
 ## Candidatas
 
-Itens que merecem virar trabalho, mas ainda não têm data.
+Itens que merecem virar trabalho, mas ainda não têm data — de qualquer origem, inclusive
+nossa. O critério de "Abertas" **não** vale aqui: ele diz o que se cobra de fora, e isto é
+estacionamento de ideia ainda sem forma. Item daqui que ganha data **sai** — para o roadmap
+ou para as tarefas de uma spec — a menos que atenda ao critério de "Abertas", e aí sobe de
+seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe para evitar.
 
 - **Separar a decisão 3 do ADR-0012 num ADR próprio**, com status `proposto`. Aquele
   documento empacota três decisões de maturidade diferente, e foi por isso que ele não
