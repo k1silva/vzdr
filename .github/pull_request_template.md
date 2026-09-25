@@ -1,16 +1,15 @@
-## O que muda
+<!-- Descreva a mudança e o porquê. O quê está no diff; o porquê, não. -->
 
-<!-- Uma ou duas frases -->
+## Declaração de revisão
 
-## Spec
+<!--
+Responda as três. A terceira linha do template não some sozinha: ela fica aqui até
+alguém apagá-la, e é isso que torna o esquecimento visível em vez de silencioso.
 
-<!-- specs/<id>/spec.md -->
+Delegação é decisão do humano e vale para ESTE PR, nunca como modo permanente.
+Ver AGENTS.md, "Branch e PR".
+-->
 
-## Checklist
-
-- [ ] `make check` verde
-- [ ] Teste do comportamento em falha, não só do caminho feliz
-- [ ] Spec atualizada se algo mudou durante a implementação
-- [ ] ADR escrito se houve decisão de arquitetura
-- [ ] Nenhum princípio da constitution violado
-- [ ] Diff revisado por um humano
+- **Revisou o diff**: `<quem>`
+- **Humano leu o diff**: `<sim/nao>`
+- **Clique do merge delegado**: `<sim/nao>`

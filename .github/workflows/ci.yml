@@ -25,6 +25,28 @@ jobs:
       - name: Lint, tipos, testes e invariantes
         run: make check
 
+  declaracao-revisao:
+    # So em PR: no push para main nao existe corpo de PR para conferir.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ambiente
+        run: make setup
+
+      - name: A declaracao de revisao foi respondida
+        # O corpo vem por variavel, e nao interpolado no shell: corpo de PR e
+        # texto de quem abriu o PR, e interpolar isso numa linha de comando e
+        # injecao. Ver AGENTS.md.
+        env:
+          CORPO_DO_PR: ${{ github.event.pull_request.body }}
+        run: make declaracao-revisao
+
   banco:
     runs-on: ubuntu-latest
 
