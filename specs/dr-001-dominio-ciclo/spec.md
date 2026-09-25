@@ -229,6 +229,24 @@ descreveria um sistema que não existe.
 - [ ] Job concluído no hypervisor sem confirmação no destino **não** conclui o ciclo
 - [ ] Bitmap órfão de ciclo inativo é reconhecido como órfão
 
+## Nada aqui dimensiona pelo laboratório
+
+Dois números aparecem nesta spec, e só um é fato:
+
+| Número | O que é |
+| --- | --- |
+| Granularidade de 64 KiB | **Fato medido** do QEMU deste parque. Entra na aritmética |
+| VM de 2,5 TiB | **Ilustração** da conta, com uma VM real do laboratório. Não é premissa |
+
+O laboratório da 4EDGE tem 11,83 TiB; o cliente-alvo tem 40 TB e **distribuição
+desconhecida** — é a medição M2, ainda pendente
+([P-002](../../docs/pendencias.md)). Nenhuma regra desta spec pode se apoiar na distribuição
+do laboratório como se fosse a do cliente.
+
+**Regra geral:** se algo aqui depender de perfil de parque, é **parâmetro com padrão**, não
+constante. O limiar de `2× o RPO` para `degradada` e o limiar de compactação são os dois
+casos — ambos parâmetros, ambos com padrão, nenhum derivado de um parque específico.
+
 ## Fora de escopo
 
 Qualquer conversa com libvirt, QMP ou Cinder. Isso é `dr-002` e `dr-003`.
@@ -256,11 +274,16 @@ As duas originais estão respondidas acima, e uma delas foi **recusada como perg
 
 O que sobra:
 
-- [ ] O limiar de compactação — a partir de quantos checkpoints retidos ela roda. Depende de
-      medir o custo da mescla no laboratório, e não bloqueia o desenho.
-- [ ] Se `nunca_iniciou` entra na contagem que alimenta `degradada`. A inclinação é sim, pela
-      idade do ponto de recuperação, que é o que o cliente sente — mas confirmar com a tela
-      na mão.
+- [ ] O limiar de compactação — a partir de quantos checkpoints retidos ela roda. Depende da
+      curva de custo da mescla, registrada como medição na [fase 0 do
+      roadmap](../../docs/03-roadmap.md), a rodar antes da `dr-003`. Não bloqueia o desenho:
+      o limiar é parâmetro, e o desenho vale com qualquer valor.
+
+`nunca_iniciou` **entra** na conta de `degradada` e **não** entra na taxa de falha. As duas
+coisas são coerentes: `degradada` é aritmética sobre a idade do ponto de recuperação, e
+ciclo que não aconteceu não produziu ponto — a idade não avançou, logo degrada. Já a taxa de
+falha mede outra coisa, e "ciclo que não aconteceu" misturado com "ciclo que deu errado"
+estragaria justamente a métrica que vai dimensionar o produto.
 
 ### Eventos
 

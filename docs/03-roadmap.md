@@ -83,6 +83,12 @@ Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage 
 - [ ] Teste de sobrevivência do bitmap à migração automática do VHI (M4 do ADR-0012)
       — bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo
 - [ ] Classificação das VMs por tier
+- [ ] **Vazão real de seed entre os datacenters** (M1 do ADR-0012) — repetir o seed de
+      2026-09-23 com `time`. Sem ela, toda estimativa de tempo de resync é chute, inclusive
+      as dos próprios documentos
+- [ ] **Custo da mescla de bitmap em função do número de checkpoints retidos** — a curva que
+      define o limiar de compactação da [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md).
+      Antes da `dr-003`. Sem a curva, qualquer limiar é chute com cara de número
 
 ## Pré-requisitos de infraestrutura
 
