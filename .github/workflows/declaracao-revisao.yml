@@ -1,0 +1,37 @@
+name: Declaracao de revisao
+
+# Workflow proprio por causa do GATILHO, nao por organizacao.
+#
+# O corpo do PR chega pelo payload do evento, que e uma FOTOGRAFIA do momento em
+# que o evento ocorreu. Sem `edited`, editar o corpo nao redispara nada — e ai a
+# unica forma de consertar uma declaracao incompleta seria empurrar um commit,
+# quando o conserto e editar o corpo. Foi o que aconteceu no PR que introduziu
+# este job.
+#
+# `edited` nao entra no ci.yml porque la faria lint, tipos, testes e banco
+# rodarem de novo a cada correcao de texto do PR.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  declaracao-revisao:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ambiente
+        run: make setup
+
+      - name: A declaracao de revisao foi respondida
+        # O corpo vem por variavel, e nao interpolado no shell: corpo de PR e
+        # texto de quem abriu o PR, e interpolar isso numa linha de comando e
+        # injecao. Ver AGENTS.md.
+        env:
+          CORPO_DO_PR: ${{ github.event.pull_request.body }}
+        run: make declaracao-revisao
