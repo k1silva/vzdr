@@ -95,6 +95,20 @@ Duas formas de evidência, e uma saída quando nenhuma chega:
   Funciona porque a receptora é nosso software e mantém túnel de saída próprio: ela está
   alcançável exatamente quando o agente da origem não está.
 
+**E o cercamento é preempção, não trabalho concorrente.** A propriedade 4, sozinha, o
+tornaria impossível: `CercarDestino` toca disco, logo carregaria a chave `(vm, disco)` — que
+está presa pela cópia zumbi, que é a razão de ele existir. Por isso existe uma **categoria**
+de efeito, e não uma exceção: efeito de preempção toma chave já tomada, é o único que pode,
+nunca escreve dado de cliente, é idempotente por construção, e **seu sucesso é evidência** —
+derrubado o export, o escritor perdeu o alvo. Categoria nomeada em vez de buraco na regra,
+porque a regra continua inteira para todo o resto.
+
+**Onde o efeito roda também é parte do valor.** Cercar roda na receptora, copiar roda no
+hypervisor de origem. Fila que roteia tudo para "um agente com acesso àquele hypervisor"
+torna o `CercarDestino` inentregável exatamente no cenário em que ele existe. O alvo de
+execução é campo do efeito, pelo mesmo motivo que a chave é: a fila só lê o que o valor
+carrega.
+
 O custo, com as três: agente inalcançável custa a derrubada de um export e a janela pendente
 daquele ciclo. Não é resync completo — `bitmap-mode: on-success` garante que o job abortado
 não limpou bitmap, então o ciclo seguinte recopia a janela inteira por cima do que ficou
@@ -113,6 +127,8 @@ pela metade.
 | Exclusão pelo `ciclo_id` que já existe | Não funciona no caso que importa. Os dois efeitos concorrentes são do mesmo ciclo |
 | Pedir a evidência ao agente detentor do lease | Trava no único cenário que a regra existe para cobrir: o detentor é quem não responde. A consulta é sobre o hypervisor, e qualquer agente com acesso a ele serve |
 | Só evidência, sem cercamento | Nó morto não produz evidência nenhuma, e o disco ficaria bloqueado indefinidamente — trocando corrupção por indisponibilidade permanente |
+| `CercarDestino` como exceção à propriedade 4 | Exceção abre buraco que cresce sozinho: o próximo efeito parecido vira segunda exceção por analogia. Categoria nomeada carrega obrigações — não escreve dado, é idempotente, seu sucesso é evidência |
+| Alvo de execução deduzido do tipo do efeito pelo despachante | Conhecimento fora do valor, que some quando o efeito atravessa a fila. Mesmo erro da chave, e o `ConfirmarNoDestino` já provava que a distinção era real |
 | Só cercamento, sem evidência | Derrubar export é barato mas não é grátis, e a maioria dos casos resolve com uma pergunta. Cercar é o caminho de exceção |
 | Reporte "exatamente uma vez" no protocolo | Não existe. O que existe é entrega pelo menos uma vez com absorção idempotente do outro lado, e é isso que a propriedade 2 assume |
 

@@ -68,9 +68,13 @@ podem discordar. É o mesmo raciocínio que recusou coluna `origem` na auditoria
 
 ### Identidade de ciclo
 
-`nome_do_bitmap(ciclo_id)` e `nome_do_checkpoint(ciclo_id)`, puras e determinísticas.
-Órfão ganha definição — nome cujo ciclo não está ativo — e a reconciliação compara conjuntos
-em vez de casar prefixo.
+`nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id)`,
+puras e determinísticas. Órfão ganha definição — nome cujo ciclo não está ativo — e a
+reconciliação compara conjuntos em vez de casar prefixo.
+
+O export entrou nesta lista pelo cercamento: com nome fixo por disco, um cercamento atrasado
+derruba o export do ciclo seguinte em vez do zumbi. Isso emendou o R3 da `dr-006`, que
+continua valendo para volume e anexação, que atravessam ciclos.
 
 ## Módulos tocados
 
@@ -111,9 +115,14 @@ máquina faz.
 
 ```python
 # efeitos.py — o que a máquina pede
+class Alvo(Enum):              # onde o efeito roda; a fila so le o que o valor carrega
+    ORIGEM = "origem"          # hypervisor da VM, pelo agente de la
+    DESTINO = "destino"        # receptora, pelo tunel do rele
+
 @dataclass(frozen=True)
 class Efeito:
     ciclo_id: UUID             # ADR-0015, propriedade 3
+    alvo: Alvo
     def para_json(self) -> dict[str, Any]: ...
 
 class EfeitoDeDisco(Efeito):
@@ -126,7 +135,13 @@ class IniciarCopia(Efeito): ...
 class DescartarBitmap(Efeito): ...
 class ConfirmarNoDestino(Efeito): ...
 class InventariarHypervisor(Efeito): ...   # a reconciliação
-class CercarDestino(Efeito): ...           # derruba o export; ver dr-006 para a mecanica
+class EfeitoDePreempcao(EfeitoDeDisco):
+    # A unica categoria que toma chave JA tomada — sem isso o cercamento e
+    # impossivel, porque a chave esta presa por quem ele vai derrubar.
+    # Nunca escreve dado de cliente; e idempotente; o sucesso dele e evidencia.
+    ...
+
+class CercarDestino(EfeitoDePreempcao): ...  # alvo=DESTINO; mecanica QMP na dr-006
 
 @dataclass(frozen=True)
 class Resultado:
@@ -158,6 +173,8 @@ tipos de entrada e a função ramificar no começo.
 | --- | --- |
 | A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec |
 | A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada |
+| A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela |
+| Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante |
 | Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três |
 | Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante |
 | `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir |

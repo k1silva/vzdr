@@ -67,6 +67,30 @@ Por isso **todo efeito que toca disco carrega uma chave de exclusão**, no míni
 `(vm, disco)`. Dois efeitos com a mesma chave nunca têm lease ao mesmo tempo,
 independentemente de ciclo.
 
+#### Preempção: a única categoria que toma chave já tomada
+
+A regra acima, sozinha, torna o cercamento impossível. `CercarDestino` toca disco, logo
+carrega a chave `(vm, disco)` — e essa chave está presa pela cópia zumbi, que é a razão de
+ele existir. O efeito que destrava não conseguiria lease, porque quem segura a chave é
+exatamente quem ele destravaria. Disco bloqueado para sempre, e de volta o cenário que o
+cercamento foi criado para eliminar.
+
+Então existe uma **categoria** de efeito, e não uma exceção à regra: **efeito de preempção
+toma chave já tomada, e é o único que pode.** Nomear a categoria é melhor que abrir buraco
+na regra, porque a regra continua inteira para todo o resto e o buraco não cresce sozinho.
+
+O que faz um efeito ser de preempção, e o que isso obriga:
+
+| Propriedade | Por quê |
+| --- | --- |
+| Toma chave já tomada | É a definição. Nenhum outro efeito pode |
+| **Nunca escreve dado de cliente** | Preempção *retira capacidade de escrever*; se escrevesse, seria mais um escritor concorrente — o problema, não a solução |
+| É idempotente por construção | A segunda tentativa encontra o export já derrubado, e isso é sucesso, não erro |
+| **O sucesso dele é evidência** | Derrubado o export, o escritor perdeu o alvo. É a terceira forma de evidência, e sem ela cercaríamos e continuaríamos esperando |
+
+Hoje há um efeito de preempção: `CercarDestino`. A categoria existe para que o segundo,
+quando aparecer, herde as quatro obrigações em vez de recriá-las por analogia.
+
 A chave nasce aqui, no tipo do efeito, e não na spec do protocolo: lá seria política de
 fila sobre um tipo que não tem onde guardá-la. É o mesmo argumento que faz a serialização
 nascer junto do tipo em vez de depois que a fila existir.
@@ -76,6 +100,20 @@ soltar. No cenário que a motivou o lease já **expirou** — a chave está livr
 enquanto o job continua escrevendo, e um segundo agente a toma sem violar regra nenhuma.
 Então a chave vem com a condição de liberação: **chave de efeito que toca disco só é
 liberada por evidência de que o job acabou, nunca pelo relógio do lease.**
+
+#### Onde o efeito roda é parte do valor
+
+Cercar roda **na receptora**, alcançada pelo túnel do relé. Copiar roda **no hypervisor de
+origem**, alcançado pelo agente de lá. São dois alvos de execução diferentes, e a fila
+precisa saber qual é o de cada efeito.
+
+Se ela rotear todo efeito para "um agente com acesso àquele hypervisor", o `CercarDestino` é
+inentregável exatamente no cenário em que existe — o erro do roteamento da evidência, um
+nível acima. O `ConfirmarNoDestino` já tem essa natureza, então a distinção é real desde
+antes; o que faltava era ela existir **no tipo**.
+
+Mesmo argumento da chave: a fila só lê o que o valor carrega. O alvo de execução é campo do
+efeito, não convenção de quem despacha.
 
 #### A evidência é sobre o hypervisor, não sobre quem pediu
 
@@ -153,7 +191,7 @@ Nome que precisa ser **reconhecido depois** não é infraestrutura, é identidad
 identidade é do domínio. O formato da string é trivial; o que mora aqui é o mapeamento
 **ciclo → nome**, que é conhecimento.
 
-Vale para os dois nomes que o ciclo cria:
+Vale para os três nomes que o ciclo cria:
 
 - **bitmap temporário.** O laboratório usou `tmp1` cravado, e funcionou porque era um
   script, uma VM, uma execução por vez. Em produto colide: ciclo que morreu deixa `tmp1`
@@ -162,8 +200,20 @@ Vale para os dois nomes que o ciclo cria:
   no mesmo segundo e não carrega identidade nenhuma. A reconciliação precisa mapear
   checkpoint para ciclo, e quem sabe esse mapeamento é a máquina.
 
+- **export no destino.** Este entrou depois, pelo cercamento, e pelo mesmo motivo dos
+  outros dois. `block-export-del` derruba *um* export, identificado por nome. Se o nome for
+  fixo por disco e a tentativa seguinte recriar com o mesmo nome, um cercamento atrasado
+  mata o job novo em vez do zumbi — o cercamento funciona e cerca a coisa errada, que é o
+  pior defeito desta classe, porque parece ter dado certo.
+
 Com o nome derivado do ciclo, **órfão tem definição**: nome de ciclo que não está ativo. A
-limpeza deixa de ser heurística de prefixo.
+limpeza deixa de ser heurística de prefixo, e **cercar identifica a instância, não o
+disco**.
+
+Isto emenda a `dr-006`, e a emenda está lá: o **R3** manda derivar todo nome de
+`(tenant_id, vm_id, disco)`, o que é certo para o volume espelho e a anexação, que
+atravessam ciclos, e errado para o export, que é por ciclo. O ADR-0010 não fixa o nome do
+export — ele descreve a mecânica e não a identidade —, então não precisa de emenda.
 
 ## Comportamento normal
 

@@ -46,7 +46,7 @@ Automático, por VM:
 | Criar o volume espelho | Cinder `POST /volumes`, tamanho lido da origem, no projeto do par de sites |
 | Anexar na receptora | Nova `POST /servers/{id}/os-volume_attachments`, receptora escolhida pelo pool |
 | Achar o device | Serial: `/dev/disk/by-id/virtio-<prefixo-do-volume-id>` — nunca `lsblk` por ordem |
-| Publicar o export | QMP no receptor: `blockdev-add` + `block-export-add`, nome determinístico |
+| Publicar o export | QMP no receptor: `blockdev-add` + `block-export-add`, nome **derivado do ciclo** — ver R3 |
 | **Derrubar o export para cercar** | QMP no receptor: `block-export-del` com `mode: hard`. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) quando um agente fica inalcançável com job escrevendo — ver "Cercar o escritor zumbi" |
 | Disparar o seed | Agente do hypervisor: checkpoint + `blockdev-backup` full, com throttle |
 | Entrar no ciclo | Agendador, na frequência do RPO daquela VM |
@@ -102,9 +102,18 @@ reporta, em vez de replicar pela metade ou excluir em silêncio.
 **R2 — Retomabilidade.** Um provisionamento interrompido em qualquer passo é retomado do
 ponto onde parou. O retry nunca cria um segundo volume.
 
-**R3 — Reconciliação, não recriação.** Todo recurso criado tem nome determinístico derivado
-de `(tenant_id, vm_id, disco)`. Antes de criar, a plataforma procura. Se existe e confere,
-adota. Se existe e diverge, para e reporta — nunca "conserta" sozinho.
+**R3 — Reconciliação, não recriação.** Todo recurso **durável** — volume espelho, anexação —
+tem nome determinístico derivado de `(tenant_id, vm_id, disco)`. Antes de criar, a
+plataforma procura. Se existe e confere, adota. Se existe e diverge, para e reporta — nunca
+"conserta" sozinho.
+
+**O export é a exceção, e não por conveniência.** Ele é por ciclo, e seu nome deriva do
+ciclo, como o bitmap temporário e o checkpoint — a regra de identidade da
+[`dr-001`](../dr-001-dominio-ciclo/spec.md). O motivo é o cercamento: `block-export-del`
+derruba um export por nome, e com nome fixo por disco um cercamento atrasado mataria o job
+do ciclo seguinte em vez do zumbi. Cercar tem que identificar a **instância**, não o disco.
+Consequência prática: não há export para adotar na retomada; há export órfão para limpar,
+definido como export cujo ciclo não está ativo.
 
 **R4 — Tamanho.** O volume espelho tem o tamanho do volume de origem. Nunca menor. Origem
 que cresceu depois de protegida é divergência, tratada como R3.

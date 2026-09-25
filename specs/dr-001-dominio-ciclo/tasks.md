@@ -13,10 +13,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - Arquivos: `docs/adr/0015-efeito-como-valor.md`
 
 - [ ] **T2** — Identidade do ciclo
-  - `nome_do_bitmap(ciclo_id)` e `nome_do_checkpoint(ciclo_id)`, puras e determinísticas.
+  - `nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id)`,
+    puras e determinísticas. O export entrou pelo cercamento: nome fixo por disco faz um
+    cercamento atrasado derrubar o export do ciclo seguinte.
   - Vem antes dos efeitos porque eles carregam esses nomes.
   - Testes: determinístico; ciclos diferentes nunca colidem; o nome permite reconhecer o
-    ciclo de volta; nada de `tmp1` nem de `dr-<timestamp>`
+    ciclo de volta; nada de `tmp1` nem de `dr-<timestamp>`; os três nomes de um mesmo ciclo
+    não colidem entre si
   - Arquivos: `packages/core-domain/src/vzdr/core/domain/identidade.py`,
     `tests/unit/test_identidade.py`
 
@@ -28,11 +31,18 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **Chave de exclusão** (propriedade 4) em todo efeito que toca disco, no mínimo
     `(vm, disco)`. Nasce aqui e não na spec do protocolo: a fila só lê o que o valor
     carrega.
-  - `CercarDestino` entra na enumeração. Só o tipo — a mecânica QMP é da `dr-006`.
+  - **`alvo` em todo efeito** (`ORIGEM` ou `DESTINO`). Cercar roda na receptora, copiar roda
+    no hypervisor: fila que deduz o alvo do tipo torna `CercarDestino` inentregável no único
+    cenário em que ele existe.
+  - **`EfeitoDePreempcao`**, a categoria que toma chave já tomada — sem ela a propriedade 4
+    torna o cercamento impossível, porque a chave está presa por quem ele vai derrubar.
+    `CercarDestino` é o primeiro membro; a mecânica QMP é da `dr-006`.
   - Testes: ida e volta de cada efeito e cada resultado; campo novo opcional não quebra
     quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe; efeito de disco sem
     chave não chega a existir; dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem
-    a mesma chave; a chave sobrevive à serialização
+    a mesma chave; a chave sobrevive à serialização; `alvo` sobrevive à serialização e
+    `CercarDestino` é `DESTINO`; **só** efeito de preempção toma chave tomada; preempção
+    repetida é sucesso, não erro
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
 - [ ] **T4** — `saude.py`: `degradada` é conta
@@ -82,13 +92,17 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - Duas formas de evidência: `query-block-jobs` **sobre o hypervisor** — roteável por
     qualquer agente com acesso a ele, nunca pedida ao detentor do lease — e a VM não estar
     mais no nó gravado, que é o Nova respondendo o que o libvirt não pode.
-  - Quando nenhuma chega, a máquina pede `CercarDestino`.
+  - Quando nenhuma chega, a máquina pede `CercarDestino` — e **o sucesso dele é a terceira
+    forma de evidência**: derrubado o export, o escritor perdeu o alvo. Sem isso cercaríamos
+    e continuaríamos esperando.
   - Testes: job rodando, job terminado, ciclo que nunca existiu, divergência; **job
     concluído no hypervisor sem confirmação no destino não conclui o ciclo** (P2); bitmap
     de ciclo inativo é reconhecido como órfão; chave de disco **não** é liberada quando só o
     lease expirou, e **é** liberada quando o inventário mostra o job encerrado; VM fora do
     nó gravado libera a chave — nó morto não bloqueia disco; sem nenhuma das duas evidências,
-    a saída é `CercarDestino` e não espera indefinida
+    a saída é `CercarDestino` e não espera indefinida; **`CercarDestino` obtém lease mesmo
+    com a chave presa pelo zumbi** — é o teste que a propriedade 4 sozinha reprovaria; o
+    sucesso do cercamento libera a chave
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_reconciliacao.py`
 
 - [ ] **T8** — Telemetria
