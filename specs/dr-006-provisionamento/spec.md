@@ -46,7 +46,8 @@ Automático, por VM:
 | Criar o volume espelho | Cinder `POST /volumes`, tamanho lido da origem, no projeto do par de sites |
 | Anexar na receptora | Nova `POST /servers/{id}/os-volume_attachments`, receptora escolhida pelo pool |
 | Achar o device | Serial: `/dev/disk/by-id/virtio-<prefixo-do-volume-id>` — nunca `lsblk` por ordem |
-| Publicar o export | QMP no receptor: `blockdev-add` + `block-export-add`, nome **derivado do ciclo** — ver R3 |
+| Anexar o nó no daemon | QMP no receptor: `blockdev-add`. **Durável**, nome de R3 — é a anexação vista de dentro do `qemu-storage-daemon` |
+| Publicar o export | QMP no receptor: `block-export-add`. **Por ciclo**, nome derivado do ciclo. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) como `PublicarExport`, não por este fluxo |
 | **Derrubar o export para cercar** | QMP no receptor: `block-export-del` com `mode: hard`. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) quando um agente fica inalcançável com job escrevendo — ver "Cercar o escritor zumbi" |
 | Disparar o seed | Agente do hypervisor: checkpoint + `blockdev-backup` full, com throttle |
 | Entrar no ciclo | Agendador, na frequência do RPO daquela VM |
@@ -109,7 +110,11 @@ plataforma procura. Se existe e confere, adota. Se existe e diverge, para e repo
 
 **O export é a exceção, e não por conveniência.** Ele é por ciclo, e seu nome deriva do
 ciclo, como o bitmap temporário e o checkpoint — a regra de identidade da
-[`dr-001`](../dr-001-dominio-ciclo/spec.md). O motivo é o cercamento: `block-export-del`
+[`dr-001`](../dr-001-dominio-ciclo/spec.md). Repare que `blockdev-add` e `block-export-add`
+estavam num passo só e **nunca tiveram o mesmo tempo de vida**: o nó é a anexação vista de
+dentro do daemon e dura o que ela dura; o export é o nome exposto na rede. O
+`block-export-del`, inclusive com `mode: hard`, remove o export e **deixa o nó** — o volume
+segue anexado e o ciclo seguinte republica. O motivo é o cercamento: `block-export-del`
 derruba um export por nome, e com nome fixo por disco um cercamento atrasado mataria o job
 do ciclo seguinte em vez do zumbi. Cercar tem que identificar a **instância**, não o disco.
 Consequência prática: não há export para adotar na retomada; há export órfão para limpar,

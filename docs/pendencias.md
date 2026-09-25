@@ -131,6 +131,14 @@ seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe 
   chamada `auditoria_por_servico` (ou coluna derivada) paga-se quando existir tela de
   leitura de auditoria, em `core-007`. **Não** é coluna nova: `origem` seria segunda fonte
   de verdade para algo já inequívoco, e duas fontes podem discordar.
+- **Cercamento por security group, na nuvem de destino** — a v2 do cercamento da
+  [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md). O cercamento da v1 tem ponto cego: o
+  caminho de escrita do zumbi é origem → receptora, direto na 10809, e o caminho do
+  cercamento é control plane → relé → receptora. O túnel do relé pode cair com a conexão de
+  dados intacta, e aí não há evidência nem cercamento. Revogar a regra de security group que
+  libera a 10809 para o `/32` da origem mata o caminho de dados sem tocar no estado da
+  receptora e sem depender do relé. Exige um quarto alvo de execução,
+  `API_DA_NUVEM_DE_DESTINO`, que **não** entra na v1 por não ter efeito que o produza.
 - **Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
   e foi o que tornou a ausência de `py.typed` invisível. Registrada como TI2 em
   `specs/core-001-tenancy/tasks.md`.

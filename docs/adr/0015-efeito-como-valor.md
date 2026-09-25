@@ -109,6 +109,12 @@ torna o `CercarDestino` inentregável exatamente no cenário em que ele existe. 
 execução é campo do efeito, pelo mesmo motivo que a chave é: a fila só lê o que o valor
 carrega.
 
+E o alvo se nomeia por **modo de falha, não por geografia**: dois efeitos têm o mesmo alvo
+se, quando um é inentregável, o outro também é. Por esse critério o agente de um hypervisor
+e o Nova da nuvem daquele hypervisor são alvos **diferentes** — e a segunda forma de
+evidência depende disso, porque ela existe justamente para o caso em que o agente não
+responde.
+
 O custo, com as três: agente inalcançável custa a derrubada de um export e a janela pendente
 daquele ciclo. Não é resync completo — `bitmap-mode: on-success` garante que o job abortado
 não limpou bitmap, então o ciclo seguinte recopia a janela inteira por cima do que ficou
@@ -129,6 +135,7 @@ pela metade.
 | Só evidência, sem cercamento | Nó morto não produz evidência nenhuma, e o disco ficaria bloqueado indefinidamente — trocando corrupção por indisponibilidade permanente |
 | `CercarDestino` como exceção à propriedade 4 | Exceção abre buraco que cresce sozinho: o próximo efeito parecido vira segunda exceção por analogia. Categoria nomeada carrega obrigações — não escreve dado, é idempotente, seu sucesso é evidência |
 | Alvo de execução deduzido do tipo do efeito pelo despachante | Conhecimento fora do valor, que some quando o efeito atravessa a fila. Mesmo erro da chave, e o `ConfirmarNoDestino` já provava que a distinção era real |
+| `Alvo` com dois valores, "origem" e "destino" | Geografia não é modo de falha. A consulta ao Nova cairia em "origem" e seria entregue ao agente do hypervisor — quem não responde no cenário em que essa evidência serve |
 | Só cercamento, sem evidência | Derrubar export é barato mas não é grátis, e a maioria dos casos resolve com uma pergunta. Cercar é o caminho de exceção |
 | Reporte "exatamente uma vez" no protocolo | Não existe. O que existe é entrega pelo menos uma vez com absorção idempotente do outro lado, e é isso que a propriedade 2 assume |
 

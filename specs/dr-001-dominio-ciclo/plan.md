@@ -33,6 +33,34 @@ uma lista de resultados.
 O [ADR-0015](../../docs/adr/0015-efeito-como-valor.md) decide a forma do efeito; este plano
 só a executa.
 
+### A varredura do envelope, feita uma vez
+
+O contrato do efeito foi emendado quatro vezes — `ciclo_id`, chave de exclusão, `alvo`,
+preempção — e as quatro responderam **a mesma pergunta**: *o que a fila, o despachante e a
+reconciliação precisam ler de um efeito sem abrir o que ele significa?* Cada rodada
+respondeu um pedaço porque o pedaço foi descoberto.
+
+Esta é a passada única, feita antes da T3 para transformar uma sequência aberta de emendas
+numa fechada. Cada item vira campo, ou vira decisão registrada de que **não** é campo.
+
+| O que o envelope precisa | Decisão | Por quê |
+| --- | --- | --- |
+| De que tenant é | **campo** `tenant_id` | P9. A fila isola sem abrir o efeito, e derivar de `vm_id` exigiria consulta no caminho de despacho |
+| De que ciclo é | **campo** `ciclo_id` | Propriedade 3: descartar resultado atrasado |
+| Por onde se alcança quem executa | **campo** `alvo` | Os três caminhos de falha independentes |
+| Se conflita com outro efeito | **campo** `chave_de_exclusao`, nos de disco | Propriedade 4 |
+| Se pode tomar chave tomada | **categoria** `EfeitoDePreempcao` | Tipo, não *flag*: *flag* é ativável por quem não leu as obrigações |
+| Quanto tempo o lease dura | **não é campo** | O heartbeat governa. Valor fixo seria constante derivada de perfil de parque, que a spec proíbe |
+| Em que ordem despachar | **não é campo** | Deriva da categoria: preempção antes do resto. Campo de prioridade seria segunda fonte de verdade sobre a mesma coisa |
+| Se tolera repetição | **não é campo** | Todo efeito tolera, por contrato. *Flag* permitiria declarar que não tolera, e a fila não tem como honrar isso |
+| Quantas tentativas, com que espera | **não é campo** | Política da fila. O domínio é puro e não conhece rede |
+| Que nome o efeito cria | **não é campo** | Derivado de `ciclo_id` pelas funções de identidade. Campo seria segunda fonte de verdade |
+| Versão do contrato | **não é campo** | O ADR-0015 já escolheu evolução aditiva: campo novo é opcional e nunca muda significado. Versão explícita convidaria a ramificar por versão |
+
+Um quarto alvo — `API_DA_NUVEM_DE_DESTINO` — é previsível e **não** entra agora: nenhum
+efeito da v1 o usa, e o cercamento por security group que o exigiria está registrado como
+candidata. Valor de enumeração sem efeito que o produza é código morto que parece desenho.
+
 ### Serialização é parte do tipo, não um detalhe
 
 Efeito e resultado nascem com `para_json` e `de_json`, e o teste de ida e volta é escrito
@@ -115,12 +143,17 @@ máquina faz.
 
 ```python
 # efeitos.py — o que a máquina pede
-class Alvo(Enum):              # onde o efeito roda; a fila so le o que o valor carrega
-    ORIGEM = "origem"          # hypervisor da VM, pelo agente de la
-    DESTINO = "destino"        # receptora, pelo tunel do rele
+class Alvo(Enum):
+    # Criterio: MODO DE FALHA, nao geografia. Dois efeitos tem o mesmo alvo se,
+    # quando um e inentregavel, o outro tambem e. Por isso agente e Nova da mesma
+    # nuvem sao alvos diferentes — e a evidencia do no depende disso.
+    AGENTE_DE_ORIGEM = "agente_de_origem"
+    RECEPTORA = "receptora"
+    API_DA_NUVEM_DE_ORIGEM = "api_da_nuvem_de_origem"
 
 @dataclass(frozen=True)
 class Efeito:
+    tenant_id: UUID            # P9; a fila nao abre o efeito para isolar
     ciclo_id: UUID             # ADR-0015, propriedade 3
     alvo: Alvo
     def para_json(self) -> dict[str, Any]: ...
@@ -141,7 +174,8 @@ class EfeitoDePreempcao(EfeitoDeDisco):
     # Nunca escreve dado de cliente; e idempotente; o sucesso dele e evidencia.
     ...
 
-class CercarDestino(EfeitoDePreempcao): ...  # alvo=DESTINO; mecanica QMP na dr-006
+class PublicarExport(EfeitoDeDisco): ...      # alvo=RECEPTORA; nome vem do ciclo
+class CercarDestino(EfeitoDePreempcao): ...  # alvo=RECEPTORA; mecanica QMP na dr-006
 
 @dataclass(frozen=True)
 class Resultado:
@@ -175,6 +209,8 @@ tipos de entrada e a função ramificar no começo.
 | A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada |
 | A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela |
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante |
+| Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa |
+| O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela |
 | Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três |
 | Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante |
 | `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir |

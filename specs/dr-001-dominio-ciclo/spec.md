@@ -115,6 +115,22 @@ antes; o que faltava era ela existir **no tipo**.
 Mesmo argumento da chave: a fila só lê o que o valor carrega. O alvo de execução é campo do
 efeito, não convenção de quem despacha.
 
+**O critério de nomeação é modo de falha, não geografia.** Dois efeitos têm o mesmo alvo se,
+quando um é inentregável, o outro também é. Por esse critério, "origem" e "destino" são
+poucos: o Nova da nuvem de origem e o agente daquele mesmo hypervisor são **alvos
+diferentes**, porque falham separado — e a segunda forma de evidência depende disso.
+
+| Alvo | Caminho de alcance | Falha independente de |
+| --- | --- | --- |
+| `AGENTE_DE_ORIGEM` | agente no hypervisor da VM | todo o resto |
+| `RECEPTORA` | túnel de saída da receptora até o relé | agente da origem |
+| `API_DA_NUVEM_DE_ORIGEM` | control plane → Keystone/Nova, credencial do cofre | agente da origem |
+
+Se `Alvo` tivesse só `ORIGEM` e `DESTINO`, a consulta ao Nova seria marcada `ORIGEM` e a
+fila a entregaria a um agente daquele hypervisor — justamente quem não responde no cenário
+em que a evidência do Nova existe para servir. Duas linhas da tabela acima estão do mesmo
+"lado" e **não** podem compartilhar alvo.
+
 #### A evidência é sobre o hypervisor, não sobre quem pediu
 
 A consulta tem que ser **roteável por qualquer agente com acesso àquele hypervisor**.
@@ -162,6 +178,47 @@ Três coisas que isso **não** muda:
 - **P5 continua valendo.** Espelho meio escrito nunca é ponto de recuperação: o ponto é o
   snapshot Cinder, tirado entre ciclos. O último ponto bom fica intacto.
 
+#### Publicar o export é passo do ciclo, e por isso é efeito
+
+O export ser por ciclo tem consequência no vocabulário: **`PublicarExport` entra na
+enumeração**, com alvo `RECEPTORA` e mecânica na `dr-006` — exatamente como o
+`CercarDestino`.
+
+Não é mudança de escopo entre specs; é a separação de duas coisas que estavam num passo só,
+e que nunca tiveram o mesmo tempo de vida:
+
+| Parte | Vida | Nome |
+| --- | --- | --- |
+| Volume espelho, anexação, `blockdev-add` | durável, atravessa ciclos | `(tenant_id, vm_id, disco)`, R3 da `dr-006` |
+| `block-export-add` / `block-export-del` | por ciclo | derivado do ciclo |
+
+O nó do `qemu-storage-daemon` é a anexação vista de dentro do daemon, e dura o que ela dura.
+O export é o nome exposto na rede. `block-export-del`, inclusive com `mode: hard`, **remove
+o export e deixa o nó**: o volume segue anexado, e o ciclo seguinte republica.
+
+O que obriga a publicação a ser explícita é o que foi construído acima: se ela ficasse
+escondida dentro do `IniciarCopia`, **a máquina não conheceria o nome do export que criou** —
+e sem esse nome não há reconciliação de export órfão nem cercamento por instância.
+
+Ganho de lado, que não foi o motivo mas vale registrar: export fechado entre ciclos deixa o
+espelho gravável pela rede **só durante a janela de cópia**, em vez de sempre. Menor
+privilégio no tempo, sem custo.
+
+#### O ponto cego do cercamento
+
+O caminho de escrita do zumbi é origem → receptora, direto na 10809. O caminho do cercamento
+é control plane → relé → receptora. **São caminhos diferentes**, e o túnel do relé pode cair
+com a conexão de dados do zumbi intacta — aí não há evidência nem cercamento.
+
+Existe nível acima, pela `API_DA_NUVEM_DE_DESTINO`: revogar a regra de security group que
+libera a 10809 para o `/32` da origem mata o caminho de dados sem tocar no estado da
+receptora, e não depende do relé.
+
+**Fica para a v2**, e está registrado como candidata em
+[`docs/pendencias.md`](../../docs/pendencias.md) para não morrer nesta conversa. A v1 assume
+o ponto cego: os dois caminhos caírem juntos é mais raro que qualquer um deles cair, e a
+consequência é a espera que o cercamento já reduziu, não corrupção nova.
+
 **Compatibilidade.** `block-export-del` com `mode: hard` precisa ser conferido contra a
 versão de `qemu-utils` do destino, que varia com o repositório do cliente — o
 [ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md) já obriga o onboarding a
@@ -181,7 +238,7 @@ Pela tabela de [`specs/README.md`](../README.md):
 
 | Parte | Onde |
 | --- | --- |
-| O efeito de cercar existir na enumeração, e quando a máquina o pede | **`dr-001`** — é vocabulário de efeito e transição |
+| Os efeitos de publicar e cercar existirem na enumeração, e quando a máquina os pede | **`dr-001`** — é vocabulário de efeito e transição |
 | A mecânica QMP no receptor (`block-export-del`, `mode`, fallback) | **`dr-006`**, que é dona do ciclo de vida do export |
 | Rotear a consulta e a recusa de lease por chave | **Protocolo do agente** |
 
@@ -379,6 +436,9 @@ descreveria um sistema que não existe.
 - [ ] Chave de disco **não** é liberada por lease expirado, e **é** liberada por evidência
 - [ ] VM que não está mais no nó gravado conta como evidência — nó morto não bloqueia disco
 - [ ] Cercar o destino **não** dispara resync completo: o custo é a janela pendente
+- [ ] Efeito que só a API da nuvem alcança **não** é roteado como efeito de agente
+- [ ] `PublicarExport` produz um nome que a máquina reconhece depois — sem isso não há
+      cercamento por instância nem reconciliação de órfão
 - [ ] Todo efeito e todo resultado sobrevivem a serialização e desserialização
 - [ ] Resultado repetido não conta duas vezes nem vira erro
 - [ ] `degradada` sai de conta sobre a idade do ponto, e não de campo guardado

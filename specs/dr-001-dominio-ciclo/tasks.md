@@ -31,18 +31,26 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **Chave de exclusão** (propriedade 4) em todo efeito que toca disco, no mínimo
     `(vm, disco)`. Nasce aqui e não na spec do protocolo: a fila só lê o que o valor
     carrega.
-  - **`alvo` em todo efeito** (`ORIGEM` ou `DESTINO`). Cercar roda na receptora, copiar roda
-    no hypervisor: fila que deduz o alvo do tipo torna `CercarDestino` inentregável no único
-    cenário em que ele existe.
+  - **A varredura do envelope do plano vira código aqui.** Campos: `tenant_id`, `ciclo_id`,
+    `alvo`, e `chave_de_exclusao` nos de disco. O que a tabela decidiu não ser campo fica
+    fora — e campo novo depois exige dizer por que não estava lá.
+  - **`alvo` em todo efeito**, nomeado por **modo de falha**: `AGENTE_DE_ORIGEM`,
+    `RECEPTORA`, `API_DA_NUVEM_DE_ORIGEM`. Dois valores só, "origem" e "destino", quebram a
+    evidência do nó: a consulta ao Nova cairia em "origem" e seria entregue ao agente do
+    hypervisor, que é quem não responde no cenário em que ela serve.
+  - **`PublicarExport`** entra na enumeração, alvo `RECEPTORA`. Publicar é passo do ciclo
+    porque o export é por ciclo; escondê-lo dentro do `IniciarCopia` deixaria a máquina sem
+    o nome do export que criou, e sem ele não há órfão nem cercamento por instância.
   - **`EfeitoDePreempcao`**, a categoria que toma chave já tomada — sem ela a propriedade 4
     torna o cercamento impossível, porque a chave está presa por quem ele vai derrubar.
     `CercarDestino` é o primeiro membro; a mecânica QMP é da `dr-006`.
   - Testes: ida e volta de cada efeito e cada resultado; campo novo opcional não quebra
     quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe; efeito de disco sem
     chave não chega a existir; dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem
-    a mesma chave; a chave sobrevive à serialização; `alvo` sobrevive à serialização e
-    `CercarDestino` é `DESTINO`; **só** efeito de preempção toma chave tomada; preempção
-    repetida é sucesso, não erro
+    a mesma chave; a chave sobrevive à serialização; `alvo` sobrevive à serialização;
+    **`CercarDestino` e `PublicarExport` são `RECEPTORA`, e o efeito que consulta o Nova
+    não é `AGENTE_DE_ORIGEM`** — é o teste que a enumeração de dois valores reprovaria;
+    **só** efeito de preempção toma chave tomada; preempção repetida é sucesso, não erro
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
 - [ ] **T4** — `saude.py`: `degradada` é conta
