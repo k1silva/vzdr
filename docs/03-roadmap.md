@@ -43,8 +43,12 @@ um, rodando sem hypervisor em menos de 2 segundos.
 
 ### Fatia de manutenção, entre a `dr-001` e a `dr-002`
 
-Quatro checadores, em commit próprio, antes de a `dr-002` começar. Três vieram da varredura
-de fronteiras: são lugares onde um documento afirma que algo é verificado e nada verifica.
+Cinco checadores, em commit próprio. Três vieram da varredura de fronteiras: são lugares
+onde um documento afirma que algo é verificado e nada verifica.
+
+**O gatilho não é data, é a próxima edição de spec** — e obrigatoriamente antes da `dr-002`.
+O motivo está em [`specs/README.md`](../specs/README.md), onde quem vai editar uma spec o
+lê.
 
 - [ ] **Meta-checador bidirecional de coerência documento↔realidade.** Afirmar que algo é
       verificado exige o mecanismo existir; afirmar que **não** é exige que ele não exista.
@@ -63,6 +67,12 @@ de fronteiras: são lugares onde um documento afirma que algo é verificado e na
       num `.md`, não num `.py`. Isso é pior que um deslize de sintaxe: o plano é o que
       alguém copia, e a sintaxe errada não entra digitada no módulo — entra copiada de um
       documento que ninguém verifica
+- [ ] **Texto do repositório e mensagem de commit só aceitam Latin mais pontuação.**
+      Português precisa de acento, então a regra não é "só ASCII": é faixa Unicode
+      permitida, e outro script é recusa. Nasceu de um `derivá-lo` com três caracteres
+      cirílicos no meio, numa mensagem de commit — e a primeira tentativa de achá-lo falhou
+      porque o padrão da busca tinha o mesmo defeito. **Varredura por faixa, não por texto**,
+      que foi o que finalmente pegou
 
 ## M2 — Ciclo real (3 a 4 semanas)
 
