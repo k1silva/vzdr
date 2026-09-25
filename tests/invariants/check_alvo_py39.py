@@ -7,6 +7,22 @@ quebra no hypervisor em tempo de import, nao na CI — por isso o checador. Ver 
 
 O conjunto de pacotes restritos nao e escrito aqui: sai de quem declara
 `target-version = "py39"` no proprio pyproject.toml. Fonte unica.
+
+## Duas regras, e a segunda nao e sobre sintaxe
+
+1. **Fecho de import**: pacote restrito so importa pacote restrito.
+2. **Terceiros**: pacote restrito so importa a biblioteca padrao e `vzdr.*`.
+
+A segunda existe porque o fecho de 3.9 nao e so questao de sintaxe — e o que
+consegue ser **instalado no hypervisor**. Dependencia com extensao C que entra
+no agente e problema que aparece no dia do deploy, no host do cliente, e nao na
+CI.
+
+`TERCEIROS_PERMITIDOS` tem hoje um nome so: `libvirt`, que vem da distribuicao
+no hypervisor e e a razao de o agente rodar la. Cada entrada e uma coisa que
+precisa existir no host do CLIENTE, entao acrescentar uma e decisao de deploy,
+com justificativa — e `cryptography`, que entra em `core-connections` na
+core-002, **nao pode** chegar aqui.
 """
 
 import ast
@@ -16,6 +32,15 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
 PACOTES = RAIZ / "packages"
+
+#: Terceiros que o codigo do hypervisor pode importar, com justificativa.
+#: Nao e lista de conveniencia: cada nome aqui e uma coisa que precisa existir
+#: no host do cliente, e acrescentar um e decisao de deploy.
+TERCEIROS_PERMITIDOS = {
+    # Binding Python do libvirt. Vem da distribuicao no hypervisor, e e a razao
+    # de o agente rodar la — sem ele nao ha o que fazer.
+    "libvirt",
+}
 
 # Pacotes que rodam no hypervisor e, portanto, TEM que continuar restritos.
 # Se alguem tirar o py39 do pyproject de um deles, isso aqui falha em vez de
@@ -83,7 +108,18 @@ def verificar(raiz: Path) -> list:
             continue
         for arquivo in sorted((pasta / "src").rglob("*.py")):
             for linha, alvo in imports_de(arquivo):
+                topo = alvo.split(".")[0]
                 if not alvo.startswith("vzdr."):
+                    if topo not in sys.stdlib_module_names and topo not in TERCEIROS_PERMITIDOS:
+                        falhas.append(
+                            f"{arquivo.relative_to(raiz)}:{linha}: '{pasta.name}' roda no "
+                            f"hypervisor e importa '{alvo}', que nao e da biblioteca "
+                            f"padrao.\n"
+                            f"      Extensao C no agente aparece no dia do deploy, no "
+                            f"host do cliente, e nao na CI.\n"
+                            f"      Se for mesmo necessaria, acrescente a "
+                            f"TERCEIROS_PERMITIDOS com justificativa."
+                        )
                     continue
                 # casa o prefixo mais longo: vzdr.core.domain.x -> vzdr.core.domain
                 partes = alvo.split(".")
