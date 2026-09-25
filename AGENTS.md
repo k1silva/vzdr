@@ -209,7 +209,10 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
   nunca vai: isso não é fato do repositório. A doença deste projeto não é checador que
   verifica pouco — é checador que afirma mais do que verifica. Roda em `make
   declaracao-revisao`, fora do `make invariants`, porque precisa do corpo do PR; e
-  **falha sem entrada**, em vez de passar em silêncio.
+  **falha sem entrada**, em vez de passar em silêncio. Rótulo que aparece duas vezes no
+  corpo também reprova: corpo de PR cita documento, e escolher a primeira ocorrência em
+  silêncio faria um PR que não respondeu passar, se a citada vier antes e estiver
+  respondida no exemplo.
 - Com a declaração em todo PR, delegação vira **contável**. Se um dia for preciso
   restringir delegação por tipo de mudança — migração, código de segurança —, a regra se
   escreve varrendo os PRs mesclados, com dado em vez de intuição.

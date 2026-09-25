@@ -31,7 +31,16 @@ CAMPOS = (
 POR_RESPONDER = re.compile(r"<\s*(quem|sim/nao|preencher)\s*>", re.IGNORECASE)
 
 
-def _linha_do_campo(corpo: str, rotulo: str) -> str | None:
+def _linhas_do_campo(corpo: str, rotulo: str) -> list[str]:
+    """TODAS as ocorrencias do rotulo, nao a primeira.
+
+    Corpo de PR e markdown livre, e neste projeto ele frequentemente CITA trecho
+    de documento — inclusive a propria regra e o proprio template. Com duas
+    ocorrencias, pegar a primeira e escolher em silencio: se a citada vier antes
+    e estiver respondida num exemplo, um PR que nao respondeu passa.
+
+    Quem chama trata mais de uma como falha. Ambiguidade e falha, nao escolha.
+    """
     padrao = re.compile(
         # `[ \t]*` e nao `\s*`: `\s` casa quebra de linha, e ai um campo vazio
         # engole a linha seguinte e le a resposta DELA. Um PR com o primeiro
@@ -39,18 +48,24 @@ def _linha_do_campo(corpo: str, rotulo: str) -> str | None:
         r"^[ \t]*[-*]?[ \t]*\**" + re.escape(rotulo) + r"\**[ \t]*:[ \t]*(?P<resposta>.*)$",
         re.IGNORECASE | re.MULTILINE,
     )
-    casou = padrao.search(corpo)
-    return None if casou is None else casou.group("resposta").strip()
+    return [m.group("resposta").strip() for m in padrao.finditer(corpo)]
 
 
 def verificar(corpo: str) -> list[str]:
     """Devolve a lista de falhas; vazia quer dizer declaracao respondida."""
     falhas = []
     for rotulo, resposta_valida in CAMPOS:
-        resposta = _linha_do_campo(corpo, rotulo)
-        if resposta is None:
+        achadas = _linhas_do_campo(corpo, rotulo)
+        if not achadas:
             falhas.append(f"{rotulo!r}: a linha nao esta no corpo do PR")
             continue
+        if len(achadas) > 1:
+            falhas.append(
+                f"{rotulo!r}: aparece {len(achadas)} vezes no corpo; a declaracao "
+                "tem que ser inequivoca"
+            )
+            continue
+        resposta = achadas[0]
         limpa = resposta.strip("`* ")
         if not limpa:
             falhas.append(f"{rotulo!r}: sem resposta")

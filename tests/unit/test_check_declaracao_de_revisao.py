@@ -89,15 +89,43 @@ def test_acento_em_nao_e_aceito():
     assert verificar(corpo) == []
 
 
-def test_declaracao_mentirosa_passa_e_isso_e_deliberado():
-    """A FRONTEIRA do checador, fixada em teste.
+def test_declaracao_que_se_contradiz_passa_e_isso_e_deliberado():
+    """A FRONTEIRA do checador, fixada com uma entrada que a exercita.
 
-    Ele confere que a linha foi respondida. Nao confere que a resposta e
-    verdadeira, e nunca vai: "um humano leu o diff" nao e fato do repositorio.
+    Declaracao MENTIROSA nao e expressavel como entrada: ela e byte a byte
+    identica a uma honesta, e e exatamente isso que faz o checador nao poder
+    distingui-las. Um teste "da mentira" so pode ser uma copia do caso feliz com
+    outro nome — foi o que a primeira versao deste teste era.
 
-    Se um dia alguem tentar fazer este checador afirmar mais do que verifica,
-    este teste e onde a conversa comeca — e o nome do arquivo tem que mudar
-    junto.
+    O que E expressavel, e prova a mesma fronteira, e uma declaracao
+    internamente CONTRADITORIA: as duas primeiras linhas se contradizem e o
+    checador aceita, porque ele le a forma e nao o sentido.
+
+    Se um dia alguem quiser que ele cruze as respostas entre si, este teste e
+    onde a conversa comeca — e o nome do arquivo muda junto.
     """
-    mentira = RESPONDIDA.replace("**Humano leu o diff**: sim", "**Humano leu o diff**: sim")
-    assert verificar(mentira) == []
+    contraditoria = """
+- **Revisou o diff**: ninguem, o PR foi mesclado sem leitura
+- **Humano leu o diff**: sim
+- **Clique do merge delegado**: nao
+"""
+    assert verificar(contraditoria) == []
+
+
+def test_rotulo_repetido_reprova():
+    """Corpo que CITA o template antes de responder e o caso real aqui.
+
+    Com duas ocorrencias, pegar a primeira e escolher em silencio — e se a
+    citada estiver respondida num exemplo, um PR que nao respondeu passa. Esse e
+    o modo de falha que importa, entao ambiguidade reprova.
+    """
+    corpo = RESPONDIDA + "\n\nComo diz o template:\n\n- **Humano leu o diff**: `<sim/nao>`\n"
+    falhas = verificar(corpo)
+    assert len(falhas) == 1
+    assert "aparece 2 vezes" in falhas[0]
+
+
+def test_rotulo_repetido_reprova_mesmo_quando_as_duas_respondem():
+    """Nao e sobre a segunda estar por responder: e sobre haver duas."""
+    corpo = RESPONDIDA + "\n- **Revisou o diff**: outra pessoa\n"
+    assert any("aparece 2 vezes" in f for f in verificar(corpo))
