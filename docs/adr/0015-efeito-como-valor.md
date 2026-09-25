@@ -99,8 +99,11 @@ Duas formas de evidência, e uma saída quando nenhuma chega:
 tornaria impossível: `CercarDestino` toca disco, logo carregaria a chave `(vm, disco)` — que
 está presa pela cópia zumbi, que é a razão de ele existir. Por isso existe uma **categoria**
 de efeito, e não uma exceção: efeito de preempção toma chave já tomada, é o único que pode,
-nunca escreve dado de cliente, é idempotente por construção, e **seu sucesso é evidência** —
-derrubado o export, o escritor perdeu o alvo. Categoria nomeada em vez de buraco na regra,
+nunca escreve dado de cliente, é idempotente por construção, **coexiste com a chave em vez
+de despejar quem a tinha**, e **seu sucesso é evidência** — derrubado o export, o escritor
+perdeu o alvo. Coexistir, porque preempção não precisa de exclusividade: precisa de
+permissão para agir apesar da chave. Exclusividade existe para impedir dois escritores, e
+preempção não é escritor. Categoria nomeada em vez de buraco na regra,
 porque a regra continua inteira para todo o resto.
 
 **Onde o efeito roda também é parte do valor.** Cercar roda na receptora, copiar roda no
@@ -135,6 +138,8 @@ pela metade.
 | Só evidência, sem cercamento | Nó morto não produz evidência nenhuma, e o disco ficaria bloqueado indefinidamente — trocando corrupção por indisponibilidade permanente |
 | `CercarDestino` como exceção à propriedade 4 | Exceção abre buraco que cresce sozinho: o próximo efeito parecido vira segunda exceção por analogia. Categoria nomeada carrega obrigações — não escreve dado, é idempotente, seu sucesso é evidência |
 | Alvo de execução deduzido do tipo do efeito pelo despachante | Conhecimento fora do valor, que some quando o efeito atravessa a fila. Mesmo erro da chave, e o `ConfirmarNoDestino` já provava que a distinção era real |
+| Preempção despejando o detentor da chave | Abre caminho ruim alcançável com o que já está decidido: um `CercarDestino` reentregue por *retry* depois de o ciclo ter fechado despejaria o lease do ciclo seguinte, que está copiando |
+| Valor desconhecido tratado com padrão seguro | Não existe padrão seguro para "para onde isto vai". Qualquer escolha é roteamento inferido, que é o defeito consertado três vezes |
 | `Alvo` com dois valores, "origem" e "destino" | Geografia não é modo de falha. A consulta ao Nova cairia em "origem" e seria entregue ao agente do hypervisor — quem não responde no cenário em que essa evidência serve |
 | Só cercamento, sem evidência | Derrubar export é barato mas não é grátis, e a maioria dos casos resolve com uma pergunta. Cercar é o caminho de exceção |
 | Reporte "exatamente uma vez" no protocolo | Não existe. O que existe é entrega pelo menos uma vez com absorção idempotente do outro lado, e é isso que a propriedade 2 assume |
@@ -150,6 +155,12 @@ Fica mais difícil em três pontos concretos:
 - **Toda mudança de efeito é mudança de contrato**, com fila e agente possivelmente numa
   versão anterior. Efeito ganha campo novo opcional; nunca muda significado de campo
   existente.
+- **Campo desconhecido se ignora; valor desconhecido de campo de segurança se recusa.** A
+  regra aditiva resolve campo novo, não valor novo de enumeração que carrega regra. Um
+  agente antigo que receba um `alvo` que não conhece e caia num padrão roteia errado — o
+  defeito que a propriedade 4 e o `Alvo` existem para impedir. Ele devolve o efeito à fila
+  com "contrato mais novo que eu". É o que permite a versão do contrato continuar não sendo
+  campo sem virar aposta de que todos os consumidores estão na mesma versão.
 - **A máquina precisa ser explícita sobre o que espera**, porque não pode "chamar e ver".
   Estado que aguarda resultado é estado nomeado, não variável local.
 - **Agente inalcançável custa a derrubada de um export**, e a janela daquele ciclo vai para

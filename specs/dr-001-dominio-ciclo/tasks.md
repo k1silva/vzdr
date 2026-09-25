@@ -34,6 +34,11 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **A varredura do envelope do plano vira código aqui.** Campos: `tenant_id`, `ciclo_id`,
     `alvo`, e `chave_de_exclusao` nos de disco. O que a tabela decidiu não ser campo fica
     fora — e campo novo depois exige dizer por que não estava lá.
+  - **Tenant se diz uma vez.** `tenant_id` no envelope e em nenhum corpo, nem como
+    referência de onde derivá-lo. Com RLS, segunda expressão vira oráculo de existência.
+  - **Valor desconhecido de campo de segurança é recusa**, não padrão. `alvo`, chave e
+    categoria. Campo desconhecido continua ignorável — a distinção é entre informação e
+    regra, e é ela que deixa "versão não é campo" ser decisão em vez de aposta.
   - **`alvo` em todo efeito**, nomeado por **modo de falha**: `AGENTE_DE_ORIGEM`,
     `RECEPTORA`, `API_DA_NUVEM_DE_ORIGEM`. Dois valores só, "origem" e "destino", quebram a
     evidência do nó: a consulta ao Nova cairia em "origem" e seria entregue ao agente do
@@ -44,13 +49,19 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **`EfeitoDePreempcao`**, a categoria que toma chave já tomada — sem ela a propriedade 4
     torna o cercamento impossível, porque a chave está presa por quem ele vai derrubar.
     `CercarDestino` é o primeiro membro; a mecânica QMP é da `dr-006`.
+  - **Coexistir, não despejar.** A preempção age apesar da chave; quem a tinha **mantém** o
+    lease. Despejar deixaria um `CercarDestino` reentregue por *retry* derrubar o lease do
+    ciclo seguinte, que está copiando.
   - Testes: ida e volta de cada efeito e cada resultado; campo novo opcional não quebra
     quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe; efeito de disco sem
     chave não chega a existir; dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem
     a mesma chave; a chave sobrevive à serialização; `alvo` sobrevive à serialização;
     **`CercarDestino` e `PublicarExport` são `RECEPTORA`, e o efeito que consulta o Nova
     não é `AGENTE_DE_ORIGEM`** — é o teste que a enumeração de dois valores reprovaria;
-    **só** efeito de preempção toma chave tomada; preempção repetida é sucesso, não erro
+    **só** efeito de preempção toma chave tomada; preempção repetida é sucesso, não erro;
+    **preempção não tira o lease de quem tinha a chave**; valor desconhecido de `alvo`, de
+    chave ou de categoria é recusado e não assumido, enquanto **campo** desconhecido
+    continua ignorado; nenhum efeito serializado contém segunda expressão de tenant
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
 - [ ] **T4** — `saude.py`: `degradada` é conta

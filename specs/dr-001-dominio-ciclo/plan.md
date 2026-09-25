@@ -45,7 +45,7 @@ numa fechada. Cada item vira campo, ou vira decisão registrada de que **não** 
 
 | O que o envelope precisa | Decisão | Por quê |
 | --- | --- | --- |
-| De que tenant é | **campo** `tenant_id` | P9. A fila isola sem abrir o efeito, e derivar de `vm_id` exigiria consulta no caminho de despacho |
+| De que tenant é | **campo** `tenant_id`, e o **único** lugar onde tenant é dito | P9. A fila isola sem abrir o efeito. Nenhum corpo repete tenant ou referência de onde derivá-lo: duas expressões podem discordar, e com RLS uma delas vira oráculo de existência |
 | De que ciclo é | **campo** `ciclo_id` | Propriedade 3: descartar resultado atrasado |
 | Por onde se alcança quem executa | **campo** `alvo` | Os três caminhos de falha independentes |
 | Se conflita com outro efeito | **campo** `chave_de_exclusao`, nos de disco | Propriedade 4 |
@@ -55,7 +55,9 @@ numa fechada. Cada item vira campo, ou vira decisão registrada de que **não** 
 | Se tolera repetição | **não é campo** | Todo efeito tolera, por contrato. *Flag* permitiria declarar que não tolera, e a fila não tem como honrar isso |
 | Quantas tentativas, com que espera | **não é campo** | Política da fila. O domínio é puro e não conhece rede |
 | Que nome o efeito cria | **não é campo** | Derivado de `ciclo_id` pelas funções de identidade. Campo seria segunda fonte de verdade |
-| Versão do contrato | **não é campo** | O ADR-0015 já escolheu evolução aditiva: campo novo é opcional e nunca muda significado. Versão explícita convidaria a ramificar por versão |
+| Versão do contrato | **não é campo** | Evolução aditiva: campo novo é opcional e nunca muda significado. Versão explícita convidaria a ramificar por versão. **Só é correto porque valor desconhecido de campo de segurança é recusa** — sem isso seria aposta de que todos os consumidores estão na mesma versão |
+| O que fazer com valor que não se conhece | **não é campo, é regra** | Campo desconhecido se ignora; valor desconhecido de `alvo`, chave ou categoria se **recusa**, devolvendo o efeito à fila. A distinção é entre informação e regra |
+| O que a preempção faz com o detentor da chave | **não é campo, é regra** | **Coexiste.** Preempção não precisa de exclusividade, precisa de permissão para agir apesar da chave — e não é escritor |
 
 Um quarto alvo — `API_DA_NUVEM_DE_DESTINO` — é previsível e **não** entra agora: nenhum
 efeito da v1 o usa, e o cercamento por security group que o exigiria está registrado como

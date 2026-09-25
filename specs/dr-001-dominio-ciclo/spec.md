@@ -87,9 +87,34 @@ O que faz um efeito ser de preempção, e o que isso obriga:
 | **Nunca escreve dado de cliente** | Preempção *retira capacidade de escrever*; se escrevesse, seria mais um escritor concorrente — o problema, não a solução |
 | É idempotente por construção | A segunda tentativa encontra o export já derrubado, e isso é sucesso, não erro |
 | **O sucesso dele é evidência** | Derrubado o export, o escritor perdeu o alvo. É a terceira forma de evidência, e sem ela cercaríamos e continuaríamos esperando |
+| **Coexiste com a chave; não despeja quem a tinha** | Ver abaixo — é a leitura que a implementação escolheria sem perceber que escolheu |
 
 Hoje há um efeito de preempção: `CercarDestino`. A categoria existe para que o segundo,
-quando aparecer, herde as quatro obrigações em vez de recriá-las por analogia.
+quando aparecer, herde as obrigações em vez de recriá-las por analogia.
+
+**"Toma chave já tomada" tem duas leituras, e só uma é segura.** Coexistir — agir apesar da
+chave, e quem a tinha continua com ela — ou despejar, tirando a chave do detentor. A escrita
+anterior não dizia qual, e quem implementasse escolheria uma sem perceber que estava
+escolhendo.
+
+É **coexistir**, e o motivo cabe numa frase: **preempção não precisa de exclusividade,
+precisa de permissão para agir apesar da chave.** Exclusividade existe para impedir dois
+escritores, e preempção não é escritor — a segunda obrigação já diz que ela nunca escreve
+dado de cliente.
+
+Despejar abriria um caminho ruim, e ele é alcançável com o que já está decidido: a fila
+reentrega uma tentativa de `CercarDestino` do ciclo N por política de *retry*; a primeira já
+tinha vencido, liberado a chave e fechado o N; o N+1 está com cópia viva. A tentativa
+atrasada chega, é idempotente, encontra o export já derrubado e reporta sucesso — mas no
+caminho **despejou o lease do N+1**, que estava copiando.
+
+Com coexistir, nada disso acontece, por duas coisas já construídas: preempção não escreve, e
+cercar identifica a **instância** — um cercamento atrasado do ciclo N só alcança o export do
+ciclo N, que não existe mais.
+
+Repare que a propriedade 3 não cobria isto: ela descarta **resultado** de ciclo que não é o
+corrente, e efeito antigo ainda na fila é outra coisa. Para a preempção não é preciso regra
+nova — coexistir mais nome por instância já a tornam inofensiva.
 
 A chave nasce aqui, no tipo do efeito, e não na spec do protocolo: lá seria política de
 fila sobre um tipo que não tem onde guardá-la. É o mesmo argumento que faz a serialização
@@ -241,6 +266,44 @@ Pela tabela de [`specs/README.md`](../README.md):
 | Os efeitos de publicar e cercar existirem na enumeração, e quando a máquina os pede | **`dr-001`** — é vocabulário de efeito e transição |
 | A mecânica QMP no receptor (`block-export-del`, `mode`, fallback) | **`dr-006`**, que é dona do ciclo de vida do export |
 | Rotear a consulta e a recusa de lease por chave | **Protocolo do agente** |
+
+### Valor desconhecido de campo de segurança é recusa, não padrão
+
+A evolução do contrato é aditiva: campo novo é opcional, e consumidor que não o conhece o
+ignora. Isso resolve **campo** desconhecido e não resolve **valor** desconhecido de campo
+que carrega regra — e o `Alvo` já prova que isso vai acontecer, porque a candidata da v2
+acrescenta `API_DA_NUVEM_DE_DESTINO` à enumeração.
+
+O cenário é concreto: v2 no ar, agente antigo num cliente, chega efeito com `alvo` que ele
+não conhece. Se ele cair num padrão, roteia errado — que é exatamente o defeito consertado
+nas últimas rodadas. Se ignorar o campo, pior.
+
+**Valor desconhecido de campo que carrega regra de segurança é recusa.** O efeito volta para
+a fila com "contrato mais novo que eu", e alguém vê. Vale para os três: `alvo`,
+`chave_de_exclusao` e a categoria de preempção — consumidor que não entende qualquer um
+deles não pode executar assumindo o caso comum.
+
+A distinção é entre **informação** e **regra**. Campo desconhecido continua ignorável, que é
+o que "aditivo" significa; valor desconhecido de campo que decide para onde vai, com quem
+conflita ou o que pode atropelar, não.
+
+Sem esta regra, "versão do contrato não é campo" seria aposta de que todos os consumidores
+estão sempre na mesma versão. Com ela, a decisão fica correta e a versão continua não sendo
+campo.
+
+### Tenant se diz uma vez
+
+`tenant_id` está no envelope para a fila isolar sem abrir o efeito. Então que seja o
+**único** lugar onde tenant aparece: nenhum corpo de efeito repete tenant, projeto ou
+qualquer referência de onde ele possa ser derivado de novo. Duas expressões da mesma coisa
+podem discordar — é o raciocínio que recusou a coluna `degradada` e a coluna `origem` na
+auditoria.
+
+Não é hipótese distante. Quando o `core-003` guardar efeitos em tabela com RLS, o
+`tenant_id` do envelope é o discriminador, e integridade referencial no Postgres **ignora
+RLS** — verificado na `core-001`. Id no corpo apontando para linha de outro tenant seria
+oráculo de existência, que é o que o
+[ADR-0006](../../docs/adr/0006-isolamento-por-rls.md) já tratou.
 
 ### Identidade é do domínio
 
@@ -437,6 +500,9 @@ descreveria um sistema que não existe.
 - [ ] VM que não está mais no nó gravado conta como evidência — nó morto não bloqueia disco
 - [ ] Cercar o destino **não** dispara resync completo: o custo é a janela pendente
 - [ ] Efeito que só a API da nuvem alcança **não** é roteado como efeito de agente
+- [ ] Valor desconhecido de `alvo`, de chave ou de categoria é **recusado**, não assumido
+- [ ] Preempção **coexiste**: o detentor da chave não perde o lease
+- [ ] Nenhum efeito serializado contém segunda expressão de tenant
 - [ ] `PublicarExport` produz um nome que a máquina reconhece depois — sem isso não há
       cercamento por instância nem reconciliação de órfão
 - [ ] Todo efeito e todo resultado sobrevivem a serialização e desserialização
