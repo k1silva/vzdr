@@ -102,5 +102,5 @@ rodando local, editando os arquivos remotos.
 | `docs/03-roadmap.md` | Os 6 marcos com critério de saída |
 | `docs/adr/` | As decisões de arquitetura registradas |
 | `docs/pendencias.md` | Pendências com dono fora do repositório, e o que cada uma destrava |
-| `tests/invariants/` | A CI falha se o domínio fizer IO, as fronteiras furarem, faltar tenant_id ou o fecho de 3.9 vazar |
+| `tests/invariants/` | Sete checadores. A CI falha se o domínio fizer IO, as fronteiras furarem, faltar `tenant_id`, o fecho de 3.9 vazar, alguém abrir conexão fora da porta única, uma pendência vencer, ou o contrato de eventos divergir do código |
 | `scripts/` | Censo de formatos, medição de taxa de mudança, verificação do scaffold |

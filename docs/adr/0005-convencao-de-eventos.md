@@ -77,5 +77,10 @@ que outra fez sem conhecê-la (P11).
 
 Fica mais difícil: mudar um evento de módulo passa a ser mudança de contrato, não
 refatoração — mover algo de `dr` para o núcleo renomeia o evento para quem assina. E a
-convenção precisa de um checador na CI para não erodir; enquanto não existir, ela depende de
-revisão humana.
+convenção precisava de um checador na CI para não erodir.
+
+**Ele existe:** `tests/invariants/check_eventos.py`, desde a TI3 da `core-001`. Ele confere
+que evento declarado e evento emitido são o mesmo conjunto, nos dois sentidos, que cada um
+tem teste, e que a ação é particípio e não imperativo. Esta linha dizia que a convenção
+dependia de revisão humana, e ficou assim depois que ela deixou de depender — o tipo de
+afirmação velha que faz alguém confiar menos do que deveria.
