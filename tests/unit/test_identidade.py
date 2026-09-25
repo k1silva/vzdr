@@ -13,6 +13,8 @@ import pytest
 from vzdr.core.domain.identidade import (
     PREFIXO,
     Especie,
+    NomeDeCiclo,
+    NomeNossoIlegivel,
     ler_nome,
     nome_de,
     nome_do_bitmap,
@@ -109,8 +111,6 @@ def test_caracteres_seguros_para_qmp_e_libvirt(fabrica):
         "vzdr-bmp-" + "a" * 31,
         "vzdr-bmp-" + "a" * 33,
         "vzdr-bmp-" + "z" * 32,
-        # especie que nao existe
-        "vzdr-xyz-" + "a" * 32,
         # prefixo parecido, mas nao o nosso
         "vzdrx-bmp-" + "a" * 32,
         "x-vzdr-bmp-" + "a" * 32,
@@ -132,6 +132,37 @@ def test_nome_que_nao_e_nosso_devolve_none(alheio):
     que e P1, nao arrumacao.
     """
     assert ler_nome(alheio) is None
+
+
+def test_especie_desconhecida_nao_e_none():
+    """Nosso pela forma, especie que esta versao nao interpreta.
+
+    Devolver `None` diria "nao e nosso, nao toque", e o custo esta no topo do
+    modulo: orfao que fica para sempre, em silencio, e o ciclo seguinte colide.
+
+    Sao tres estados porque a acao e diferente em cada um — colapsar este no
+    primeiro e valor desconhecido virando padrao, que o ADR-0015 proibe.
+    """
+    ciclo = uuid4()
+    lido = ler_nome(f"{PREFIXO}-xyz-{ciclo.hex}")
+    assert isinstance(lido, NomeNossoIlegivel)
+    assert lido.especie_crua == "xyz"
+    assert lido.ciclo_id == ciclo
+
+
+def test_especie_desconhecida_nao_e_confundida_com_conhecida():
+    """Quem reconcilia decide por tipo, e os dois nao se misturam."""
+    assert not isinstance(ler_nome(f"{PREFIXO}-xyz-{uuid4().hex}"), NomeDeCiclo)
+    assert not isinstance(ler_nome(nome_do_bitmap(uuid4())), NomeNossoIlegivel)
+
+
+def test_forma_alheia_continua_sendo_none_mesmo_com_tres_letras():
+    """O que muda e a especie desconhecida COM forma nossa.
+
+    Prefixo alheio continua `None`: a forma inteira e que diz se e nosso.
+    """
+    assert ler_nome("vzdrx-xyz-" + "a" * 32) is None
+    assert ler_nome("xyz-" + "a" * 32) is None
 
 
 def test_hex_maiusculo_nao_e_aceito():

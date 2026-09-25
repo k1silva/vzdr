@@ -29,12 +29,14 @@ Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 import enum
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Union
 from uuid import UUID
 
 __all__ = [
     "Especie",
+    "Leitura",
     "NomeDeCiclo",
+    "NomeNossoIlegivel",
     "PREFIXO",
     "ler_nome",
     "nome_de",
@@ -63,10 +65,36 @@ class Especie(enum.Enum):
 
 @dataclass(frozen=True)
 class NomeDeCiclo:
-    """O que um nome nosso diz, depois de lido."""
+    """Nome nosso, de especie que esta versao interpreta."""
 
     especie: Especie
     ciclo_id: UUID
+
+
+@dataclass(frozen=True)
+class NomeNossoIlegivel:
+    """Nosso pela forma, com especie que esta versao nao interpreta.
+
+    Versoes diferentes convivendo no mesmo parque e estado normal, nao acidente —
+    e a premissa que faz "versao do contrato nao e campo" depender de recusa por
+    desconhecimento, em docs/adr/0015-efeito-como-valor.md.
+
+    Nao tocar, e **reportar**. Colapsar isto em "nao e nosso" seria valor
+    desconhecido virando padrao, que e a regra que o ADR-0015 proibe — e o custo
+    esta escrito no topo deste modulo: orfao que fica para sempre, em silencio, e
+    o ciclo seguinte colide com ele.
+    """
+
+    especie_crua: str
+    ciclo_id: UUID
+
+
+#: Os tres estados do dominio. `None` e "nao e nosso".
+#:
+#: Sao tres porque a acao e diferente em cada um, e `Optional[NomeDeCiclo]` so
+#: expressa dois. O terceiro nao e erro nem excecao: e divergencia, e quem
+#: reconcilia a trata como trata as outras.
+Leitura = Union[NomeDeCiclo, NomeNossoIlegivel, None]
 
 
 # 32 digitos hexadecimais minusculos: e o `UUID.hex`, sem hifens.
@@ -111,23 +139,25 @@ def nome_do_export(ciclo_id: UUID) -> str:
     return nome_de(Especie.EXPORT, ciclo_id)
 
 
-def ler_nome(nome: str) -> Optional[NomeDeCiclo]:
-    """Le um nome nosso; devolve `None` para qualquer outro.
+def ler_nome(nome: str) -> Leitura:
+    """Le um nome, e diz em qual dos tres estados ele esta.
 
-    `None` e a resposta para tudo que nao criamos — `tmp1`, `dr-1727280000`, um
-    bitmap que o cliente mantem por conta dele. Nao e caso de erro: e a
-    distincao entre "orfao nosso, pode limpar" e "nao e nosso, nao toque".
+    - `None` — nao e nosso. `tmp1`, `dr-1727280000`, um bitmap que o cliente
+      mantem por conta dele. Nao tocar.
+    - `NomeDeCiclo` — nosso, especie conhecida. Candidato a orfao.
+    - `NomeNossoIlegivel` — nosso pela forma, especie que esta versao nao
+      interpreta. Nao tocar **e** reportar.
 
-    Devolver excecao aqui empurraria quem varre o hypervisor a envolver cada
-    nome num `try`, e o caminho de nome alheio e o comum, nao o excepcional.
+    Nada aqui levanta excecao: nome alheio e o caso COMUM numa varredura de
+    hypervisor, e excecao empurraria quem varre a envolver cada nome num `try`.
     """
     casou = _LEITOR.fullmatch(nome)
     if casou is None:
         return None
+    crua = casou.group("especie")
+    ciclo_id = UUID(hex=casou.group("ciclo"))
     try:
-        especie = Especie(casou.group("especie"))
+        especie = Especie(crua)
     except ValueError:
-        # Prefixo nosso com especie que esta versao nao conhece. Pode ser um
-        # agente mais novo no mesmo parque; nao e nosso para limpar.
-        return None
-    return NomeDeCiclo(especie=especie, ciclo_id=UUID(hex=casou.group("ciclo")))
+        return NomeNossoIlegivel(especie_crua=crua, ciclo_id=ciclo_id)
+    return NomeDeCiclo(especie=especie, ciclo_id=ciclo_id)
