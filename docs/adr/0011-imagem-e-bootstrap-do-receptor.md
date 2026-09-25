@@ -88,3 +88,18 @@ modo de transporte exige, e reaproveita o canal de controle que já existe.
   verifica isso e falha cedo, com mensagem clara, em vez de falhar no provisionamento.
 - Versão do `qemu-utils` passa a variar com o que o repositório do cliente serve. O
   onboarding registra a versão encontrada; a suíte de compatibilidade roda contra ela.
+
+### O que a suíte de compatibilidade confere
+
+A lista mora aqui, e não espalhada, porque foi este ADR que criou a obrigação. Cada linha
+existe porque alguma decisão depende do resultado — suíte que confere o que ninguém usa é
+tempo de boot gasto à toa.
+
+| O que | Por que depende da versão | Quem depende |
+| --- | --- | --- |
+| `block-export-del` aceita `mode: hard` | Desconectar cliente ativo é o que mata o escritor zumbi. Sem isso, o cercamento vira reinício do `qemu-storage-daemon` daquela receptora — mais grosseiro, e derruba os exports dos outros discos junto | Cercamento da [`dr-001`](../../specs/dr-001-dominio-ciclo/spec.md), mecânica na [`dr-006`](../../specs/dr-006-provisionamento/spec.md) |
+| Comprimento máximo do `node-name` do `blockdev-add` | A lembrança de duas pessoas aqui é **31 caracteres**, e nenhuma das duas verificou. Se o limite existir, o **R3** da `dr-006` estoura com folga: `(tenant_id, vm_id, disco)` são três UUIDs. Aí o nome do nó precisa de forma própria, e forma de nome é identidade — logo domínio | `blockdev-add` da `dr-006` |
+
+Os nomes derivados de ciclo da `dr-001` têm 41 caracteres e **não** são `node-name`:
+bitmap, checkpoint e export NBD aceitam nome longo. A linha acima é sobre o nó, que é
+outra coisa e é durável.
