@@ -209,6 +209,12 @@ class VerificadorLocal:
             # recebe um token nao sabe de que tipo ele e, e fazer a API
             # escolher seria mais uma coisa para alguem lembrar.
             #
+            # LIMITE DESTA CADEIA: ela custa uma consulta a mais no caminho de
+            # falha, o que com dois tipos e irrelevante. Se aparecer um
+            # TERCEIRO, a saida NAO e encadear mais um `if` — e discriminar o
+            # tipo no proprio token, como o prefixo ja faz com o tenant. Sem
+            # esta nota, o terceiro tipo vira mais um elif e o quarto tambem.
+            #
             # Import tardio porque `servico` depende deste modulo: a direcao da
             # dependencia e servico -> autenticacao, e so este ponto a inverte.
             from vzdr.core.tenancy.servico import resolver as resolver_servico
