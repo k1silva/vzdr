@@ -213,7 +213,8 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
   corpo também reprova: corpo de PR cita documento, e escolher a primeira ocorrência em
   silêncio faria um PR que não respondeu passar, se a citada vier antes e estiver
   respondida no exemplo.
-- **Para citar os rótulos num PR, use bloco de código** — cercado por crases ou indentado.
+- **Para citar os rótulos num PR, use bloco de código** — cerca de crases ou tis, três ou
+  mais, ou bloco indentado.
   O checador os ignora, então PR que discute a própria regra cita à vontade. Fora de
   bloco, o rótulo tem que começar na margem e aparecer uma vez só. A escolha foi entre
   isto e pedir que ninguém escrevesse o rótulo literal; a segunda custa disciplina, e

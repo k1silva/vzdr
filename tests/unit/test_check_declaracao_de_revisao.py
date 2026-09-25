@@ -198,3 +198,51 @@ def test_cerca_sem_fechamento_nao_come_a_declaracao():
     """
     corpo = "Comecei um bloco e esqueci de fechar:\n\n```\nalgo\n\n" + RESPONDIDA
     assert verificar(corpo) == []
+
+
+@pytest.mark.parametrize(
+    ("nome", "abre", "fecha"),
+    [
+        ("crase tripla", "```", "```"),
+        # `~~~` e o que se escolhe quando o conteudo tem crase — e o template
+        # tem: as respostas de exemplo vem entre crases.
+        ("til triplo", "~~~", "~~~"),
+        # Quatro crases e o jeito normal de citar um bloco que ja contem tres.
+        ("quatro crases", "````", "````"),
+        # A cerca pode vir indentada em ate tres espacos e continua sendo cerca,
+        # com o conteudo na margem — entao a margem do rotulo nao alcanca isto.
+        ("cerca indentada", "   ```", "   ```"),
+        # O fechamento pode ser MAIOR que a abertura.
+        ("fecha maior que abre", "```", "`````"),
+    ],
+)
+def test_toda_grafia_de_cerca_esconde_a_citacao(nome, abre, fecha):
+    """Cobrir uma grafia e deixar a outra aberta cobre metade.
+
+    Nenhuma destas e exotica: sao as formas que o CommonMark define e que
+    aparecem quando o conteudo citado ja tem crase, que e o caso do template.
+    """
+    corpo = f"{RESPONDIDA}\n{abre}\n- **Humano leu o diff**: `<sim/nao>`\n{fecha}\n"
+    assert verificar(corpo) == [], nome
+
+
+def test_til_nao_fecha_cerca_de_crase():
+    """O fechamento e do MESMO caractere da abertura.
+
+    Um `~~~` no meio de um bloco de crases e conteudo, nao fechamento — e se
+    fechasse, o resto do bloco voltaria a contar.
+    """
+    corpo = f"{RESPONDIDA}\n```\n- **Humano leu o diff**: x\n~~~\n```\n"
+    assert verificar(corpo) == []
+
+
+def test_bloco_de_citacao_nao_conta():
+    """Decisao, nao acidente.
+
+    Citar com `>` e citar, igual a citar em bloco de codigo, entao o rotulo nao
+    conta. Isto ja acontecia por efeito colateral do padrao do rotulo; o teste
+    existe para que continue acontecendo de proposito — e para que quem mudar o
+    padrao descubra aqui, e nao num PR reprovado sem motivo aparente.
+    """
+    corpo = f"{RESPONDIDA}\nComo o template pede:\n\n> - **Humano leu o diff**: `<sim/nao>`\n"
+    assert verificar(corpo) == []
