@@ -187,6 +187,32 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
 - Mudança de infraestrutura compartilhada — CI, Makefile, checador de invariante — vai
   em commit próprio, separado da tarefa que a motivou. Quem revisa uma tarefa não deveria
   ter que revisar o build junto.
+- **Todo PR declara quem revisou o diff.** Três linhas, sempre, respondidas — quem
+  revisou, se um humano leu o diff, e se o clique do merge foi delegado. As três, porque
+  só a primeira é respondível com verdade por quem delegou: "revisado por: k1silva" é
+  verdadeiro no GitHub mesmo quando ninguém leu, e aí a declaração não declara nada.
+- **A declaração é estrutura, não disciplina.** O `.github/pull_request_template.md` traz
+  as linhas por responder, então ela não depende de alguém lembrar de escrever — depende
+  de alguém lembrar de apagar, que é o sentido certo do esforço. Na forma anterior desta
+  regra, o esquecimento produzia silêncio, e silêncio é indistinguível do caso normal.
+- **Delegação é decisão do humano, vale para aquele PR, e pode cobrir ler e apertar.** Um
+  humano pode delegar a revisão do diff a um agente, e também o clique do merge. Não é
+  violação; é escolha dele, e fica registrada. O que não vale é delegação como **modo
+  permanente**: delegação sem escopo é override de banda sem prazo, que o
+  [ADR-0013](docs/adr/0013-orcamento-de-banda-e-janelas.md) já recusou pelo mesmo motivo —
+  o temporário vira permanente e ninguém lembra por quê.
+- **`git push` direto para `main` continua fora do alcance de qualquer agente**, em
+  qualquer arranjo. O que a delegação dispensa é a leitura e o clique, nunca a decisão de
+  quem manda.
+- `tests/invariants/check_declaracao_de_revisao.py` verifica **que as linhas foram
+  respondidas**, e o nome dele diz só isso. Ele não verifica que a revisão aconteceu, e
+  nunca vai: isso não é fato do repositório. A doença deste projeto não é checador que
+  verifica pouco — é checador que afirma mais do que verifica. Roda em `make
+  declaracao-revisao`, fora do `make invariants`, porque precisa do corpo do PR; e
+  **falha sem entrada**, em vez de passar em silêncio.
+- Com a declaração em todo PR, delegação vira **contável**. Se um dia for preciso
+  restringir delegação por tipo de mudança — migração, código de segurança —, a regra se
+  escreve varrendo os PRs mesclados, com dado em vez de intuição.
 - **Mudança em workflow só está pronta quando uma execução nova aparecer verde.** Não
   basta o YAML parecer certo: ausência de check é indistinguível de sucesso em quase toda
   interface — um job que deixou de existir, um nome que mudou ou um gatilho que não casa
