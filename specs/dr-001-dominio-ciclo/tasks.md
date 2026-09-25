@@ -28,6 +28,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **Chave de exclusão** (propriedade 4) em todo efeito que toca disco, no mínimo
     `(vm, disco)`. Nasce aqui e não na spec do protocolo: a fila só lê o que o valor
     carrega.
+  - `CercarDestino` entra na enumeração. Só o tipo — a mecânica QMP é da `dr-006`.
   - Testes: ida e volta de cada efeito e cada resultado; campo novo opcional não quebra
     quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe; efeito de disco sem
     chave não chega a existir; dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem
@@ -65,7 +66,10 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     40 TB é dias de janela, e a distância entre "degradou" e "inviabilizou o contrato" é
     exatamente esta propriedade.
   - Testes: a tabela inteira; o teste da invariante; resultado atrasado do ciclo N é
-    descartado no N+1; resultado repetido não conta duas vezes
+    descartado no N+1; resultado repetido não conta duas vezes; **cercar o destino não
+    dispara resync completo** — o custo é a janela pendente, porque `bitmap-mode:
+    on-success` garante que o job abortado não limpou bitmap e o ciclo seguinte recopia a
+    janela inteira por cima do que ficou pela metade
   - Arquivos: `tests/unit/test_ciclo_falha.py`
 
 - [ ] **T7** — Reconciliação
@@ -73,12 +77,18 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     hypervisor, não resultado de efeito pedido.
   - As cinco saídas da spec, e a regra de autoridade: hypervisor decide sobre o hypervisor,
     destino sobre o destino.
-  - **Liberação da chave de exclusão**: só por evidência do hypervisor de que o job acabou,
-    nunca pelo relógio do lease. É aqui que a propriedade 4 do ADR-0015 fecha.
+  - **Liberação da chave de exclusão**: só por evidência de que o job acabou, nunca pelo
+    relógio do lease. É aqui que a propriedade 4 do ADR-0015 fecha.
+  - Duas formas de evidência: `query-block-jobs` **sobre o hypervisor** — roteável por
+    qualquer agente com acesso a ele, nunca pedida ao detentor do lease — e a VM não estar
+    mais no nó gravado, que é o Nova respondendo o que o libvirt não pode.
+  - Quando nenhuma chega, a máquina pede `CercarDestino`.
   - Testes: job rodando, job terminado, ciclo que nunca existiu, divergência; **job
     concluído no hypervisor sem confirmação no destino não conclui o ciclo** (P2); bitmap
     de ciclo inativo é reconhecido como órfão; chave de disco **não** é liberada quando só o
-    lease expirou, e **é** liberada quando o inventário mostra o job encerrado
+    lease expirou, e **é** liberada quando o inventário mostra o job encerrado; VM fora do
+    nó gravado libera a chave — nó morto não bloqueia disco; sem nenhuma das duas evidências,
+    a saída é `CercarDestino` e não espera indefinida
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_reconciliacao.py`
 
 - [ ] **T8** — Telemetria

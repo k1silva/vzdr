@@ -78,12 +78,27 @@ que o reporte parou. Rede particionada, agente pausado, VM do agente suspensa: o
 segue vivo, escrevendo.
 
 Daí a condição de liberação, que é metade da propriedade: **chave de efeito que toca disco
-só é liberada por evidência do hypervisor de que o job acabou, nunca pelo relógio do
-lease.** Sem ela a chave não resolve o cenário que a motivou, porque nele o lease já
-expirou — a chave está livre justamente enquanto o job continua escrevendo.
+só é liberada por evidência de que o job acabou, nunca pelo relógio do lease.** Sem ela a
+chave não resolve o cenário que a motivou, porque nele o lease já expirou — a chave está
+livre justamente enquanto o job continua escrevendo.
 
-O custo: agente inalcançável bloqueia aquele disco até alguém conseguir olhar o hypervisor.
-Lentidão contra corrupção silenciosa, e a constituição já escolheu.
+Duas formas de evidência, e uma saída quando nenhuma chega:
+
+- **`query-block-jobs`, roteável por qualquer agente com acesso àquele hypervisor.** Nunca
+  perguntar ao detentor do lease: ele é justamente quem não responde no cenário que importa,
+  e a regra travaria onde foi construída para proteger.
+- **A VM não estar mais no nó gravado.** O escritor era o processo QEMU daquele nó; se a VM
+  saiu, o escritor não existe. Vem do Nova em vez do libvirt, e continua sendo evidência.
+  Sem esta segunda forma, um nó morto bloqueia aquele disco para sempre.
+- **Cercar, quando nenhuma chega.** Derrubar o export NBD no destino (`block-export-del`,
+  `mode: hard`) tira do zumbi a possibilidade de continuar, em vez de provar que ele parou.
+  Funciona porque a receptora é nosso software e mantém túnel de saída próprio: ela está
+  alcançável exatamente quando o agente da origem não está.
+
+O custo, com as três: agente inalcançável custa a derrubada de um export e a janela pendente
+daquele ciclo. Não é resync completo — `bitmap-mode: on-success` garante que o job abortado
+não limpou bitmap, então o ciclo seguinte recopia a janela inteira por cima do que ficou
+pela metade.
 
 ## Alternativas consideradas
 
@@ -96,6 +111,9 @@ Lentidão contra corrupção silenciosa, e a constituição já escolheu.
 | Deixar a forma para quando a fila existir | É o que esta decisão evita. Três implementações no ar transformam mudança de forma em migração coordenada |
 | Exclusão só no protocolo do agente, sem campo no efeito | Seria política de fila sobre um tipo que não tem onde guardá-la. Mesmo argumento da serialização: o que a fila precisa ler tem que existir no valor que ela guarda |
 | Exclusão pelo `ciclo_id` que já existe | Não funciona no caso que importa. Os dois efeitos concorrentes são do mesmo ciclo |
+| Pedir a evidência ao agente detentor do lease | Trava no único cenário que a regra existe para cobrir: o detentor é quem não responde. A consulta é sobre o hypervisor, e qualquer agente com acesso a ele serve |
+| Só evidência, sem cercamento | Nó morto não produz evidência nenhuma, e o disco ficaria bloqueado indefinidamente — trocando corrupção por indisponibilidade permanente |
+| Só cercamento, sem evidência | Derrubar export é barato mas não é grátis, e a maioria dos casos resolve com uma pergunta. Cercar é o caminho de exceção |
 | Reporte "exatamente uma vez" no protocolo | Não existe. O que existe é entrega pelo menos uma vez com absorção idempotente do outro lado, e é isso que a propriedade 2 assume |
 
 ## Consequências
@@ -111,8 +129,12 @@ Fica mais difícil em três pontos concretos:
   existente.
 - **A máquina precisa ser explícita sobre o que espera**, porque não pode "chamar e ver".
   Estado que aguarda resultado é estado nomeado, não variável local.
-- **Agente inalcançável bloqueia o disco dele** até haver evidência do hypervisor. É o
-  preço da propriedade 4, e é deliberado.
+- **Agente inalcançável custa a derrubada de um export**, e a janela daquele ciclo vai para
+  o próximo. É o preço da propriedade 4, e é deliberado.
+- **O `mode: hard` depende da versão de `qemu-utils` do destino**, que varia com o
+  repositório do cliente. O ADR-0011 já obriga o onboarding a registrar a versão e rodar a
+  suíte de compatibilidade contra ela; sem o `mode: hard`, o cercamento vira reinício do
+  `qemu-storage-daemon` daquela receptora.
 - **Idempotência é obrigação de quem absorve**, e isso tem que ter teste. Resultado repetido
   não pode contar duas vezes — e é o tipo de coisa que passa despercebida porque o caminho
   feliz nunca a exercita.

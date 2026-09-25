@@ -47,8 +47,35 @@ Automático, por VM:
 | Anexar na receptora | Nova `POST /servers/{id}/os-volume_attachments`, receptora escolhida pelo pool |
 | Achar o device | Serial: `/dev/disk/by-id/virtio-<prefixo-do-volume-id>` — nunca `lsblk` por ordem |
 | Publicar o export | QMP no receptor: `blockdev-add` + `block-export-add`, nome determinístico |
+| **Derrubar o export para cercar** | QMP no receptor: `block-export-del` com `mode: hard`. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) quando um agente fica inalcançável com job escrevendo — ver "Cercar o escritor zumbi" |
 | Disparar o seed | Agente do hypervisor: checkpoint + `blockdev-backup` full, com throttle |
 | Entrar no ciclo | Agendador, na frequência do RPO daquela VM |
+
+### Cercar o escritor zumbi
+
+A [`dr-001`](../dr-001-dominio-ciclo/spec.md) decide **quando** cercar; a mecânica é desta
+spec, porque quem é dono do ciclo de vida do export é quem sabe derrubá-lo.
+
+O caso: agente da origem inalcançável com `blockdev-backup` ainda escrevendo. Lease vencido
+não prova que o job parou — prova que o reporte parou. Em vez de esperar evidência que pode
+não vir, tira-se do zumbi a possibilidade de continuar: `block-export-del` com `mode: hard`
+desconecta cliente ativo, e o job morre por perder a conexão.
+
+Isso é possível porque a receptora é nosso software e mantém **túnel de saída próprio** para
+o relé ([ADR-0009](../../docs/adr/0009-separacao-rele-control-plane.md), com a chave do
+[ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md)): ela está alcançável
+exatamente no cenário em que o agente da origem não está.
+
+**Compatibilidade, e o fallback.** O `mode: hard` depende da versão de `qemu-utils` que o
+repositório do cliente serve. O ADR-0011 já obriga o onboarding a registrar a versão
+encontrada e rodar a suíte de compatibilidade contra ela; **esta linha entra nessa suíte**.
+Sem `mode: hard`, o cercamento vira reinício do `qemu-storage-daemon` daquela receptora —
+mais grosseiro, mesmo efeito, e derruba os exports dos outros discos da mesma receptora
+junto, que voltam no ciclo seguinte.
+
+Cercar **não** causa resync completo: `bitmap-mode: on-success` garante que o job abortado
+não limpou bitmap, então o ciclo seguinte recopia a janela inteira por cima das escritas
+parciais.
 
 Humano, e só no onboarding do cliente:
 

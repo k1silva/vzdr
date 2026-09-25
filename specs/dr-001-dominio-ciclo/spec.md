@@ -75,13 +75,77 @@ nascer junto do tipo em vez de depois que a fila existir.
 soltar. No cenário que a motivou o lease já **expirou** — a chave está livre justamente
 enquanto o job continua escrevendo, e um segundo agente a toma sem violar regra nenhuma.
 Então a chave vem com a condição de liberação: **chave de efeito que toca disco só é
-liberada por evidência do hypervisor de que o job acabou, nunca pelo relógio do lease.**
-Que evidência é essa já está definida — é a reconciliação, e a regra de autoridade dela
-vale inteira aqui: quem tem a palavra sobre o job é o hypervisor onde ele roda.
+liberada por evidência de que o job acabou, nunca pelo relógio do lease.**
 
-O custo é honesto e vale nomear: agente inalcançável **bloqueia aquele disco** até alguém
-conseguir olhar o hypervisor. É lentidão, e a alternativa é corrupção silenciosa. Entre as
-duas, a constituição já escolheu.
+#### A evidência é sobre o hypervisor, não sobre quem pediu
+
+A consulta tem que ser **roteável por qualquer agente com acesso àquele hypervisor**.
+`query-block-jobs` responde sobre o hypervisor, não sobre quem perguntou.
+
+Está escrito aqui porque a implementação natural é a errada: buscar a evidência no detentor
+do lease trava exatamente no cenário que a motivou — o agente está inalcançável, logo não
+responde, logo não há evidência, logo a chave nunca libera, e a única saída vira mexer no
+banco à mão.
+
+#### "A VM não está mais neste nó" também é evidência
+
+Nó morto, ou VM migrada: não existe job para encontrar porque não existe quem responda. Com
+uma forma só de evidência, um nó que morre bloqueia aquele disco para sempre.
+
+A informação já está no desenho — é a detecção de troca de nó do
+[ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md), que hoje leva a `degradada` e
+resync controlado. Ela serve aqui porque **o escritor era o processo QEMU do nó antigo**: se
+a VM não está mais lá, aquele escritor não existe mais. A evidência vem do Nova em vez do
+libvirt, e continua sendo evidência.
+
+#### Quando a evidência não chega, cerca-se
+
+Evidência responde "o zumbi parou?". Existe mecanismo mais forte, e ele é nosso: **o destino
+é nosso software**. O alcance até a receptora não passa pelo agente da origem — ela mantém
+túnel de saída próprio para o relé, com a chave SSH restrita que o
+[ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md) lhe entrega no bootstrap.
+A receptora continua alcançável exatamente no cenário em que o agente da origem não está.
+
+Então, em vez de esperar, **derruba-se o export NBD no destino**: `block-export-del` com
+`mode: hard` desconecta cliente ativo. O `blockdev-backup` zumbi perde a conexão e morre sem
+escrever mais nada — não porque provamos que parou, mas porque tiramos dele a possibilidade
+de continuar. O `block-export-del` já é a mecânica de retirada de export do
+[ADR-0010](../../docs/adr/0010-receptor-e-armazenamento-do-espelho.md); o que muda é o
+`mode` e o motivo.
+
+Três coisas que isso **não** muda:
+
+- **A evidência continua sendo o caminho normal** — barata, sem efeito colateral. Cercar é o
+  caminho de quando a evidência não chega.
+- **Cercar não produz resync completo.** O custo é a janela pendente daquele ciclo, e a
+  razão é `bitmap-mode: on-success`: o job abortado não limpou bitmap nenhum, então o ciclo
+  seguinte recopia a janela inteira por cima das escritas parciais. A convergência não
+  depende de o zumbi ter parado num ponto limpo.
+- **P5 continua valendo.** Espelho meio escrito nunca é ponto de recuperação: o ponto é o
+  snapshot Cinder, tirado entre ciclos. O último ponto bom fica intacto.
+
+**Compatibilidade.** `block-export-del` com `mode: hard` precisa ser conferido contra a
+versão de `qemu-utils` do destino, que varia com o repositório do cliente — o
+[ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md) já obriga o onboarding a
+registrar a versão encontrada e rodar a suíte de compatibilidade contra ela. Se o `mode:
+hard` não estiver lá, o cercamento vira reinício do `qemu-storage-daemon` daquela receptora:
+mais grosseiro, mesmo efeito, e continua sem tocar em produção.
+
+#### O custo, depois disso
+
+Deixa de ser "agente inalcançável bloqueia aquele disco por tempo indeterminado" e passa a
+ser **"agente inalcançável custa a derrubada de um export, e a janela pendente vai para o
+próximo ciclo"**. Sem bloqueio indefinido e sem intervenção no banco.
+
+#### De quem é cada parte
+
+Pela tabela de [`specs/README.md`](../README.md):
+
+| Parte | Onde |
+| --- | --- |
+| O efeito de cercar existir na enumeração, e quando a máquina o pede | **`dr-001`** — é vocabulário de efeito e transição |
+| A mecânica QMP no receptor (`block-export-del`, `mode`, fallback) | **`dr-006`**, que é dona do ciclo de vida do export |
+| Rotear a consulta e a recusa de lease por chave | **Protocolo do agente** |
 
 ### Identidade é do domínio
 
@@ -262,6 +326,9 @@ descreveria um sistema que não existe.
 - [ ] Todo efeito que toca disco carrega chave de exclusão, e a chave sobrevive à
       serialização — efeito sem chave não chega a existir
 - [ ] Dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem a mesma chave
+- [ ] Chave de disco **não** é liberada por lease expirado, e **é** liberada por evidência
+- [ ] VM que não está mais no nó gravado conta como evidência — nó morto não bloqueia disco
+- [ ] Cercar o destino **não** dispara resync completo: o custo é a janela pendente
 - [ ] Todo efeito e todo resultado sobrevivem a serialização e desserialização
 - [ ] Resultado repetido não conta duas vezes nem vira erro
 - [ ] `degradada` sai de conta sobre a idade do ponto, e não de campo guardado

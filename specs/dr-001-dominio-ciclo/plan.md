@@ -126,6 +126,7 @@ class IniciarCopia(Efeito): ...
 class DescartarBitmap(Efeito): ...
 class ConfirmarNoDestino(Efeito): ...
 class InventariarHypervisor(Efeito): ...   # a reconciliação
+class CercarDestino(Efeito): ...           # derruba o export; ver dr-006 para a mecanica
 
 @dataclass(frozen=True)
 class Resultado:
@@ -139,8 +140,13 @@ def reconciliar(estado: EstadoDoCiclo, inventario: Inventario) -> Transicao
 ```
 
 A chave é do tipo, não do protocolo: a fila precisa lê-la para recusar o segundo lease, e
-só lê o que o valor carrega. A **liberação** dela não é deste módulo — é evidência do
-hypervisor, que chega por `reconciliar`.
+só lê o que o valor carrega. A **liberação** dela não é deste módulo — é evidência, que
+chega por `reconciliar`.
+
+`CercarDestino` está na enumeração porque cercar é um efeito, e a máquina decide quando
+pedi-lo. O que **não** está aqui é a mecânica: `block-export-del`, o `mode` e o fallback de
+reinício do `qemu-storage-daemon` são da `dr-006`, dona do ciclo de vida do export. A
+divisão sai da tabela de [`specs/README.md`](../README.md), e a spec a registra.
 
 `reconciliar` é função separada porque a entrada é diferente: não é o resultado de um efeito
 pedido, é a fotografia do hypervisor. Fundi-la em `avancar` faria a assinatura aceitar dois
@@ -151,6 +157,8 @@ tipos de entrada e a função ramificar no começo.
 | Risco | Mitigação |
 | --- | --- |
 | A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec |
+| A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada |
+| Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três |
 | Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante |
 | `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir |
 | Resultado atrasado aceito como do ciclo corrente | O id do ciclo está no tipo, não na convenção, e há teste do descarte. `Resultado` sem `ciclo_id` não compila |
