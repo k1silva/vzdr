@@ -10,11 +10,19 @@ O roadmap serve aos marcos: o que entrega o quê, e quando.
 
 Nenhum dos dois sustenta um item com estas três características ao mesmo tempo:
 
-- **o dono está fora do repositório** — um fornecedor, um cliente, uma conta que ninguém
-  aqui controla;
+- **o desbloqueio depende de alguém fora do time** — um fornecedor, um cliente, uma conta
+  que ninguém aqui controla. Repare que não é sobre quem está escrito na linha `Dono`: a
+  P-002 tem dono interno e mora aqui mesmo assim, porque destravá-la exige um acordo de
+  acesso que não se resolve daqui;
 - **ele bloqueia uma decisão já registrada**, em geral num ADR;
 - **ele aparece em mais de um documento**, e some justamente por isso: cada documento
   supõe que outro está cuidando.
+
+**O que não entra, e o critério existe para isto.** Trabalho nosso, com relógio nosso, não
+é pendência: medição de laboratório, dívida técnica, checador a escrever. Isso mora na fase
+0 do [roadmap](03-roadmap.md) ou nas tarefas de uma spec. A distinção não é burocracia — é o
+que faz este arquivo responder a uma pergunta só, e ela é *o que precisamos cobrar de
+fora*. Um item nosso misturado aqui não fica mais visível; ele apaga o sinal dos outros.
 
 Pendência que mora só na prosa de um documento some. Aconteceu perto de acontecer com o
 limite de tentativa de senha por IP, que quase caiu entre a `core-001` e a `core-007`, e é
@@ -69,7 +77,11 @@ VM descartável, e a resposta do fornecedor muda como o teste é feito — ou se
 necessário.
 
 **O que ela destrava.** M4, junto com M1, M2 e M3, fecha a **decisão 3** do mesmo ADR: se
-o resync diferencial é a próxima coisa depois da base ou se espera. Hoje essa decisão está
+o resync diferencial é a próxima coisa depois da base ou se espera. **Desta pendência só é
+dona a M4** — as outras três são trabalho nosso e moram na [fase 0 do roadmap](03-roadmap.md),
+com exceção da M2, que tem pendência própria na P-002. Esta linha as cita para dizer de que
+a decisão 3 depende, e não para guardá-las: medição rastreada dentro do texto de uma
+pendência só é achada por quem lê a pendência inteira. Hoje essa decisão está
 `em análise`, e o diferencial está desenhado mas não priorizado.
 
 O sentido da resposta importa nos dois lados: se o bitmap **sobrevive**, a frequência de

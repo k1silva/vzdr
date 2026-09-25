@@ -76,19 +76,33 @@ transferindo só o delta.
 
 Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage do DC-2.
 
+**Toda linha aqui carrega o método, não só o nome.** Medição registrada sem método é uma
+medida diferente cada vez que roda, e a série não serve para comparar nada — que é o único
+motivo de medir mais de uma vez. Quando o método mora num ADR, a linha aponta para lá em
+vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
+
 - [x] Censo de discos nos três nós (`scripts/censo-discos.sh`) — feito em 2026-09-23:
       11,83 TiB, 65 VMs, 115 discos.
       Ver [censo](validacao/2026-09-23-censo-do-parque.md)
-- [ ] Taxa de mudança em 20-30 VMs por 48 h (`scripts/medir-taxa-mudanca.sh`)
-- [ ] Teste de sobrevivência do bitmap à migração automática do VHI (M4 do ADR-0012)
-      — bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo
-- [ ] Classificação das VMs por tier
+- [ ] **Taxa real de mudança** (M3 do ADR-0012) — `scripts/medir-taxa-mudanca.sh`, com
+      bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
+      o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
+      e divergia dele
+- [ ] **Sobrevivência do bitmap à migração automática do VHI** (M4 do ADR-0012) — migrar
+      uma VM descartável entre dois nós e conferir se o bitmap persiste. Exige cluster com
+      mais de um nó. Bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo:
+      a resposta muda como o teste é feito, ou se ele é necessário
+- [ ] **Classificação das VMs por tier** — o critério escrito **antes** da lista, e a lista
+      derivada dele. Na ordem inversa a classificação vira opinião por VM, e ninguém
+      consegue dizer depois por que uma VM ficou no tier que ficou
 - [ ] **Vazão real de seed entre os datacenters** (M1 do ADR-0012) — repetir o seed de
-      2026-09-23 com `time`. Sem ela, toda estimativa de tempo de resync é chute, inclusive
-      as dos próprios documentos
-- [ ] **Custo da mescla de bitmap em função do número de checkpoints retidos** — a curva que
-      define o limiar de compactação da [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md).
-      Antes da `dr-003`. Sem a curva, qualquer limiar é chute com cara de número
+      2026-09-23 com `time`, medindo o mesmo volume, para converter tamanho em horas. Sem
+      ela, toda estimativa de tempo de resync é chute, inclusive as dos próprios documentos
+- [ ] **Custo da mescla de bitmap em função do número de checkpoints retidos** — cronometrar
+      a mescla com 1, 2, 4, 8, 16 e 32 checkpoints retidos na mesma VM, e registrar a curva.
+      É ela que define o limiar de compactação da
+      [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md), e precisa existir antes da `dr-003`.
+      Sem a curva, qualquer limiar é chute com cara de número
 
 ## Pré-requisitos de infraestrutura
 
