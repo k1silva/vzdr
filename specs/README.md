@@ -11,9 +11,9 @@ Núcleo e feature intercalados: cada capacidade do núcleo nasce quando o DR pre
 | core-001 | Tenancy e identidade | Usuários, tenant, papéis, verificação de permissão | — | M0 |
 | core-002 | Conexões e conectores | Registro de sistemas externos, conector tipado, cofre, health check | core-001 | M0 |
 | dr-001 | Domínio e máquina de estados | VM protegida, ciclo, janela, ponto de recuperação | core-001 | M1 |
-| dr-002 | Descoberta de discos e bitmaps | node-name, inventário de discos, leitura de bitmaps | dr-001 | M1 |
+| dr-002 | Descoberta de discos e bitmaps | node-name, inventário de discos, leitura de bitmaps. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `node-name` é efêmero, `qemu-img info` falha em volume de VM ligada | dr-001 | M1 |
 | core-003 | Motor de trabalho | Fila durável, estado, retomada, agendamento | core-001 | M1 |
-| dr-003 | Ciclo de replicação multi-disco | Checkpoint atômico, merge, backup job, commit | dr-001, dr-002, core-003 | M2 |
+| dr-003 | Ciclo de replicação multi-disco | Checkpoint atômico, merge, backup job, commit. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `bitmap-mode: on-success` com `sync: incremental`, `--quiesce` não existe neste fork, `raw` recusa checkpoint | dr-001, dr-002, core-003 | M2 |
 | dr-004 | Quiesce com watchdog | freeze/thaw garantido, nível de consistência registrado | dr-003 | M2 |
 | dr-005 | Reconciliação e resync | Detecção de divergência, decisão de resync | dr-003 | M2 |
 | core-004 | Frota de agentes | Registro, versão, saúde, comando | core-002 | M2 |
@@ -30,6 +30,16 @@ Núcleo e feature intercalados: cada capacidade do núcleo nasce quando o DR pre
 
 A interface começa depois de `core-007`, consumindo a API. Pode correr em paralelo assim
 que o contrato OpenAPI estabilizar.
+
+## Antes de escrever uma spec de agente
+
+As validações de 18 e 23 de setembro custaram dias e já estão escritas. A coluna "Entrega"
+das specs que tocam libvirt ou QMP aponta para elas: leia antes, não depois.
+
+O lugar dos fatos é [`docs/01-arquitetura-dr.md`](../docs/01-arquitetura-dr.md) e
+[`docs/validacao/`](../docs/validacao/). O lembrete mora aqui, na tabela, porque este é o
+primeiro arquivo que alguém abre ao começar uma spec — e pendência que mora só na prosa de
+outro documento some.
 
 ## O que toda spec responde
 
