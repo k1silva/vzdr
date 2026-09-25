@@ -205,7 +205,15 @@ class VerificadorLocal:
             linha = cur.fetchone()
 
         if linha is None:
-            raise TokenInvalidoError("sessao desconhecida")
+            # Pode ser token de servico: mesmo formato, outra tabela. Quem
+            # recebe um token nao sabe de que tipo ele e, e fazer a API
+            # escolher seria mais uma coisa para alguem lembrar.
+            #
+            # Import tardio porque `servico` depende deste modulo: a direcao da
+            # dependencia e servico -> autenticacao, e so este ponto a inverte.
+            from vzdr.core.tenancy.servico import resolver as resolver_servico
+
+            return resolver_servico(self._conexao, token)
 
         usuario_id, tenant_da_linha, expira_em, papel = linha
         if expira_em <= datetime.now(UTC):
