@@ -29,10 +29,15 @@ make db-up        # PostgreSQL local
 
 `make check` tem que passar antes de qualquer commit. Sem exceção.
 
-**Limite o commit, não o `add`.** `git commit -- <caminhos>` leva só o que você nomear;
-`git add <caminhos> && git commit` leva **tudo que o índice acumulou**, inclusive o que
-ficou de um `git add -A` anterior. Já aconteceu duas vezes: um commit de infraestrutura
-engoliu os arquivos de outra fatia. Confira o `--stat` antes de considerar feito.
+**Limite o commit, não o `add`.** `git add <caminhos> && git commit` leva **tudo que o
+índice acumulou**, inclusive o que ficou de um `git add -A` anterior — já aconteceu duas
+vezes aqui, com um commit de infraestrutura engolindo os arquivos de outra fatia.
+`git commit -- <caminhos>` leva só o que se nomeia.
+
+Com uma pegadinha: `git commit -- <caminhos>` **não inclui arquivo novo**. Para arquivo
+não rastreado, `git add` primeiro e depois `git commit -- <os mesmos caminhos>` — o `add`
+põe no índice, e o `--` limita o que sai dele. Confira o `--stat` antes de considerar
+feito.
 
 **Não canalize comando de verificação.** `make check | tail` devolve o código de saída
 do `tail`, não o do `make` — o comando reprova e o `&&` seguinte roda assim mesmo. Já
@@ -113,6 +118,12 @@ from vzdr.tools.dr import ...
 - **Erro que não distingue causas mente sobre o diagnóstico.** Um `except` que trata
   toda falha do driver como "banco fora do ar" transforma erro de sintaxe em caça ao
   PostgreSQL. Separe falha de conexão de falha de execução, e preserve o erro cru (P8).
+- **Checador de coerência entre documento e realidade é sempre bidirecional.** Afirmar
+  que algo é verificado exige o mecanismo existir; afirmar que **não** é verificado exige
+  que ele não exista. Olhar um sentido só fecha metade da classe e dá a sensação de ter
+  fechado inteira — já aconteceu três vezes: no contrato de eventos, na guarda de
+  terceiros no hypervisor, e num ADR que dizia depender de revisão humana quando já não
+  dependia.
 - **Verificação que não verifica é pior que verificação ausente**, porque dá confiança.
   Dois casos já mordidos: em Postgres, `rolsuper` e `rolbypassrls` têm que ser checados
   **juntos** — `FORCE ROW LEVEL SECURITY` não alcança superusuário, então um papel
