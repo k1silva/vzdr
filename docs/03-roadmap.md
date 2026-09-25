@@ -41,6 +41,39 @@ estado durável. Nada ainda copia byte.
 **Sai quando:** a máquina de estados cobre todos os cenários de falha, com teste para cada
 um, rodando sem hypervisor em menos de 2 segundos.
 
+### Fatia de manutenção, entre a `dr-001` e a `dr-002`
+
+Cinco checadores, em commit próprio. Três vieram da varredura de fronteiras: são lugares
+onde um documento afirma que algo é verificado e nada verifica.
+
+**O gatilho não é data, é a próxima edição de spec** — e obrigatoriamente antes da `dr-002`.
+O motivo está em [`specs/README.md`](../specs/README.md), onde quem vai editar uma spec o
+lê.
+
+- [ ] **Meta-checador bidirecional de coerência documento↔realidade.** Afirmar que algo é
+      verificado exige o mecanismo existir; afirmar que **não** é exige que ele não exista.
+      Declaração estrutural, não textual — lista de exceção datada é o que se quer evitar
+- [ ] **Todo arquivo de `tests/integration` referencia a fixture da conexão real.** Repare
+      que a asserção é **positiva**. Procurar `unittest.mock` pega a forma óbvia e passa
+      reto na que importa: uma classe `FakeQMP` escrita à mão, sem importar nada, satisfaz a
+      mesma interface. Ausência de mock é impossível de provar; presença da conexão real é
+      trivial de verificar, e um duplo escrito à mão não passa a satisfazê-la por acidente.
+      Inofensivo hoje, porque a pasta está vazia; morde na `dr-002`
+- [ ] **`gitleaks` na CI, mais checador próprio só para a regra do projeto** — DSN com senha
+      fora de `scripts/ambiente_db.py`. Não reescrever scanner de segredo: a parte genérica
+      é problema resolvido, e mal resolvido de novo é pior que ausente
+- [ ] **`check_alvo_py39` varrendo também os blocos `python` de `specs/**/*.md` e
+      `docs/**/*.md`.** Um `X | Y` passou pelo checador e pelo job `alvo-py39` porque estava
+      num `.md`, não num `.py`. Isso é pior que um deslize de sintaxe: o plano é o que
+      alguém copia, e a sintaxe errada não entra digitada no módulo — entra copiada de um
+      documento que ninguém verifica
+- [ ] **Texto do repositório e mensagem de commit só aceitam Latin mais pontuação.**
+      Português precisa de acento, então a regra não é "só ASCII": é faixa Unicode
+      permitida, e outro script é recusa. Nasceu de um `derivá-lo` com três caracteres
+      cirílicos no meio, numa mensagem de commit — e a primeira tentativa de achá-lo falhou
+      porque o padrão da busca tinha o mesmo defeito. **Varredura por faixa, não por texto**,
+      que foi o que finalmente pegou
+
 ## M2 — Ciclo real (3 a 4 semanas)
 
 `dr-003`, `dr-004`, `dr-005`, `core-004`. O agente replica de verdade, multi-disco, com
@@ -76,13 +109,33 @@ transferindo só o delta.
 
 Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage do DC-2.
 
+**Toda linha aqui carrega o método, não só o nome.** Medição registrada sem método é uma
+medida diferente cada vez que roda, e a série não serve para comparar nada — que é o único
+motivo de medir mais de uma vez. Quando o método mora num ADR, a linha aponta para lá em
+vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
+
 - [x] Censo de discos nos três nós (`scripts/censo-discos.sh`) — feito em 2026-09-23:
       11,83 TiB, 65 VMs, 115 discos.
       Ver [censo](validacao/2026-09-23-censo-do-parque.md)
-- [ ] Taxa de mudança em 20-30 VMs por 48 h (`scripts/medir-taxa-mudanca.sh`)
-- [ ] Teste de sobrevivência do bitmap à migração automática do VHI (M4 do ADR-0012)
-      — bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo
-- [ ] Classificação das VMs por tier
+- [ ] **Taxa real de mudança** (M3 do ADR-0012) — `scripts/medir-taxa-mudanca.sh`, com
+      bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
+      o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
+      e divergia dele
+- [ ] **Sobrevivência do bitmap à migração automática do VHI** (M4 do ADR-0012) — migrar
+      uma VM descartável entre dois nós e conferir se o bitmap persiste. Exige cluster com
+      mais de um nó. Bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo:
+      a resposta muda como o teste é feito, ou se ele é necessário
+- [ ] **Classificação das VMs por tier** — o critério escrito **antes** da lista, e a lista
+      derivada dele. Na ordem inversa a classificação vira opinião por VM, e ninguém
+      consegue dizer depois por que uma VM ficou no tier que ficou
+- [ ] **Vazão real de seed entre os datacenters** (M1 do ADR-0012) — repetir o seed de
+      2026-09-23 com `time`, medindo o mesmo volume, para converter tamanho em horas. Sem
+      ela, toda estimativa de tempo de resync é chute, inclusive as dos próprios documentos
+- [ ] **Custo da mescla de bitmap em função do número de checkpoints retidos** — cronometrar
+      a mescla com 1, 2, 4, 8, 16 e 32 checkpoints retidos na mesma VM, e registrar a curva.
+      É ela que define o limiar de compactação da
+      [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md), e precisa existir antes da `dr-003`.
+      Sem a curva, qualquer limiar é chute com cara de número
 
 ## Pré-requisitos de infraestrutura
 

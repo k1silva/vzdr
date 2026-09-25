@@ -10,11 +10,19 @@ O roadmap serve aos marcos: o que entrega o quê, e quando.
 
 Nenhum dos dois sustenta um item com estas três características ao mesmo tempo:
 
-- **o dono está fora do repositório** — um fornecedor, um cliente, uma conta que ninguém
-  aqui controla;
+- **o desbloqueio depende de alguém fora do time** — um fornecedor, um cliente, uma conta
+  que ninguém aqui controla. Repare que não é sobre quem está escrito na linha `Dono`: a
+  P-002 tem dono interno e mora aqui mesmo assim, porque destravá-la exige um acordo de
+  acesso que não se resolve daqui;
 - **ele bloqueia uma decisão já registrada**, em geral num ADR;
 - **ele aparece em mais de um documento**, e some justamente por isso: cada documento
   supõe que outro está cuidando.
+
+**O que não entra em "Abertas", e o critério existe para isto.** Trabalho nosso, com
+relógio nosso, não é pendência: medição de laboratório, dívida técnica, checador a escrever.
+Isso mora na fase 0 do [roadmap](03-roadmap.md) ou nas tarefas de uma spec. A distinção não é burocracia — é o
+que faz este arquivo responder a uma pergunta só, e ela é *o que precisamos cobrar de
+fora*. Um item nosso misturado aqui não fica mais visível; ele apaga o sinal dos outros.
 
 Pendência que mora só na prosa de um documento some. Aconteceu perto de acontecer com o
 limite de tentativa de senha por IP, que quase caiu entre a `core-001` e a `core-007`, e é
@@ -69,7 +77,11 @@ VM descartável, e a resposta do fornecedor muda como o teste é feito — ou se
 necessário.
 
 **O que ela destrava.** M4, junto com M1, M2 e M3, fecha a **decisão 3** do mesmo ADR: se
-o resync diferencial é a próxima coisa depois da base ou se espera. Hoje essa decisão está
+o resync diferencial é a próxima coisa depois da base ou se espera. **Desta pendência só é
+dona a M4** — as outras três são trabalho nosso e moram na [fase 0 do roadmap](03-roadmap.md),
+com exceção da M2, que tem pendência própria na P-002. Esta linha as cita para dizer de que
+a decisão 3 depende, e não para guardá-las: medição rastreada dentro do texto de uma
+pendência só é achada por quem lê a pendência inteira. Hoje essa decisão está
 `em análise`, e o diferencial está desenhado mas não priorizado.
 
 O sentido da resposta importa nos dois lados: se o bitmap **sobrevive**, a frequência de
@@ -104,7 +116,11 @@ mudariam a conclusão inteira. É a medição que falta e que não está no labo
 
 ## Candidatas
 
-Itens que merecem virar trabalho, mas ainda não têm data.
+Itens que merecem virar trabalho, mas ainda não têm data — de qualquer origem, inclusive
+nossa. O critério de "Abertas" **não** vale aqui: ele diz o que se cobra de fora, e isto é
+estacionamento de ideia ainda sem forma. Item daqui que ganha data **sai** — para o roadmap
+ou para as tarefas de uma spec — a menos que atenda ao critério de "Abertas", e aí sobe de
+seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe para evitar.
 
 - **Separar a decisão 3 do ADR-0012 num ADR próprio**, com status `proposto`. Aquele
   documento empacota três decisões de maturidade diferente, e foi por isso que ele não
@@ -115,6 +131,14 @@ Itens que merecem virar trabalho, mas ainda não têm data.
   chamada `auditoria_por_servico` (ou coluna derivada) paga-se quando existir tela de
   leitura de auditoria, em `core-007`. **Não** é coluna nova: `origem` seria segunda fonte
   de verdade para algo já inequívoco, e duas fontes podem discordar.
+- **Cercamento por security group, na nuvem de destino** — a v2 do cercamento da
+  [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md). O cercamento da v1 tem ponto cego: o
+  caminho de escrita do zumbi é origem → receptora, direto na 10809, e o caminho do
+  cercamento é control plane → relé → receptora. O túnel do relé pode cair com a conexão de
+  dados intacta, e aí não há evidência nem cercamento. Revogar a regra de security group que
+  libera a 10809 para o `/32` da origem mata o caminho de dados sem tocar no estado da
+  receptora e sem depender do relé. Exige um quarto alvo de execução,
+  `API_DA_NUVEM_DE_DESTINO`, que **não** entra na v1 por não ter efeito que o produza.
 - **Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
   e foi o que tornou a ausência de `py.typed` invisível. Registrada como TI2 em
   `specs/core-001-tenancy/tasks.md`.

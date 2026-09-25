@@ -41,6 +41,24 @@ O lugar dos fatos é [`docs/01-arquitetura-dr.md`](../docs/01-arquitetura-dr.md)
 primeiro arquivo que alguém abre ao começar uma spec — e pendência que mora só na prosa de
 outro documento some.
 
+## Antes de editar qualquer spec, a partir de agora
+
+O **meta-checador bidirecional de coerência documento↔realidade** vem antes da próxima
+edição de spec, e obrigatoriamente antes da `dr-002`. Ele está na fatia de manutenção do
+[M1 do roadmap](../docs/03-roadmap.md).
+
+O motivo de o gatilho ser este, e não uma data: hoje a `dr-001` e a `dr-006` conferem
+porque foram editadas juntas e lidas juntas. **Isso é uma linha de base verificada à mão**,
+e é o melhor momento possível para o checador nascer — primeira execução verde, e o que ele
+achar depois é desvio de verdade.
+
+Cada spec editada antes de ele existir é uma edição cuja coerência ninguém conferiu. Passada
+a segunda ou a terceira, a primeira execução dele deixa de distinguir "desviou" de "nunca
+foi conferido", e um checador que não distingue as duas coisas nasce sem poder falhar.
+
+A `dr-001` T2–T8 não edita spec nenhuma, então a ordem combinada — código primeiro — não
+esbarra nisto.
+
 ## O que toda spec responde
 
 1. **Comportamento normal** — o caminho feliz, passo a passo.
