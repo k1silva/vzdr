@@ -131,6 +131,16 @@ seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe 
   chamada `auditoria_por_servico` (ou coluna derivada) paga-se quando existir tela de
   leitura de auditoria, em `core-007`. **Não** é coluna nova: `origem` seria segunda fonte
   de verdade para algo já inequívoco, e duas fontes podem discordar.
+- **Limite de comprimento do `node-name` do QEMU, e o que ele faz com o R3 da
+  [`dr-006`](../specs/dr-006-provisionamento/spec.md).** Os nomes derivados de ciclo têm 41
+  caracteres (`vzdr-bmp-` mais 32 hex) e não são `node-name` — bitmap, checkpoint e export
+  NBD aceitam nome longo, então a `dr-001` não é afetada. O nó do `blockdev-add` é outra
+  coisa: a lembrança de duas pessoas aqui é **31 caracteres**, e **nenhuma das duas
+  verificou**. Se o limite existir, o R3 estoura com folga, porque `(tenant_id, vm_id,
+  disco)` são três UUIDs. Aí o nome do nó precisa de forma própria — e forma de nome é
+  identidade, logo domínio, como os outros três. Verificar contra a versão de `qemu-utils`
+  que o onboarding registra (ADR-0011), **antes** de a `dr-006` implementar o
+  `blockdev-add`.
 - **Cercamento por security group, na nuvem de destino** — a v2 do cercamento da
   [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md). O cercamento da v1 tem ponto cego: o
   caminho de escrita do zumbi é origem → receptora, direto na 10809, e o caminho do
