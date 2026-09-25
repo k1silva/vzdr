@@ -37,7 +37,7 @@ estado + resultado do efeito anterior  →  (novo estado, próximos efeitos)
 Quem executa é o agente. Isso torna a máquina testável sem cluster e o agente substituível —
 e é o que separa esta spec de uma que só roda em produção.
 
-### Três exigências de forma
+### Quatro exigências de forma
 
 Entre a máquina pedir e o agente fazer existem **uma fila e uma rede**. O efeito não é uma
 chamada de função adiada; é um registro que viaja.
@@ -47,6 +47,41 @@ chamada de função adiada; é um registro que viaja.
 | **Efeito é serializável** | O agente busca trabalho depois, de outro processo, talvez de outra máquina. Efeito que não cabe numa linha não sobrevive à fila |
 | **Resultado é serializável e tolera repetição** | A rede cai entre concluir e reportar, e o agente repete. O protocolo do agente exige reporte idempotente, e é aqui que isso desce |
 | **Todo efeito carrega o id do ciclo** | Senão um resultado atrasado do ciclo N chega quando a máquina já está no N+1, e ela o aceita como se fosse do atual |
+| **Todo efeito que toca disco carrega chave de exclusão** | O id do ciclo não cobre isto: dois `blockdev-backup` concorrentes sobre o mesmo disco são **do mesmo ciclo**. Ver abaixo |
+
+### Heartbeat que para não prova que o trabalho parou
+
+O protocolo do agente concede trabalho por *lease* com heartbeat, e devolve o trabalho à
+fila quando o heartbeat para. Mas heartbeat que para prova que **o reporte** parou, não que
+o trabalho parou. Rede particionada, agente pausado, VM do agente suspensa: o job do QEMU
+segue vivo do outro lado, escrevendo.
+
+A terceira exigência não alcança este caso. Ela descarta resultado de **outro** ciclo, e
+aqui os dois efeitos são do mesmo ciclo — o original, que ninguém cancelou, e o reemitido
+depois que o lease caiu. A segunda também não: ela absorve reporte duplicado, que é
+contabilidade, e o que está em jogo aqui são dois `blockdev-backup` escrevendo o mesmo
+espelho. Resultado indefinido em cima do dado que o cliente vai usar no failover — é P1 e
+P2, não desenho de protocolo.
+
+Por isso **todo efeito que toca disco carrega uma chave de exclusão**, no mínimo
+`(vm, disco)`. Dois efeitos com a mesma chave nunca têm lease ao mesmo tempo,
+independentemente de ciclo.
+
+A chave nasce aqui, no tipo do efeito, e não na spec do protocolo: lá seria política de
+fila sobre um tipo que não tem onde guardá-la. É o mesmo argumento que faz a serialização
+nascer junto do tipo em vez de depois que a fila existir.
+
+**E a chave sozinha não fecha o caso.** Ela torna a exclusão *dizível*; não diz quando
+soltar. No cenário que a motivou o lease já **expirou** — a chave está livre justamente
+enquanto o job continua escrevendo, e um segundo agente a toma sem violar regra nenhuma.
+Então a chave vem com a condição de liberação: **chave de efeito que toca disco só é
+liberada por evidência do hypervisor de que o job acabou, nunca pelo relógio do lease.**
+Que evidência é essa já está definida — é a reconciliação, e a regra de autoridade dela
+vale inteira aqui: quem tem a palavra sobre o job é o hypervisor onde ele roda.
+
+O custo é honesto e vale nomear: agente inalcançável **bloqueia aquele disco** até alguém
+conseguir olhar o hypervisor. É lentidão, e a alternativa é corrupção silenciosa. Entre as
+duas, a constituição já escolheu.
 
 ### Identidade é do domínio
 
@@ -207,6 +242,9 @@ descreveria um sistema que não existe.
   alguém a quebrar otimizando, o produto passa a copiar terabytes por causa de um timeout
   de rede.
 - Todo efeito carrega o id do ciclo, e resultado de ciclo que não é o corrente é descartado.
+- **P1/P2:** dois efeitos com a mesma chave de exclusão nunca têm lease ao mesmo tempo, e
+  chave de efeito que toca disco só é liberada por evidência do hypervisor — nunca pelo
+  relógio do lease.
 - Nome de bitmap temporário e de checkpoint é derivado do ciclo, nunca fixo.
 - Ciclo encerrado sem registro de telemetria é ciclo incompleto, inclusive quando falhou.
 - `degradada` é calculada, nunca guardada.
@@ -221,6 +259,9 @@ descreveria um sistema que não existe.
 - [ ] **Falha de ciclo não dispara resync completo, em nenhum caminho** — o teste que
       protege a propriedade medida em 2026-09-18
 - [ ] Resultado atrasado do ciclo N, chegando no N+1, é descartado
+- [ ] Todo efeito que toca disco carrega chave de exclusão, e a chave sobrevive à
+      serialização — efeito sem chave não chega a existir
+- [ ] Dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem a mesma chave
 - [ ] Todo efeito e todo resultado sobrevivem a serialização e desserialização
 - [ ] Resultado repetido não conta duas vezes nem vira erro
 - [ ] `degradada` sai de conta sobre a idade do ponto, e não de campo guardado

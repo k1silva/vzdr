@@ -25,8 +25,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     tolerante a repetição, `ciclo_id` em todo efeito.
   - **A serialização nasce junto do tipo**, com teste de ida e volta — não depois, quando
     a fila existir e a forma já estiver moldada pelo que foi escrito.
+  - **Chave de exclusão** (propriedade 4) em todo efeito que toca disco, no mínimo
+    `(vm, disco)`. Nasce aqui e não na spec do protocolo: a fila só lê o que o valor
+    carrega.
   - Testes: ida e volta de cada efeito e cada resultado; campo novo opcional não quebra
-    quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe
+    quem lê a versão anterior; `Resultado` sem `ciclo_id` não existe; efeito de disco sem
+    chave não chega a existir; dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem
+    a mesma chave; a chave sobrevive à serialização
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
 - [ ] **T4** — `saude.py`: `degradada` é conta
@@ -34,8 +39,11 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     campo a guarda.
   - O `fator` é parâmetro com padrão: depende de perfil de parque, e a spec proíbe
     constante derivada de parque.
+  - **O relógio entra por parâmetro.** Nenhuma função do módulo chama `now()` — senão o
+    teste não consegue fixar o instante, e a falha é silenciosa.
   - Testes: 1× o RPO não degrada, 2× degrada; tier de 1h e de 24h tratados pela mesma
-    conta; `nunca_iniciou` entra na idade do ponto e **não** na taxa de falha
+    conta; `nunca_iniciou` entra na idade do ponto e **não** na taxa de falha; nenhuma
+    função do módulo lê o relógio — verificado, não combinado
   - Arquivos: `.../domain/saude.py`, `tests/unit/test_saude.py`
 
 - [ ] **T5** — A máquina: caminho normal
@@ -49,6 +57,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - **O teste que protege a propriedade medida em 2026-09-18**: percorrer todos os caminhos
     de falha e afirmar que **nenhum** produz resync completo — só descarte do bitmap
     temporário, com os checkpoints intactos e uma janela a mais no próximo ciclo.
+  - **Exigência de forma: parametrizado sobre a enumeração de falhas, não sobre lista
+    escrita à mão.** Lista à mão não cobre o modo de falha que alguém acrescentar no ano que
+    vem, e o teste segue verde depois de a propriedade já estar quebrada — cobertura
+    aparente, de novo. Sobre o enum, falha nova é caso novo automaticamente.
+  - É o teste mais importante do projeto, não só da spec: resync completo num cliente de
+    40 TB é dias de janela, e a distância entre "degradou" e "inviabilizou o contrato" é
+    exatamente esta propriedade.
   - Testes: a tabela inteira; o teste da invariante; resultado atrasado do ciclo N é
     descartado no N+1; resultado repetido não conta duas vezes
   - Arquivos: `tests/unit/test_ciclo_falha.py`
@@ -58,9 +73,12 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     hypervisor, não resultado de efeito pedido.
   - As cinco saídas da spec, e a regra de autoridade: hypervisor decide sobre o hypervisor,
     destino sobre o destino.
+  - **Liberação da chave de exclusão**: só por evidência do hypervisor de que o job acabou,
+    nunca pelo relógio do lease. É aqui que a propriedade 4 do ADR-0015 fecha.
   - Testes: job rodando, job terminado, ciclo que nunca existiu, divergência; **job
     concluído no hypervisor sem confirmação no destino não conclui o ciclo** (P2); bitmap
-    de ciclo inativo é reconhecido como órfão
+    de ciclo inativo é reconhecido como órfão; chave de disco **não** é liberada quando só o
+    lease expirou, e **é** liberada quando o inventário mostra o job encerrado
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_reconciliacao.py`
 
 - [ ] **T8** — Telemetria

@@ -33,7 +33,7 @@ estado + resultado do efeito anterior  →  (novo estado, próximos efeitos)
 Ela devolve **efeitos como valores**. Quem executa é o agente, e o resultado volta pelo
 mesmo caminho.
 
-Três propriedades, e nenhuma é opcional:
+Quatro propriedades, e nenhuma é opcional:
 
 ### 1. O efeito é serializável
 
@@ -62,14 +62,40 @@ do ciclo corrente, conclui uma janela que não foi copiada, e o dado do cliente 
 buraco que ninguém vê. É o tipo de defeito que só aparece em cliente com link ruim — e que
 custa uma linha para fechar agora.
 
+### 4. Todo efeito que toca disco carrega chave de exclusão
+
+No mínimo `(vm, disco)`. Dois efeitos com a mesma chave nunca têm lease ao mesmo tempo,
+independentemente de ciclo.
+
+A propriedade 3 não cobre este caso, e é fácil achar que cobre: os dois efeitos em conflito
+são **do mesmo ciclo** — o original, que ninguém cancelou, e o reemitido depois que o lease
+caiu. A propriedade 2 também não: ela absorve reporte duplicado, que é contabilidade. Aqui
+são dois `blockdev-backup` escrevendo o mesmo espelho, e o resultado é indefinido em cima do
+dado que o cliente vai usar no failover. É P1 e P2 da constituição.
+
+O que produz o conflito é que **heartbeat que para não prova que o trabalho parou** — prova
+que o reporte parou. Rede particionada, agente pausado, VM do agente suspensa: o job do QEMU
+segue vivo, escrevendo.
+
+Daí a condição de liberação, que é metade da propriedade: **chave de efeito que toca disco
+só é liberada por evidência do hypervisor de que o job acabou, nunca pelo relógio do
+lease.** Sem ela a chave não resolve o cenário que a motivou, porque nele o lease já
+expirou — a chave está livre justamente enquanto o job continua escrevendo.
+
+O custo: agente inalcançável bloqueia aquele disco até alguém conseguir olhar o hypervisor.
+Lentidão contra corrupção silenciosa, e a constituição já escolheu.
+
 ## Alternativas consideradas
 
 | Alternativa | Por que não |
 | --- | --- |
-| A máquina chama o agente por uma interface (porta/adaptador) | Parece equivalente e não é: interface implica chamada síncrona no mesmo processo. A fila durável, o reinício do agente e o reporte idempotente deixam de caber, e a testabilidade vira mock em vez de valor |
+| A máquina chama o agente por uma interface (porta/adaptador) | Parece equivalente e não é: interface implica chamada síncrona no mesmo processo. A fila durável, o reinício do agente e o reporte idempotente deixam de caber. E a diferença não é de estilo: **valor se persiste, se inspeciona, se compara e se reexecuta; chamada de interface só se observa acontecendo** |
+| A mesma, pela testabilidade | Recusada por colidir com regra escrita, o que é mais forte que recusa por desenho: "mockar libvirt ou QMP em teste de integração" está proibido no `AGENTS.md`. Interface empurra o teste para o mock; valor deixa o teste comparar registros |
 | Efeito como *callable* ou *closure* | Não atravessa fila nem rede. Testável, mas só dentro do processo — e o agente roda noutra máquina |
 | Resultado sem id de ciclo, confiando na ordem | A fila entrega fora de ordem depois de um retry, e um job lento chega atrasado por definição. Confiar na ordem é confiar em algo que o desenho não garante |
 | Deixar a forma para quando a fila existir | É o que esta decisão evita. Três implementações no ar transformam mudança de forma em migração coordenada |
+| Exclusão só no protocolo do agente, sem campo no efeito | Seria política de fila sobre um tipo que não tem onde guardá-la. Mesmo argumento da serialização: o que a fila precisa ler tem que existir no valor que ela guarda |
+| Exclusão pelo `ciclo_id` que já existe | Não funciona no caso que importa. Os dois efeitos concorrentes são do mesmo ciclo |
 | Reporte "exatamente uma vez" no protocolo | Não existe. O que existe é entrega pelo menos uma vez com absorção idempotente do outro lado, e é isso que a propriedade 2 assume |
 
 ## Consequências
@@ -85,6 +111,8 @@ Fica mais difícil em três pontos concretos:
   existente.
 - **A máquina precisa ser explícita sobre o que espera**, porque não pode "chamar e ver".
   Estado que aguarda resultado é estado nomeado, não variável local.
+- **Agente inalcançável bloqueia o disco dele** até haver evidência do hypervisor. É o
+  preço da propriedade 4, e é deliberado.
 - **Idempotência é obrigação de quem absorve**, e isso tem que ter teste. Resultado repetido
   não pode contar duas vezes — e é o tipo de coisa que passa despercebida porque o caminho
   feliz nunca a exercita.

@@ -53,6 +53,19 @@ def esta_degradada(idade_do_ponto: timedelta, rpo: timedelta, fator: float = 2.0
 Nenhuma transição a produz, nenhum campo a guarda. O `fator` é parâmetro com padrão,
 porque depende de perfil de parque — e a spec proíbe constante derivada de parque.
 
+**O relógio entra por parâmetro, nunca lido por dentro.** Quem recebe `idade_do_ponto` já
+recebeu o resultado da subtração; nenhuma função deste módulo chama `now()`. Função que lê
+o relógio por dentro não é reproduzível, o teste não consegue fixar o instante, e a falha é
+silenciosa: ela passa hoje e reprova em outro fuso, em outro segundo, na virada do horário
+de verão. Onde a data for necessária como valor, ela é argumento de assinatura pública.
+
+**E `degradada` não vira coluna depois.** Vai chegar o dia de "liste todas as VMs
+degradadas" numa consulta, e a saída óbvia vai parecer materializar a coluna por
+desempenho. A resposta é *view* ou expressão computada no SQL — a conta, escrita uma vez
+mais, na linguagem de lá. Está escrito aqui porque agora é barato: campo que nasce de
+pressão de desempenho não volta atrás, e a partir dele existem duas fontes de verdade que
+podem discordar. É o mesmo raciocínio que recusou coluna `origem` na auditoria.
+
 ### Identidade de ciclo
 
 `nome_do_bitmap(ciclo_id)` e `nome_do_checkpoint(ciclo_id)`, puras e determinísticas.
@@ -103,6 +116,11 @@ class Efeito:
     ciclo_id: UUID             # ADR-0015, propriedade 3
     def para_json(self) -> dict[str, Any]: ...
 
+class EfeitoDeDisco(Efeito):
+    # ADR-0015, propriedade 4. Sem chave, dois blockdev-backup do MESMO ciclo
+    # podem escrever o mesmo espelho — e o ciclo_id nao distingue.
+    def chave_de_exclusao(self) -> ChaveDeExclusao: ...   # no minimo (vm, disco)
+
 class CriarCheckpoint(Efeito): ...
 class IniciarCopia(Efeito): ...
 class DescartarBitmap(Efeito): ...
@@ -120,6 +138,10 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado]) -> Transicao
 def reconciliar(estado: EstadoDoCiclo, inventario: Inventario) -> Transicao
 ```
 
+A chave é do tipo, não do protocolo: a fila precisa lê-la para recusar o segundo lease, e
+só lê o que o valor carrega. A **liberação** dela não é deste módulo — é evidência do
+hypervisor, que chega por `reconciliar`.
+
 `reconciliar` é função separada porque a entrada é diferente: não é o resultado de um efeito
 pedido, é a fotografia do hypervisor. Fundi-la em `avancar` faria a assinatura aceitar dois
 tipos de entrada e a função ramificar no começo.
@@ -128,7 +150,9 @@ tipos de entrada e a função ramificar no começo.
 
 | Risco | Mitigação |
 | --- | --- |
-| A invariante da falha cair numa "otimização" | Teste dedicado que percorre todos os caminhos de falha e afirma que nenhum produz resync completo. É o teste mais importante da spec |
+| A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec |
+| Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante |
+| `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir |
 | Resultado atrasado aceito como do ciclo corrente | O id do ciclo está no tipo, não na convenção, e há teste do descarte. `Resultado` sem `ciclo_id` não compila |
 | `degradada` virar campo "por conveniência" ao integrar com o `core-003` | Ela é função e não existe como campo; guardá-la exigiria criar o campo, o que aparece na revisão |
 | A forma do efeito endurecer errada | É o ADR-0015, escrito antes das três implementações existirem |
