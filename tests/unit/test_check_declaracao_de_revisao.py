@@ -129,3 +129,72 @@ def test_rotulo_repetido_reprova_mesmo_quando_as_duas_respondem():
     """Nao e sobre a segunda estar por responder: e sobre haver duas."""
     corpo = RESPONDIDA + "\n- **Revisou o diff**: outra pessoa\n"
     assert any("aparece 2 vezes" in f for f in verificar(corpo))
+
+
+CITACAO_CERCADA = (
+    RESPONDIDA
+    + """
+Como o template pede:
+
+```markdown
+- **Revisou o diff**: `<quem>`
+- **Humano leu o diff**: `<sim/nao>`
+- **Clique do merge delegado**: `<sim/nao>`
+```
+"""
+)
+
+CITACAO_INDENTADA = (
+    RESPONDIDA
+    + """
+Como o template pede:
+
+    - **Revisou o diff**: `<quem>`
+    - **Humano leu o diff**: `<sim/nao>`
+"""
+)
+
+
+def test_citacao_em_bloco_cercado_nao_conta():
+    """PR que mexe nesta regra e justamente quem mais cita o template.
+
+    A alternativa era pedir que ninguem escrevesse o rotulo literal —
+    disciplina, que este projeto troca por estrutura sempre que da.
+    """
+    assert verificar(CITACAO_CERCADA) == []
+
+
+def test_citacao_indentada_nao_conta():
+    """Bloco indentado e a outra forma de citar em markdown.
+
+    Cerca sozinha nao o alcanca; por isso o rotulo tem que comecar na margem.
+    """
+    assert verificar(CITACAO_INDENTADA) == []
+
+
+def test_citar_em_prosa_continua_reprovando():
+    """O afrouxamento tem limite: repeticao em prosa e ambiguidade real."""
+    corpo = RESPONDIDA + "\nE mais abaixo:\n\n- **Humano leu o diff**: `<sim/nao>`\n"
+    assert any("aparece 2 vezes" in f for f in verificar(corpo))
+
+
+def test_declaracao_so_dentro_de_bloco_reprova_alto():
+    """Quem puser a declaracao DE VERDADE dentro de uma cerca perde ela.
+
+    Reprova com "nao esta no corpo", que e mensagem clara — nao passa em
+    silencio, que seria o defeito.
+    """
+    corpo = "```\n" + RESPONDIDA + "\n```\n"
+    falhas = verificar(corpo)
+    assert len(falhas) == 3
+    assert all("nao esta no corpo do PR" in f for f in falhas)
+
+
+def test_cerca_sem_fechamento_nao_come_a_declaracao():
+    """So bloco COMPLETO e removido.
+
+    Cerca aberta e nao fechada comeria o resto do corpo, e com ele a declaracao
+    de verdade — entao ela nao remove nada.
+    """
+    corpo = "Comecei um bloco e esqueci de fechar:\n\n```\nalgo\n\n" + RESPONDIDA
+    assert verificar(corpo) == []

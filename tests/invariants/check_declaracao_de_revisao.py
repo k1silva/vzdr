@@ -31,6 +31,25 @@ CAMPOS = (
 POR_RESPONDER = re.compile(r"<\s*(quem|sim/nao|preencher)\s*>", re.IGNORECASE)
 
 
+#: Bloco cercado COMPLETO, com ``` ou ~~~. So completo: cerca sem fechamento
+#: comeria o resto do corpo, e com ele a declaracao de verdade.
+_CERCADO = re.compile(r"^(?P<cerca>```|~~~).*?^(?P=cerca)[ \t]*$", re.DOTALL | re.MULTILINE)
+
+
+def _sem_blocos_de_codigo(corpo: str) -> str:
+    """Tira os blocos cercados antes de procurar os rotulos.
+
+    Citar o template e a regra dentro de um bloco de codigo e como as pessoas
+    citam de verdade, e PR que mexe nesta regra e justamente quem mais cita. A
+    alternativa seria pedir que ninguem escreva o rotulo literal — disciplina,
+    que e o que este projeto troca por estrutura sempre que da.
+
+    Nao afrouxa nada: rotulo repetido em PROSA continua reprovando, que e o caso
+    em que a ambiguidade e real.
+    """
+    return _CERCADO.sub("", corpo)
+
+
 def _linhas_do_campo(corpo: str, rotulo: str) -> list[str]:
     """TODAS as ocorrencias do rotulo, nao a primeira.
 
@@ -45,7 +64,10 @@ def _linhas_do_campo(corpo: str, rotulo: str) -> list[str]:
         # `[ \t]*` e nao `\s*`: `\s` casa quebra de linha, e ai um campo vazio
         # engole a linha seguinte e le a resposta DELA. Um PR com o primeiro
         # campo em branco passaria, lendo o segundo duas vezes.
-        r"^[ \t]*[-*]?[ \t]*\**" + re.escape(rotulo) + r"\**[ \t]*:[ \t]*(?P<resposta>.*)$",
+        # Sem espaco antes do marcador: a declaracao de verdade mora na
+        # margem, e bloco de codigo INDENTADO e a outra forma de citar em
+        # markdown — cerca sozinha nao o alcanca.
+        r"^[-*]?[ \t]*\**" + re.escape(rotulo) + r"\**[ \t]*:[ \t]*(?P<resposta>.*)$",
         re.IGNORECASE | re.MULTILINE,
     )
     return [m.group("resposta").strip() for m in padrao.finditer(corpo)]
@@ -53,6 +75,7 @@ def _linhas_do_campo(corpo: str, rotulo: str) -> list[str]:
 
 def verificar(corpo: str) -> list[str]:
     """Devolve a lista de falhas; vazia quer dizer declaracao respondida."""
+    corpo = _sem_blocos_de_codigo(corpo)
     falhas = []
     for rotulo, resposta_valida in CAMPOS:
         achadas = _linhas_do_campo(corpo, rotulo)
