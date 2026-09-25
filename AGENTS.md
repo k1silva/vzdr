@@ -29,6 +29,11 @@ make db-up        # PostgreSQL local
 
 `make check` tem que passar antes de qualquer commit. Sem exceção.
 
+**Limite o commit, não o `add`.** `git commit -- <caminhos>` leva só o que você nomear;
+`git add <caminhos> && git commit` leva **tudo que o índice acumulou**, inclusive o que
+ficou de um `git add -A` anterior. Já aconteceu duas vezes: um commit de infraestrutura
+engoliu os arquivos de outra fatia. Confira o `--stat` antes de considerar feito.
+
 **Não canalize comando de verificação.** `make check | tail` devolve o código de saída
 do `tail`, não o do `make` — o comando reprova e o `&&` seguinte roda assim mesmo. Já
 aconteceu: um commit entrou com arquivo não formatado por causa disso. Se a saída é
@@ -125,7 +130,10 @@ from vzdr.tools.dr import ...
 - `vzdr.core.domain` não importa nada de IO: sem libvirt, sem rede, sem banco, sem subprocess.
 - Nenhum módulo do núcleo importa de `vzdr.tools.*`. O núcleo não conhece as features.
 - Uma feature não importa de outra feature. Conversam por eventos.
-- O agente não fala com o banco. Fala com a API.
+- O agente não fala com o banco. Fala com a API — e isso passou a ser **verificado**:
+  `psycopg` não é da biblioteca padrão e não está em `TERCEIROS_PERMITIDOS`, então
+  `check_alvo_py39.py` recusa. Até a core-002 esta linha estava sob "a CI verifica"
+  sem nenhuma CI verificando.
 - Pendência de `docs/pendencias.md` com data de revisão vencida falha o build. É o
   único checador que falha por tempo passar, e não pelo que você mudou — o conserto
   legítimo é mudar o estado ou mudar a data com motivo.
