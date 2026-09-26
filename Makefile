@@ -1,4 +1,4 @@
-.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean
+.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean declaracao-revisao
 
 VENV := .venv
 PIP := $(VENV)/bin/pip
@@ -57,6 +57,13 @@ invariants:
 	$(BIN)/python tests/invariants/check_dsn_guardada.py
 	$(BIN)/python tests/invariants/check_pendencias.py
 	$(BIN)/python tests/invariants/check_eventos.py
+
+# Fora do `invariants` de proposito: aquele e deterministico e roda sem rede.
+# Este precisa do corpo do PR, entao tem alvo proprio — e FALHA sem entrada, em
+# vez de passar em silencio. Job que deixou de passar a entrada apareceria como
+# sucesso, e ausencia de check e indistinguivel de aprovacao.
+declaracao-revisao:
+	$(BIN)/python tests/invariants/check_declaracao_de_revisao.py
 
 check: lint typecheck test invariants
 	@echo "tudo verde"

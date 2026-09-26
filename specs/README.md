@@ -59,6 +59,12 @@ foi conferido", e um checador que não distingue as duas coisas nasce sem poder 
 A `dr-001` T2–T8 não edita spec nenhuma, então a ordem combinada — código primeiro — não
 esbarra nisto.
 
+**O gatilho é sobre edição que cria ou altera afirmação**, não sobre marcar progresso:
+marcar `[x]` num `tasks.md` não cria afirmação cruzada que possa divergir. Na dúvida,
+**conta como afirmação** — e o PR que edita sob `specs/` diz qual leitura aplicou. Uma
+linha, pela mesma razão da declaração de revisão: juízo declarado em vez de juízo
+silencioso.
+
 ## O que toda spec responde
 
 1. **Comportamento normal** — o caminho feliz, passo a passo.
