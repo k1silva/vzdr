@@ -23,7 +23,7 @@ Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 
 import enum
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Any, ClassVar, Optional, TypeVar
 from uuid import UUID
 
@@ -34,11 +34,12 @@ __all__ = [
     "ChaveDeExclusao",
     "ConfirmarNoDestino",
     "ConsultarNoDaVm",
-    "CriarCheckpoint",
     "DescartarBitmap",
     "Efeito",
     "EfeitoDeDisco",
     "EfeitoDePreempcao",
+    "EfeitoDeVm",
+    "FecharJanela",
     "IniciarCopia",
     "InventariarHypervisor",
     "PublicarExport",
@@ -50,7 +51,9 @@ __all__ = [
     "ValorDesconhecidoError",
     "efeito_de_json",
     "pode_tomar_chave_tomada",
+    "chaves_de",
     "resultado_de_json",
+    "se_excluem",
 ]
 
 
@@ -178,22 +181,53 @@ class Efeito:
 
 @dataclass(frozen=True)
 class EfeitoDeDisco(Efeito):
-    """Efeito que toca disco, e por isso carrega chave de exclusao."""
+    """Efeito que toca UM disco, e por isso segura uma chave de exclusao."""
 
     vm_id: UUID
     disco: str
 
-    def chave_de_exclusao(self) -> ChaveDeExclusao:
-        """Deterministica: mesmo disco, mesma chave, em qualquer ciclo.
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]:
+        """Uma so, e ainda assim no plural — o envelope e o mesmo para todos.
 
-        Nao entra o `ciclo_id` de proposito. Se entrasse, dois ciclos sobre o
-        mesmo disco teriam chaves diferentes e poderiam escrever juntos — que e
-        exatamente o que a chave existe para impedir.
+        Deterministica: mesmo disco, mesma chave, em qualquer ciclo. Nao entra o
+        `ciclo_id` de proposito: se entrasse, dois ciclos sobre o mesmo disco
+        teriam chaves diferentes e poderiam escrever juntos.
         """
-        return ChaveDeExclusao(vm_id=self.vm_id, disco=self.disco)
+        return (ChaveDeExclusao(vm_id=self.vm_id, disco=self.disco),)
 
     def _corpo_json(self) -> dict[str, Any]:
-        return {"chave_de_exclusao": self.chave_de_exclusao().para_json()}
+        return {"chaves_de_exclusao": [c.para_json() for c in self.chaves_de_exclusao()]}
+
+
+@dataclass(frozen=True)
+class EfeitoDeVm(Efeito):
+    """Efeito que age em TODOS os discos da VM de uma vez, como unidade.
+
+    Existe porque a varredura do envelope perguntou o que a fila le, e nao de
+    quantos discos. Checkpoint e congelamento sao da VM: feitos disco a disco, cada
+    disco teria um instante diferente, e com banco num disco e log noutro o ponto
+    de recuperacao pareceria valido e nao seria — sem erro em lugar nenhum,
+    aparecendo so no restore.
+
+    Segura UMA CHAVE POR DISCO. A fila concede o lease so se todas estiverem
+    livres, de uma vez: adquirir chave por chave abriria espaco para dois efeitos
+    segurando metades e esperando um pelo outro.
+    """
+
+    vm_id: UUID
+    discos: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.discos:
+            raise ValorDesconhecidoError(f"{type(self).__name__} sem disco nenhum nao age em nada")
+        if len(set(self.discos)) != len(self.discos):
+            raise ValorDesconhecidoError(f"{type(self).__name__} com disco repetido: {self.discos}")
+
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]:
+        return tuple(ChaveDeExclusao(vm_id=self.vm_id, disco=d) for d in self.discos)
+
+    def _corpo_json(self) -> dict[str, Any]:
+        return {"chaves_de_exclusao": [c.para_json() for c in self.chaves_de_exclusao()]}
 
 
 @dataclass(frozen=True)
@@ -229,13 +263,56 @@ def pode_tomar_chave_tomada(efeito: Efeito) -> bool:
     return isinstance(efeito, EfeitoDePreempcao)
 
 
+def chaves_de(efeito: Efeito) -> tuple[ChaveDeExclusao, ...]:
+    """As chaves que o efeito segura — nenhuma, se ele nao toca disco."""
+    if isinstance(efeito, (EfeitoDeDisco, EfeitoDeVm)):
+        return efeito.chaves_de_exclusao()
+    return ()
+
+
+def se_excluem(a: Efeito, b: Efeito) -> bool:
+    """Dois efeitos se excluem quando as chaves deles SE INTERSECTAM.
+
+    Nao "quando tem a mesma chave". Com chave no plural, "mesma" passa a ser lida
+    como "conjuntos identicos", e ai um efeito de VM sobre `vda, vdb, vdc` e um
+    efeito de disco sobre `vdb` conviveriam — o defeito voltando pela porta da
+    generalizacao. Um disco em comum basta.
+
+    Isto e a regra; quem pode agir APESAR dela e outra pergunta, respondida por
+    `pode_tomar_chave_tomada`.
+    """
+    return bool(set(chaves_de(a)) & set(chaves_de(b)))
+
+
 # ── Os efeitos ──────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class CriarCheckpoint(EfeitoDeDisco):
+class FecharJanela(EfeitoDeVm):
+    """Fecha a janela corrente e abre a proxima, numa unidade so.
+
+    Sao dois passos na descricao — congelar a janela acumulada num bitmap
+    temporario, e criar o checkpoint que passa a acumular a proxima — e UM na
+    execucao. A pergunta que decide nao e quantos passos a prosa descreve: e se
+    existe um instante entre os dois em que uma escrita se perde. Existe. Uma
+    escrita que chegue entre o congelamento e o checkpoint cai no bitmap velho,
+    que ja foi mesclado e nao sera lido de novo, e nao cai no novo, que ainda nao
+    existe. Some das duas contabilidades: nenhum erro, um bloco a menos no
+    espelho. E por isso que o backup incremental do QEMU faz as duas coisas numa
+    `transaction` so, e o laboratorio ja usava `transaction` para a mescla.
+
+    O onus da prova fica invertido: um efeito ate a medicao provar que da para
+    separar. Separar depois e facil; descobrir a perda em producao nao tem volta.
+
+    E da VM, e nao do disco, pelo mesmo motivo por outro lado: checkpoint por
+    disco daria um instante por disco.
+
+    Antes havia `CriarCheckpoint`, efeito de disco, e nenhum efeito criava o
+    bitmap temporario — embora `DescartarBitmap` o removesse.
+    """
+
     ALVO = Alvo.AGENTE_DE_ORIGEM
-    TIPO = "criar_checkpoint"
+    TIPO = "fechar_janela"
 
 
 @dataclass(frozen=True)
@@ -357,10 +434,11 @@ class Resultado:
     tenant_id: UUID
     ciclo_id: UUID
     tipo_do_efeito: str
-    #: Sem padrao: quem nao tem chave passa `None` explicitamente. Com padrao
-    #: aqui, toda subclasse seria obrigada a ter padrao tambem — e ai `sucesso`
-    #: e `concluido` ganhariam um, o que faria silencio significar sucesso.
-    chave: Optional[ChaveDeExclusao]
+    #: As mesmas chaves do efeito que este resultado responde — no plural, como
+    #: no efeito. Sem padrao: quem nao tem chave passa `()` explicitamente. Com
+    #: padrao aqui, toda subclasse seria obrigada a ter padrao tambem — e ai
+    #: `sucesso` e `concluido` ganhariam um, e silencio significaria sucesso.
+    chaves: tuple[ChaveDeExclusao, ...]
 
     def para_json(self) -> dict[str, Any]:
         dados: dict[str, Any] = {
@@ -369,8 +447,7 @@ class Resultado:
             "ciclo_id": str(self.ciclo_id),
             "tipo_do_efeito": self.tipo_do_efeito,
         }
-        if self.chave is not None:
-            dados["chave"] = self.chave.para_json()
+        dados["chaves"] = [c.para_json() for c in self.chaves]
         dados.update(self._corpo_json())
         return dados
 
@@ -525,11 +602,23 @@ def _exigir_uuid(dados: Mapping[str, Any], nome: str) -> UUID:
         raise ValorDesconhecidoError(f"{nome!r} nao e UUID: {valor!r}") from erro
 
 
-def _exigir_mapa(dados: Mapping[str, Any], nome: str) -> Mapping[str, Any]:
+def _exigir_chaves(dados: Mapping[str, Any], nome: str) -> tuple[ChaveDeExclusao, ...]:
+    """Lista de chaves; vazia vale, repetida nao.
+
+    Mesmo caminho para efeito e resultado — dois leitores de chave seriam dois
+    lados, e um deles viraria o frouxo.
+    """
     valor = _exigir(dados, nome)
-    if not isinstance(valor, Mapping):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser objeto, e veio {valor!r}")
-    return valor
+    if isinstance(valor, (str, Mapping)) or not isinstance(valor, (list, tuple)):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser lista de chaves, e veio {valor!r}")
+    chaves = []
+    for item in valor:
+        if not isinstance(item, Mapping):
+            raise ValorDesconhecidoError(f"{nome!r} tem item que nao e objeto: {item!r}")
+        chaves.append(ChaveDeExclusao.de_json(item))
+    if len(set(chaves)) != len(chaves):
+        raise ValorDesconhecidoError(f"{nome!r} com chave repetida")
+    return tuple(chaves)
 
 
 def _exigir_texto(dados: Mapping[str, Any], nome: str) -> str:
@@ -598,10 +687,6 @@ def _por_tipo(raiz: type[T]) -> dict[str, type[T]]:
     return achados
 
 
-def _campos(classe: type) -> dict[str, Any]:
-    return {campo.name: campo for campo in fields(classe)}
-
-
 def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
     """Le um efeito. Campo desconhecido se ignora; valor desconhecido recusa."""
     catalogo = _por_tipo(Efeito)
@@ -631,11 +716,22 @@ def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
         "tenant_id": _exigir_uuid(dados, "tenant_id"),
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
     }
-    nomes = _campos(classe)
-    if "vm_id" in nomes:
-        chave = ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave_de_exclusao"))
-        argumentos["vm_id"] = chave.vm_id
-        argumentos["disco"] = chave.disco
+    if issubclass(classe, (EfeitoDeDisco, EfeitoDeVm)):
+        chaves = _exigir_chaves(dados, "chaves_de_exclusao")
+        vms = {c.vm_id for c in chaves}
+        if len(vms) != 1:
+            raise ValorDesconhecidoError(
+                f"{classe.TIPO!r} com chaves de VMs diferentes: {sorted(map(str, vms))}"
+            )
+        argumentos["vm_id"] = chaves[0].vm_id
+        if issubclass(classe, EfeitoDeDisco):
+            if len(chaves) != 1:
+                raise ValorDesconhecidoError(
+                    f"{classe.TIPO!r} age num disco so, e chegou com {len(chaves)} chaves"
+                )
+            argumentos["disco"] = chaves[0].disco
+        else:
+            argumentos["discos"] = tuple(c.disco for c in chaves)
     return classe(**argumentos)
 
 
@@ -648,14 +744,11 @@ def resultado_de_json(dados: Mapping[str, Any]) -> Resultado:
             f"tipo de resultado desconhecido: {tipo!r}. Esta versao conhece {sorted(catalogo)}."
         )
     classe = catalogo[str(tipo)]
-    chave_crua = dados.get("chave")
     argumentos: dict[str, Any] = {
         "tenant_id": _exigir_uuid(dados, "tenant_id"),
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
         "tipo_do_efeito": _exigir_texto(dados, "tipo_do_efeito"),
-        "chave": None
-        if chave_crua is None
-        else ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave")),
+        "chaves": _exigir_chaves(dados, "chaves"),
     }
     argumentos.update(classe._corpo_de_json(dados))
     return classe(**argumentos)

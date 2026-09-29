@@ -19,11 +19,12 @@ from vzdr.core.domain.efeitos import (
     ChaveDeExclusao,
     ConfirmarNoDestino,
     ConsultarNoDaVm,
-    CriarCheckpoint,
     DescartarBitmap,
     Efeito,
     EfeitoDeDisco,
     EfeitoDePreempcao,
+    EfeitoDeVm,
+    FecharJanela,
     IniciarCopia,
     InventariarHypervisor,
     PublicarExport,
@@ -33,9 +34,11 @@ from vzdr.core.domain.efeitos import (
     ResultadoDeLocalizacao,
     ResultadoSimples,
     ValorDesconhecidoError,
+    chaves_de,
     efeito_de_json,
     pode_tomar_chave_tomada,
     resultado_de_json,
+    se_excluem,
 )
 
 TENANT = uuid4()
@@ -43,13 +46,13 @@ CICLO = uuid4()
 VM = uuid4()
 
 DE_DISCO = (
-    CriarCheckpoint,
     IniciarCopia,
     DescartarBitmap,
     PublicarExport,
     ConfirmarNoDestino,
     CercarDestino,
 )
+DE_VM = (FecharJanela,)
 SEM_DISCO = (InventariarHypervisor, ConsultarNoDaVm)
 
 
@@ -57,11 +60,13 @@ def um(classe, **troca):
     base = {"tenant_id": TENANT, "ciclo_id": CICLO}
     if issubclass(classe, EfeitoDeDisco):
         base.update(vm_id=VM, disco="vda")
+    elif issubclass(classe, EfeitoDeVm):
+        base.update(vm_id=VM, discos=("vda", "vdb"))
     base.update(troca)
     return classe(**base)
 
 
-TODOS = [um(c) for c in DE_DISCO + SEM_DISCO]
+TODOS = [um(c) for c in DE_DISCO + DE_VM + SEM_DISCO]
 
 
 # ── Propriedade 1: o efeito e serializavel ──────────────────────────────────
@@ -95,7 +100,7 @@ def test_ciclo_id_viaja(efeito):
 
 def test_efeito_sem_ciclo_id_nao_existe():
     with pytest.raises(TypeError):
-        CriarCheckpoint(tenant_id=TENANT, vm_id=VM, disco="vda")
+        IniciarCopia(tenant_id=TENANT, vm_id=VM, disco="vda")
 
 
 # ── Propriedade 4: chave de exclusao ────────────────────────────────────────
@@ -115,18 +120,20 @@ def test_mesmo_disco_mesma_chave_mesmo_em_ciclos_diferentes():
     """
     a = um(IniciarCopia)
     b = um(IniciarCopia, ciclo_id=uuid4())
-    assert a.chave_de_exclusao() == b.chave_de_exclusao()
+    assert a.chaves_de_exclusao() == b.chaves_de_exclusao()
 
 
 def test_discos_diferentes_chaves_diferentes():
     """Multi-disco copia em paralelo; a exclusao e por disco, nao por VM."""
-    assert um(IniciarCopia).chave_de_exclusao() != um(IniciarCopia, disco="vdb").chave_de_exclusao()
+    assert (
+        um(IniciarCopia).chaves_de_exclusao() != um(IniciarCopia, disco="vdb").chaves_de_exclusao()
+    )
 
 
 def test_dois_efeitos_do_mesmo_ciclo_sobre_o_mesmo_disco_colidem():
     """Os dois em conflito sao do MESMO ciclo — o original e o reemitido depois
     que o lease caiu. E por isso que o `ciclo_id` nao resolve isto."""
-    assert um(IniciarCopia).chave_de_exclusao() == um(ConfirmarNoDestino).chave_de_exclusao()
+    assert um(IniciarCopia).chaves_de_exclusao() == um(ConfirmarNoDestino).chaves_de_exclusao()
 
 
 @pytest.mark.parametrize(
@@ -134,13 +141,13 @@ def test_dois_efeitos_do_mesmo_ciclo_sobre_o_mesmo_disco_colidem():
 )
 def test_a_chave_sobrevive_a_serializacao(efeito):
     """A fila so le o que o valor carrega."""
-    assert efeito_de_json(efeito.para_json()).chave_de_exclusao() == efeito.chave_de_exclusao()
+    assert efeito_de_json(efeito.para_json()).chaves_de_exclusao() == efeito.chaves_de_exclusao()
 
 
 def test_efeito_sem_disco_nao_tem_chave():
     """Inventariar e consultar o Nova nao escrevem nada; exigir chave deles
     faria a exclusao bloquear leitura."""
-    assert not hasattr(um(InventariarHypervisor), "chave_de_exclusao")
+    assert chaves_de(um(InventariarHypervisor)) == ()
 
 
 # ── Preempcao ───────────────────────────────────────────────────────────────
@@ -177,7 +184,7 @@ def test_preempcao_repetida_e_o_mesmo_valor():
 @pytest.mark.parametrize(
     ("classe", "alvo"),
     [
-        (CriarCheckpoint, Alvo.AGENTE_DE_ORIGEM),
+        (FecharJanela, Alvo.AGENTE_DE_ORIGEM),
         (IniciarCopia, Alvo.AGENTE_DE_ORIGEM),
         (DescartarBitmap, Alvo.AGENTE_DE_ORIGEM),
         (InventariarHypervisor, Alvo.AGENTE_DE_ORIGEM),
@@ -255,7 +262,7 @@ def test_alvo_que_contradiz_o_tipo_recusa():
 
 def test_tipo_de_resultado_desconhecido_recusa():
     dados = ResultadoSimples(
-        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None, sucesso=True
+        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(), sucesso=True
     ).para_json()
     dados["tipo"] = "telepatia"
     with pytest.raises(ValorDesconhecidoError):
@@ -284,14 +291,14 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="descartar_bitmap",
-        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=True,
     ),
     ResultadoSimples(
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="cercar_destino",
-        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=False,
         motivo="export ja nao existia",
     ),
@@ -299,7 +306,7 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="iniciar_copia",
-        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         bytes_transferidos=17_510_400,
         concluido=True,
     ),
@@ -307,7 +314,7 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="inventariar_hypervisor",
-        chave=None,
+        chaves=(),
         job_em_curso=True,
         nomes_encontrados=("vzdr-bmp-" + "a" * 32,),
     ),
@@ -315,7 +322,7 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="consultar_no_da_vm",
-        chave=None,
+        chaves=(),
         no_atual="node-02",
     ),
 ]
@@ -328,7 +335,7 @@ def test_resultado_ida_e_volta(resultado):
 
 def test_resultado_sem_ciclo_id_nao_existe():
     with pytest.raises(TypeError):
-        ResultadoSimples(tenant_id=TENANT, tipo_do_efeito="x", chave=None, sucesso=True)
+        ResultadoSimples(tenant_id=TENANT, tipo_do_efeito="x", chaves=(), sucesso=True)
 
 
 def test_silencio_nao_pode_significar_sucesso():
@@ -340,10 +347,10 @@ def test_silencio_nao_pode_significar_sucesso():
     obrigatorios.
     """
     with pytest.raises(TypeError):
-        ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None)
+        ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=())
     with pytest.raises(TypeError):
         ResultadoDeCopia(
-            tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None, bytes_transferidos=0
+            tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(), bytes_transferidos=0
         )
 
 
@@ -369,12 +376,12 @@ def test_resultado_correlaciona_sem_id_proprio():
     resultado = RESULTADOS[2]
     assert resultado.ciclo_id == efeito.ciclo_id
     assert resultado.tipo_do_efeito == efeito.TIPO
-    assert resultado.chave == efeito.chave_de_exclusao()
+    assert resultado.chaves == efeito.chaves_de_exclusao()
 
 
 def test_resultado_de_efeito_sem_disco_nao_carrega_chave():
-    assert RESULTADOS[3].chave is None
-    assert "chave" not in RESULTADOS[3].para_json()
+    assert RESULTADOS[3].chaves == ()
+    assert RESULTADOS[3].para_json()["chaves"] == []
 
 
 # ── O envelope e fechado ────────────────────────────────────────────────────
@@ -393,6 +400,16 @@ def test_o_envelope_tem_exatamente_os_campos_da_varredura():
         "ciclo_id",
         "vm_id",
         "disco",
+    }
+    # O primeiro caso de "campo novo depois", e o motivo de ele nao estar na
+    # tabela: a varredura perguntou O QUE a fila le, e nao DE QUANTOS DISCOS.
+    # Checkpoint e congelamento sao da VM, e feitos disco a disco dariam um
+    # instante por disco.
+    assert {c.name for c in dataclasses.fields(EfeitoDeVm)} == {
+        "tenant_id",
+        "ciclo_id",
+        "vm_id",
+        "discos",
     }
 
 
@@ -419,6 +436,7 @@ def _simples(**troca):
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
+        "chaves": [],
         "sucesso": True,
         "motivo": None,
     }
@@ -446,7 +464,7 @@ def test_copia_nao_concluida_nao_vira_concluida():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
-        "chave": {"vm_id": str(VM), "disco": "vda"},
+        "chaves": [{"vm_id": str(VM), "disco": "vda"}],
         "bytes_transferidos": 1,
         "concluido": "false",
     }
@@ -461,7 +479,7 @@ def test_numero_em_texto_recusa():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
-        "chave": None,
+        "chaves": [],
         "bytes_transferidos": "17510400",
         "concluido": True,
     }
@@ -477,7 +495,7 @@ def test_booleano_nao_passa_por_inteiro():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
-        "chave": None,
+        "chaves": [],
         "bytes_transferidos": True,
         "concluido": True,
     }
@@ -499,7 +517,7 @@ def test_texto_no_lugar_de_lista_recusa():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "inventariar_hypervisor",
-        "chave": None,
+        "chaves": [],
         "job_em_curso": False,
         "nomes_encontrados": "vzdr-bmp-x",
     }
@@ -530,7 +548,7 @@ def test_dois_cercamentos_do_mesmo_ciclo_e_disco_sao_iguais():
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="cercar_destino",
-        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=True,
     )
     assert a == dataclasses.replace(a)
@@ -547,7 +565,7 @@ def test_efeito_sem_chave_tambem_depende_de_idempotencia():
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="consultar_no_da_vm",
-        chave=None,
+        chaves=(),
         no_atual="node-02",
     )
     assert b == dataclasses.replace(b)
@@ -593,7 +611,7 @@ def test_disco_que_nao_e_texto_recusa():
     colidir, e a exclusao deixava de excluir — sem erro, com a forma toda certa.
     """
     dados = um(IniciarCopia).para_json()
-    dados["chave_de_exclusao"]["disco"] = 42
+    dados["chaves_de_exclusao"][0]["disco"] = 42
     with pytest.raises(ValorDesconhecidoError, match="disco"):
         efeito_de_json(dados)
 
@@ -613,7 +631,7 @@ def test_uuid_do_envelope_que_nao_e_texto_recusa_com_o_tipo_certo(campo):
 
 def test_vm_id_que_nao_e_uuid_recusa_com_o_tipo_certo():
     dados = um(IniciarCopia).para_json()
-    dados["chave_de_exclusao"]["vm_id"] = "nao-e-uuid"
+    dados["chaves_de_exclusao"][0]["vm_id"] = "nao-e-uuid"
     with pytest.raises(ValorDesconhecidoError, match="vm_id"):
         efeito_de_json(dados)
 
@@ -635,14 +653,137 @@ def test_campo_do_envelope_ausente_recusa_com_o_tipo_certo(campo):
 
 def test_chave_que_nao_e_objeto_recusa():
     dados = um(IniciarCopia).para_json()
-    dados["chave_de_exclusao"] = "vda"
-    with pytest.raises(ValorDesconhecidoError, match="chave_de_exclusao"):
+    dados["chaves_de_exclusao"] = "vda"
+    with pytest.raises(ValorDesconhecidoError, match="chaves_de_exclusao"):
         efeito_de_json(dados)
 
 
 def test_chave_do_resultado_tambem_exige():
     """Simetria: o resultado le a chave pelo mesmo caminho do efeito."""
     dados = RESULTADOS[0].para_json()
-    dados["chave"]["disco"] = 42
+    dados["chaves"][0]["disco"] = 42
     with pytest.raises(ValorDesconhecidoError, match="disco"):
         resultado_de_json(dados)
+
+
+# ── Chaves no plural: a regra passa a ser intersecao ────────────────────────
+
+
+def _vm(*discos):
+    return um(FecharJanela, discos=discos)
+
+
+def _disco(disco):
+    return um(IniciarCopia, disco=disco)
+
+
+def test_efeito_de_vm_e_efeito_de_disco_com_um_disco_em_comum_se_excluem():
+    """O teste que a leitura "mesma chave" reprovaria.
+
+    Com chave no plural, "mesma" passa a ser lida como "conjuntos identicos", e
+    um efeito de VM sobre tres discos conviveria com um efeito de disco sobre o
+    segundo deles. Um disco em comum basta.
+    """
+    assert se_excluem(_vm("vda", "vdb", "vdc"), _disco("vdb"))
+    assert se_excluem(_disco("vdb"), _vm("vda", "vdb", "vdc"))
+
+
+def test_sem_disco_em_comum_nao_se_excluem():
+    """Multi-disco copia em paralelo: exclusao e por disco, nao por VM."""
+    assert not se_excluem(_vm("vda", "vdb"), _disco("vdc"))
+    assert not se_excluem(_disco("vda"), _disco("vdb"))
+
+
+def test_dois_efeitos_de_vm_sobre_a_mesma_vm_se_excluem():
+    assert se_excluem(_vm("vda", "vdb"), _vm("vdb", "vdc"))
+
+
+def test_efeitos_de_vms_diferentes_nunca_se_excluem():
+    outro = um(IniciarCopia, vm_id=uuid4(), disco="vda")
+    assert not se_excluem(_disco("vda"), outro)
+
+
+def test_efeito_sem_disco_nao_exclui_ninguem():
+    """Leitura nao bloqueia escrita, e nao e bloqueada por ela."""
+    assert not se_excluem(um(InventariarHypervisor), _vm("vda", "vdb"))
+    assert not se_excluem(um(ConsultarNoDaVm), _disco("vda"))
+
+
+def test_efeito_de_vm_segura_uma_chave_por_disco():
+    chaves = _vm("vda", "vdb", "vdc").chaves_de_exclusao()
+    assert [c.disco for c in chaves] == ["vda", "vdb", "vdc"]
+    assert {c.vm_id for c in chaves} == {VM}
+
+
+def test_efeito_de_vm_sem_disco_nao_existe():
+    with pytest.raises(ValorDesconhecidoError, match="sem disco"):
+        _vm()
+
+
+def test_efeito_de_vm_com_disco_repetido_nao_existe():
+    """Chave repetida contaria duas vezes o mesmo disco na concessao."""
+    with pytest.raises(ValorDesconhecidoError, match="repetido"):
+        _vm("vda", "vda")
+
+
+def test_efeito_de_vm_sobrevive_a_serializacao_com_a_ordem_dos_discos():
+    efeito = _vm("vdb", "vda", "vdc")
+    assert efeito_de_json(json.loads(json.dumps(efeito.para_json()))) == efeito
+
+
+def test_efeito_de_disco_com_duas_chaves_recusa():
+    """Um efeito de disco que chegasse com duas chaves seria contradicao entre o
+    tipo e o envelope — e contradicao nao se resolve escolhendo uma."""
+    dados = _disco("vda").para_json()
+    dados["chaves_de_exclusao"].append({"vm_id": str(VM), "disco": "vdb"})
+    with pytest.raises(ValorDesconhecidoError, match="disco so"):
+        efeito_de_json(dados)
+
+
+def test_chaves_de_vms_diferentes_no_mesmo_efeito_recusa():
+    dados = _vm("vda", "vdb").para_json()
+    dados["chaves_de_exclusao"][1]["vm_id"] = str(uuid4())
+    with pytest.raises(ValorDesconhecidoError, match="VMs diferentes"):
+        efeito_de_json(dados)
+
+
+def test_chave_repetida_no_json_recusa():
+    dados = _vm("vda", "vdb").para_json()
+    dados["chaves_de_exclusao"][1] = dict(dados["chaves_de_exclusao"][0])
+    with pytest.raises(ValorDesconhecidoError, match="repetida"):
+        efeito_de_json(dados)
+
+
+# ── Fechar a janela e UMA unidade de execucao ───────────────────────────────
+
+
+def test_fechar_janela_e_da_vm_e_nao_do_disco():
+    """Checkpoint por disco daria um instante por disco — banco num, log noutro,
+    ponto de recuperacao que parece valido e nao e."""
+    assert issubclass(FecharJanela, EfeitoDeVm)
+    assert not issubclass(FecharJanela, EfeitoDeDisco)
+
+
+def test_o_efeito_antigo_de_checkpoint_por_disco_e_recusado():
+    """Um agente ou uma fila numa versao anterior pode ainda ter um
+    `criar_checkpoint` guardado. Ele e tipo desconhecido para esta versao, e a
+    resposta e recusar — nao traduzir para `fechar_janela`, que nao e a mesma
+    coisa: o antigo era por disco e nao congelava."""
+    dados = _disco("vda").para_json()
+    dados["tipo"] = "criar_checkpoint"
+    with pytest.raises(ValorDesconhecidoError, match="tipo de efeito"):
+        efeito_de_json(dados)
+
+
+def test_resultado_de_efeito_de_vm_carrega_todas_as_chaves():
+    """A correlacao segue a mesma tripla: ciclo, tipo e as chaves do efeito."""
+    efeito = _vm("vda", "vdb")
+    resultado = ResultadoSimples(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito=efeito.TIPO,
+        chaves=efeito.chaves_de_exclusao(),
+        sucesso=True,
+    )
+    lido = resultado_de_json(json.loads(json.dumps(resultado.para_json())))
+    assert lido.chaves == efeito.chaves_de_exclusao()
