@@ -136,8 +136,8 @@ para o projeto do par de sites daquele tenant.
 **R8 — Nada destrutivo.** O provisionamento cria. Não apaga volume, snapshot, checkpoint ou
 bitmap. Remoção de proteção é fluxo separado, com confirmação humana explícita (P6).
 
-**R9 — Conjunto de discos é atômico.** Uma VM de vários discos só entra em `protegida`
-quando todos os seus volumes concluíram o mesmo ciclo. Conjunto parcial não vira ponto de
+**R9 — Conjunto de discos é atômico.** Uma VM de vários discos só ganha ponto de
+recuperação quando todos os seus volumes concluíram o mesmo ciclo. Conjunto parcial não vira ponto de
 recuperação e é descartado inteiro (ADR-0010, P5).
 
 **R10 — Orçamento de banda é do par de sites, não do job.** O seed disparado aqui entra
@@ -152,16 +152,26 @@ do expediente é exatamente o caso que a regra existe para conter.
 ## Estados
 
 ```
-pendente → provisionando → semeando → protegida
-                ↓              ↓          ↓
-             falhada       falhada    degradada
+pendente → provisionando → semeando → em_protecao
+                ↓              ↓
+             falhada        falhada
 ```
 
 - `provisionando` — criando volume, anexando, publicando export
 - `semeando` — seed em andamento
-- `protegida` — ciclo ativo dentro do RPO
-- `degradada` — ciclo ativo mas fora do RPO, ou último ciclo falhou
+- `em_protecao` — seed concluído, VM no ciclo. Diz onde a VM está no **ciclo de vida**, e
+  não se a proteção está em dia
 - `falhada` — provisionamento parou; estado consultável, retomável
+
+**Ciclo de vida é marcado; saúde é derivada.** Estes são estados de processo, e mudam
+quando algo acontece. Se a proteção está em dia ou `degradada` não é estado desta máquina:
+é conta sobre a idade do ponto de recuperação, e é definida uma vez, na
+[`dr-001`](../dr-001-dominio-ciclo/spec.md).
+
+Esta seção já teve `protegida` e `degradada` como estados, com o limiar "fora do RPO, ou
+último ciclo falhou". Isso contradizia a `dr-001`, que degrada a 2× o RPO, por tempo e não
+por tentativas. A contradição foi resolvida por regra, e não escolhendo um vencedor: o
+próximo conceito que aparecer nos dois lugares tem critério para ser arbitrado.
 
 ## Critérios de aceite
 
@@ -184,5 +194,6 @@ pendente → provisionando → semeando → protegida
   consistência de crash em vez de consistência de aplicação. Flag por VM, e o ponto de
   recuperação carrega a marca.
 - **Sobrevivência do bitmap à migração automática do VHI.** Se o bitmap não sobreviver, o
-  agente precisa detectar e reagendar resync — o que muda o estado `degradada`. É o único
+  agente precisa detectar e reagendar resync — o que afeta a saúde da proteção, calculada
+  na [`dr-001`](../dr-001-dominio-ciclo/spec.md). É o único
   item em aberto que pode alterar o desenho do agente.
