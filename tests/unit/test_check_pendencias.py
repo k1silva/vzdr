@@ -105,7 +105,10 @@ def test_o_arquivo_de_verdade_esta_em_dia():
     """O que o checador afirma, afirmado sobre este repositório."""
     texto = (RAIZ / ARQUIVO).read_text(encoding="utf-8")
     assert verificar(texto, date.today()) == []
-    assert len(itens(texto)) == 2
+    # Pelos IDs, e nao pela contagem: contagem continua certa se o leitor passar a
+    # achar a pendencia errada no lugar da certa. Muda aqui quando uma pendencia
+    # abre ou fecha — e deve mudar, porque isso e decisao, nao acidente.
+    assert [item[0] for item in itens(texto)] == ["P-002"]
 
 
 def test_limite_de_renovacoes_e_o_documentado():
