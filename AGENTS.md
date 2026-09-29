@@ -153,6 +153,14 @@ from vzdr.tools.dr import ...
   era copiado cru enquanto o do efeito convertia; consertado, a chave do efeito passou a
   ser o lado que coagia; consertada, o tipo da exceção ficou frouxo num dos lados.
   Consertar um lado de cada vez só muda qual lado é o frouxo.
+
+  **E a pergunta tem procedimento, porque sozinha ela se responde olhando um lado só.**
+  Ao reconciliar dois documentos, enumere as ocorrências nos dois e registre **os dois
+  números** no commit. No conserto de `degradada` foram levantadas todas as menções na
+  `dr-006` e nenhuma na `dr-001`, e a `dr-001` ficou com `aguardando seed` e `protegida`
+  como estados — a regra, recém-escrita, aplicada pela metade por quem a escreveu.
+  Pergunta respondível sem olhar os dois lados é pergunta de impressão. Dois números lado
+  a lado tornam "não olhei o outro" visível: zero de um lado com dez do outro não passa.
 - **Antes de definir um conceito numa spec, pergunte se ele já é definido em outra.** A
   `dr-006` tinha `degradada` como estado de máquina, com limiar de "último ciclo falhou";
   a `dr-001` a tinha como conta derivada, com limiar de 2× o RPO. As duas foram lidas por
