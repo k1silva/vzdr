@@ -130,6 +130,13 @@ from vzdr.tools.dr import ...
   superusuário passa num teste que olha só `rolbypassrls` e ignora toda a política.
   Quando escrever um teste de controle de segurança, mute o controle e confirme que o
   teste reprova.
+- **Onde dois caminhos fazem o mesmo trabalho, o defeito mora no lado mais solto.** Ler e
+  escrever, efeito e resultado, origem e destino: a pergunta de revisão não é "este lado
+  está certo?", é **"os dois são iguais?"**. Na T3 da `dr-001` foram quatro achados, e três
+  tinham a mesma forma — um lado conferia, o outro coagia. Primeiro o corpo do resultado
+  era copiado cru enquanto o do efeito convertia; consertado, a chave do efeito passou a
+  ser o lado que coagia; consertada, o tipo da exceção ficou frouxo num dos lados.
+  Consertar um lado de cada vez só muda qual lado é o frouxo.
 - Seção de configuração do `mypy` que não casa com nenhum módulo **falha o build**.
   O `mypy` trata isso como nota e sai com código 0, então a regra daquela seção
   simplesmente deixa de ser aplicada sem ninguém ver. `scripts/checar_mypy.py`
