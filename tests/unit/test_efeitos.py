@@ -254,7 +254,9 @@ def test_alvo_que_contradiz_o_tipo_recusa():
 
 
 def test_tipo_de_resultado_desconhecido_recusa():
-    dados = ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x").para_json()
+    dados = ResultadoSimples(
+        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None, sucesso=True
+    ).para_json()
     dados["tipo"] = "telepatia"
     with pytest.raises(ValorDesconhecidoError):
         resultado_de_json(dados)
@@ -278,7 +280,13 @@ def test_nenhum_efeito_serializado_repete_tenant(efeito):
 # ── Resultados ──────────────────────────────────────────────────────────────
 
 RESULTADOS = [
-    ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="descartar_bitmap"),
+    ResultadoSimples(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="descartar_bitmap",
+        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        sucesso=True,
+    ),
     ResultadoSimples(
         tenant_id=TENANT,
         ciclo_id=CICLO,
@@ -299,6 +307,7 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="inventariar_hypervisor",
+        chave=None,
         job_em_curso=True,
         nomes_encontrados=("vzdr-bmp-" + "a" * 32,),
     ),
@@ -306,6 +315,7 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="consultar_no_da_vm",
+        chave=None,
         no_atual="node-02",
     ),
 ]
@@ -318,7 +328,23 @@ def test_resultado_ida_e_volta(resultado):
 
 def test_resultado_sem_ciclo_id_nao_existe():
     with pytest.raises(TypeError):
-        ResultadoSimples(tenant_id=TENANT, tipo_do_efeito="x")
+        ResultadoSimples(tenant_id=TENANT, tipo_do_efeito="x", chave=None, sucesso=True)
+
+
+def test_silencio_nao_pode_significar_sucesso():
+    """`sucesso` sem padrao, e `concluido` tambem.
+
+    Para um tipo cujo trabalho e relatar desfecho, construir sem dizer o desfecho
+    nao pode dar "deu certo". A causa raiz era o padrao da `chave` na base, que
+    obrigava toda subclasse a ter padrao — tirado ele, os dois voltaram a ser
+    obrigatorios.
+    """
+    with pytest.raises(TypeError):
+        ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None)
+    with pytest.raises(TypeError):
+        ResultadoDeCopia(
+            tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chave=None, bytes_transferidos=0
+        )
 
 
 def test_resultado_repetido_e_o_mesmo_valor():
@@ -382,3 +408,175 @@ def test_todo_resultado_declara_tipo_unico():
     tipos = [type(r).TIPO for r in RESULTADOS]
     assert len(set(tipos)) == len({type(r) for r in RESULTADOS})
     assert all(isinstance(r, Resultado) for r in RESULTADOS)
+
+
+# ── O corpo do resultado e convertido, nao copiado ──────────────────────────
+
+
+def _simples(**troca):
+    base = {
+        "tipo": "simples",
+        "tenant_id": str(TENANT),
+        "ciclo_id": str(CICLO),
+        "tipo_do_efeito": "iniciar_copia",
+        "sucesso": True,
+        "motivo": None,
+    }
+    base.update(troca)
+    return base
+
+
+def test_texto_no_lugar_de_booleano_recusa():
+    """O caso concreto: `"false"` e VERDADEIRO em Python.
+
+    Copiado cru, um efeito que falhou era absorvido como sucesso — sem erro, sem
+    alarme, e com o desfecho invertido.
+    """
+    with pytest.raises(ValorDesconhecidoError, match="booleano"):
+        resultado_de_json(_simples(sucesso="false"))
+
+
+def test_copia_nao_concluida_nao_vira_concluida():
+    """Pior que o anterior: janela dada por copiada sem ter sido.
+
+    E o defeito que o `ciclo_id` existe para impedir, entrando por outra porta.
+    """
+    dados = {
+        "tipo": "copia",
+        "tenant_id": str(TENANT),
+        "ciclo_id": str(CICLO),
+        "tipo_do_efeito": "iniciar_copia",
+        "chave": {"vm_id": str(VM), "disco": "vda"},
+        "bytes_transferidos": 1,
+        "concluido": "false",
+    }
+    with pytest.raises(ValorDesconhecidoError, match="booleano"):
+        resultado_de_json(dados)
+
+
+def test_numero_em_texto_recusa():
+    """Entra na telemetria e quebra a soma depois, longe daqui."""
+    dados = {
+        "tipo": "copia",
+        "tenant_id": str(TENANT),
+        "ciclo_id": str(CICLO),
+        "tipo_do_efeito": "iniciar_copia",
+        "chave": None,
+        "bytes_transferidos": "17510400",
+        "concluido": True,
+    }
+    with pytest.raises(ValorDesconhecidoError, match="inteiro"):
+        resultado_de_json(dados)
+
+
+def test_booleano_nao_passa_por_inteiro():
+    """`isinstance(True, int)` e verdadeiro em Python, entao isto precisa de
+    recusa a mao — senao `True` entra como 1 na telemetria."""
+    dados = {
+        "tipo": "copia",
+        "tenant_id": str(TENANT),
+        "ciclo_id": str(CICLO),
+        "tipo_do_efeito": "iniciar_copia",
+        "chave": None,
+        "bytes_transferidos": True,
+        "concluido": True,
+    }
+    with pytest.raises(ValorDesconhecidoError, match="inteiro"):
+        resultado_de_json(dados)
+
+
+def test_campo_obrigatorio_ausente_recusa():
+    dados = _simples()
+    del dados["sucesso"]
+    with pytest.raises(ValorDesconhecidoError, match="obrigatorio"):
+        resultado_de_json(dados)
+
+
+def test_texto_no_lugar_de_lista_recusa():
+    """Texto e iteravel, e iterar sobre ele daria uma lista de letras."""
+    dados = {
+        "tipo": "inventario",
+        "tenant_id": str(TENANT),
+        "ciclo_id": str(CICLO),
+        "tipo_do_efeito": "inventariar_hypervisor",
+        "chave": None,
+        "job_em_curso": False,
+        "nomes_encontrados": "vzdr-bmp-x",
+    }
+    with pytest.raises(ValorDesconhecidoError, match="lista de texto"):
+        resultado_de_json(dados)
+
+
+def test_campo_desconhecido_no_resultado_continua_ignorado():
+    """A recusa e de VALOR; campo novo continua aditivo."""
+    lido = resultado_de_json(_simples(velocidade_media=3))
+    assert lido.sucesso is True
+
+
+# ── Correlacao: tres classes, tres razoes ───────────────────────────────────
+
+
+def test_dois_cercamentos_do_mesmo_ciclo_e_disco_sao_iguais():
+    """A chave NAO garante unicidade para preempcao — ela toma chave tomada e
+    coexiste. Dois `CercarDestino` do mesmo ciclo e disco podem ficar pendentes
+    juntos, pelo caminho de reentrega por retry.
+
+    E inofensivo porque preempcao e idempotente, e isso e obrigacao e nao
+    coincidencia: dois pedidos iguais sao o mesmo valor, e dois resultados iguais
+    tambem.
+    """
+    assert um(CercarDestino) == um(CercarDestino)
+    a = ResultadoSimples(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="cercar_destino",
+        chave=ChaveDeExclusao(vm_id=VM, disco="vda"),
+        sucesso=True,
+    )
+    assert a == dataclasses.replace(a)
+
+
+def test_efeito_sem_chave_tambem_depende_de_idempotencia():
+    """`InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave nenhuma.
+
+    Nada impede dois pendentes; e inofensivo porque sao leituras, e leitura
+    repetida devolve o mesmo valor.
+    """
+    assert um(InventariarHypervisor) == um(InventariarHypervisor)
+    b = ResultadoDeLocalizacao(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="consultar_no_da_vm",
+        chave=None,
+        no_atual="node-02",
+    )
+    assert b == dataclasses.replace(b)
+
+
+# ── Catalogo ────────────────────────────────────────────────────────────────
+
+
+def test_tipo_duplicado_levanta():
+    """A ultima classe visitada venceria em silencio, e a ordem de visita vem de
+    `pop()` sobre `__subclasses__()` — nao e estavel nem previsivel.
+
+    Com duas classes disputando a mesma string, `efeito_de_json` construiria o
+    tipo ERRADO a partir de um JSON valido, sem erro em lugar nenhum.
+    """
+
+    @dataclasses.dataclass(frozen=True)
+    class CopiaImpostora(IniciarCopia):
+        TIPO = "iniciar_copia"
+
+    try:
+        with pytest.raises(ValorDesconhecidoError, match="duas classes"):
+            efeito_de_json(um(IniciarCopia).para_json())
+    finally:
+        # A classe some do catalogo quando some das subclasses; sem isto, os
+        # testes seguintes deste arquivo herdariam o catalogo envenenado.
+        del CopiaImpostora
+        import gc
+
+        gc.collect()
+
+    assert efeito_de_json(um(IniciarCopia).para_json()) == um(IniciarCopia)

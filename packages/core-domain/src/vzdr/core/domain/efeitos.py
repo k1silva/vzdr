@@ -316,8 +316,27 @@ class Resultado:
     Carrega a MESMA tripla que correlaciona: `ciclo_id`, `tipo` do efeito e, nos
     de disco, a chave. Nao existe id de efeito, e isso e decisao e nao esquecimento
     — a correlacao e derivavel do que ja viaja, e id novo seria segunda forma de
-    dizer a mesma coisa. Dois efeitos do mesmo tipo, do mesmo ciclo, sobre o mesmo
-    disco nao podem estar pendentes juntos: e o que a chave de exclusao garante.
+    dizer a mesma coisa.
+
+    A correlacao e segura nas tres classes de efeito, e por razoes DIFERENTES.
+    Registrar so a primeira seria afirmar uma garantia que duas delas nao tem:
+
+    - **disco, sem preempcao** — a chave de exclusao garante que dois do mesmo
+      tipo, ciclo e disco nao ficam pendentes juntos. Aqui a chave e mesmo o
+      mecanismo;
+    - **preempcao** — a chave NAO garante nada, por definicao: preempcao toma
+      chave ja tomada e coexiste com quem a tinha. Dois `CercarDestino` do mesmo
+      ciclo e disco podem ficar pendentes juntos, e o caminho esta descrito em
+      PREEMPCAO_DESPEJA_DETENTOR: reentrega por retry;
+    - **sem chave** — `InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave
+      nenhuma, e nada impede dois pendentes.
+
+    Nos dois ultimos casos a correlacao e inofensiva **porque a absorcao e
+    idempotente**, e isso e obrigacao e nao coincidencia: preempcao e idempotente
+    por construcao, e leitura repetida devolve o mesmo valor. No dia em que
+    existir uma preempcao que nao seja idempotente, esta e a linha que reprova a
+    ideia — e nao um docstring dizendo que a chave garante o que ela nunca
+    garantiu.
 
     `tenant_id` esta aqui pelo mesmo motivo que esta no efeito: o resultado
     atravessa a mesma fila e a mesma tabela sob RLS, e quem isola nao deveria
@@ -330,7 +349,10 @@ class Resultado:
     tenant_id: UUID
     ciclo_id: UUID
     tipo_do_efeito: str
-    chave: Optional[ChaveDeExclusao] = None
+    #: Sem padrao: quem nao tem chave passa `None` explicitamente. Com padrao
+    #: aqui, toda subclasse seria obrigada a ter padrao tambem — e ai `sucesso`
+    #: e `concluido` ganhariam um, o que faria silencio significar sucesso.
+    chave: Optional[ChaveDeExclusao]
 
     def para_json(self) -> dict[str, Any]:
         dados: dict[str, Any] = {
@@ -347,26 +369,43 @@ class Resultado:
     def _corpo_json(self) -> dict[str, Any]:
         return {}
 
+    @classmethod
+    def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:  # noqa: ARG003
+        # Resultado sem corpo proprio. O parametro existe porque a assinatura e
+        # o contrato que as subclasses cumprem.
+        return {}
+
 
 @dataclass(frozen=True)
 class ResultadoSimples(Resultado):
-    """Deu certo, ou nao deu, sem mais nada a dizer."""
+    """Deu certo, ou nao deu.
+
+    `sucesso` nao tem padrao, e isso e deliberado: para um tipo cujo trabalho e
+    relatar desfecho, silencio nao pode significar sucesso.
+    """
 
     TIPO = "simples"
 
-    sucesso: bool = True
+    sucesso: bool
     motivo: Optional[str] = None
 
     def _corpo_json(self) -> dict[str, Any]:
         return {"sucesso": self.sucesso, "motivo": self.motivo}
+
+    @classmethod
+    def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "sucesso": _exigir_bool(dados, "sucesso"),
+            "motivo": _texto_ou_nada(dados, "motivo"),
+        }
 
 
 @dataclass(frozen=True)
 class ResultadoDeCopia(Resultado):
     TIPO = "copia"
 
-    bytes_transferidos: int = 0
-    concluido: bool = False
+    bytes_transferidos: int
+    concluido: bool
 
     def _corpo_json(self) -> dict[str, Any]:
         return {
@@ -374,18 +413,32 @@ class ResultadoDeCopia(Resultado):
             "concluido": self.concluido,
         }
 
+    @classmethod
+    def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "bytes_transferidos": _exigir_inteiro(dados, "bytes_transferidos"),
+            "concluido": _exigir_bool(dados, "concluido"),
+        }
+
 
 @dataclass(frozen=True)
 class ResultadoDeInventario(Resultado):
     TIPO = "inventario"
 
-    job_em_curso: bool = False
-    nomes_encontrados: tuple[str, ...] = ()
+    job_em_curso: bool
+    nomes_encontrados: tuple[str, ...]
 
     def _corpo_json(self) -> dict[str, Any]:
         return {
             "job_em_curso": self.job_em_curso,
             "nomes_encontrados": list(self.nomes_encontrados),
+        }
+
+    @classmethod
+    def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "job_em_curso": _exigir_bool(dados, "job_em_curso"),
+            "nomes_encontrados": _exigir_lista_de_texto(dados, "nomes_encontrados"),
         }
 
 
@@ -395,10 +448,82 @@ class ResultadoDeLocalizacao(Resultado):
 
     TIPO = "localizacao"
 
-    no_atual: str = ""
+    no_atual: str
 
     def _corpo_json(self) -> dict[str, Any]:
         return {"no_atual": self.no_atual}
+
+    @classmethod
+    def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:
+        return {"no_atual": _exigir_texto(dados, "no_atual")}
+
+
+# ── Conversao de corpo ─────────────────────────────────────────
+
+# O corpo do resultado e convertido e CONFERIDO, como o do efeito ja era. Copiar
+# cru produzia um caso concreto e ruim: `{"sucesso": "false"}` virava a string
+# "false", que e verdadeira em Python, e um efeito que falhou era absorvido como
+# sucesso. Com `concluido`, o mesmo vira janela dada por copiada sem ter sido —
+# o defeito que o ciclo_id existe para impedir, entrando por outra porta.
+#
+# A leitura e simetrica a escrita: cada tipo diz como se le, do lado de como se
+# escreve. Reflexao sobre as anotacoes seria mais curta e leria `Optional[str]` e
+# `tuple[str, ...]` como objetos de `typing`, nao como classes — e o proximo tipo
+# composto silenciaria de novo.
+
+
+def _exigir(dados: Mapping[str, Any], nome: str) -> Any:
+    if nome not in dados:
+        raise ValorDesconhecidoError(f"resultado sem o campo obrigatorio {nome!r}")
+    return dados[nome]
+
+
+def _exigir_bool(dados: Mapping[str, Any], nome: str) -> bool:
+    valor = _exigir(dados, nome)
+    if not isinstance(valor, bool):
+        raise ValorDesconhecidoError(
+            f"{nome!r} tem que ser booleano, e veio {valor!r} ({type(valor).__name__}). "
+            'Texto nao vira booleano por conveniencia: "false" e verdadeiro.'
+        )
+    return valor
+
+
+def _exigir_inteiro(dados: Mapping[str, Any], nome: str) -> int:
+    valor = _exigir(dados, nome)
+    # `isinstance(True, int)` e verdadeiro em Python, entao booleano precisa ser
+    # recusado a mao — senao `True` entra como 1 na telemetria.
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        raise ValorDesconhecidoError(
+            f"{nome!r} tem que ser inteiro, e veio {valor!r} ({type(valor).__name__}). "
+            "Numero em texto quebra a soma depois, longe daqui."
+        )
+    return valor
+
+
+def _exigir_texto(dados: Mapping[str, Any], nome: str) -> str:
+    valor = _exigir(dados, nome)
+    if not isinstance(valor, str):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser texto, e veio {valor!r}")
+    return valor
+
+
+def _texto_ou_nada(dados: Mapping[str, Any], nome: str) -> Optional[str]:
+    valor = dados.get(nome)
+    if valor is None:
+        return None
+    if not isinstance(valor, str):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser texto ou nada, e veio {valor!r}")
+    return valor
+
+
+def _exigir_lista_de_texto(dados: Mapping[str, Any], nome: str) -> tuple[str, ...]:
+    valor = _exigir(dados, nome)
+    if isinstance(valor, str) or not isinstance(valor, (list, tuple)):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser lista de texto, e veio {valor!r}")
+    for item in valor:
+        if not isinstance(item, str):
+            raise ValorDesconhecidoError(f"{nome!r} tem item que nao e texto: {item!r}")
+    return tuple(valor)
 
 
 # ── Leitura ─────────────────────────────────────────────────────────────────
@@ -407,14 +532,37 @@ T = TypeVar("T")
 
 
 def _por_tipo(raiz: type[T]) -> dict[str, type[T]]:
+    """Catalogo de subclasses por `TIPO`.
+
+    Duas coisas valem estar escritas.
+
+    `TIPO` repetido LEVANTA. A ultima classe visitada venceria em silencio, e a
+    ordem de visita vem de `pop()` sobre `__subclasses__()` — nao e estavel nem
+    previsivel. Com duas classes disputando a mesma string, `efeito_de_json`
+    construiria o tipo errado a partir de um JSON valido, sem erro em lugar
+    nenhum. Ambiguidade e falha, nao escolha silenciosa.
+
+    E o catalogo so enxerga classe **ja importada**. Hoje tudo mora num modulo e
+    isso nao morde; no dia em que um efeito nascer noutro modulo, ele sera
+    recusado como "tipo desconhecido" ate alguem importa-lo. A falha e fechada,
+    entao e segura — mas o sintoma nao sugere a causa, e por isso esta aqui.
+    """
     achados: dict[str, type[T]] = {}
     pendentes = list(raiz.__subclasses__())
     while pendentes:
         classe = pendentes.pop()
         pendentes.extend(classe.__subclasses__())
         tipo = classe.__dict__.get("TIPO")
-        if isinstance(tipo, str):
-            achados[tipo] = classe
+        if not isinstance(tipo, str):
+            continue
+        anterior = achados.get(tipo)
+        if anterior is not None:
+            raise ValorDesconhecidoError(
+                f"TIPO {tipo!r} declarado por duas classes: "
+                f"{anterior.__name__} e {classe.__name__}. Uma delas venceria "
+                "conforme a ordem de visita, que nao e estavel."
+            )
+        achados[tipo] = classe
     return achados
 
 
@@ -468,18 +616,12 @@ def resultado_de_json(dados: Mapping[str, Any]) -> Resultado:
             f"tipo de resultado desconhecido: {tipo!r}. Esta versao conhece {sorted(catalogo)}."
         )
     classe = catalogo[str(tipo)]
+    chave_crua = dados.get("chave")
     argumentos: dict[str, Any] = {
         "tenant_id": UUID(str(dados["tenant_id"])),
         "ciclo_id": UUID(str(dados["ciclo_id"])),
-        "tipo_do_efeito": str(dados["tipo_do_efeito"]),
+        "tipo_do_efeito": _exigir_texto(dados, "tipo_do_efeito"),
+        "chave": None if chave_crua is None else ChaveDeExclusao.de_json(chave_crua),
     }
-    if dados.get("chave") is not None:
-        argumentos["chave"] = ChaveDeExclusao.de_json(dados["chave"])
-    for nome in _campos(classe):
-        if nome in argumentos or nome == "chave":
-            continue
-        if nome in dados:
-            argumentos[nome] = dados[nome]
-    if "nomes_encontrados" in argumentos:
-        argumentos["nomes_encontrados"] = tuple(argumentos["nomes_encontrados"])
+    argumentos.update(classe._corpo_de_json(dados))
     return classe(**argumentos)
