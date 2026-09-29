@@ -44,6 +44,14 @@ do `tail`, não o do `make` — o comando reprova e o `&&` seguinte roda assim m
 aconteceu: um commit entrou com arquivo não formatado por causa disso. Se a saída é
 longa demais para ler, o problema é a saída, não a leitura.
 
+**Nem silencie o canal de erro.** `2>/dev/null` em comando de verificação é a mesma lição
+do cano por outra porta: transforma falha em sucesso aparente. Aconteceu com um laço de
+espera de CI que chamava `gh pr checks --json`, opção que a versão instalada não tem. Todo
+o laço falhava na primeira chamada, o erro ia para o nulo, e o laço nunca terminava — o
+que parecia **paciência, não erro**. Sintoma indistinguível do estado normal é irmão de
+"ausência de check parece aprovação". Laço de verificação tem **limite de voltas**, e erro
+de ferramenta aparece em vez de sumir.
+
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
 também — a CI roda os dois.
@@ -137,6 +145,14 @@ from vzdr.tools.dr import ...
   era copiado cru enquanto o do efeito convertia; consertado, a chave do efeito passou a
   ser o lado que coagia; consertada, o tipo da exceção ficou frouxo num dos lados.
   Consertar um lado de cada vez só muda qual lado é o frouxo.
+- **Antes de definir um conceito numa spec, pergunte se ele já é definido em outra.** A
+  `dr-006` tinha `degradada` como estado de máquina, com limiar de "último ciclo falhou";
+  a `dr-001` a tinha como conta derivada, com limiar de 2× o RPO. As duas foram lidas por
+  duas pessoas, e nenhuma notou, porque nenhuma escreveu duas entradas num bloco de
+  definições — cada spec falou do conceito a seu modo. `check_definicao_unica.py` pega a
+  definição **declarada** em forma estrutural; a definida em prosa só esta pergunta pega.
+  Conceito mora num lugar, e os outros apontam para ele — "tenant se diz uma vez",
+  aplicado a documento.
 - Seção de configuração do `mypy` que não casa com nenhum módulo **falha o build**.
   O `mypy` trata isso como nota e sai com código 0, então a regra daquela seção
   simplesmente deixa de ser aplicada sem ninguém ver. `scripts/checar_mypy.py`
