@@ -80,10 +80,16 @@ def idade_do_ponto(ultimo_ponto: Optional[datetime], agora: datetime) -> Optiona
     que ainda esta no seed. Quem chama decide o que mostrar; esta funcao nao
     escolhe por ele.
 
-    Os dois instantes precisam ter o mesmo tipo de fuso — ambos com, ou ambos
-    sem. Misturar levanta `TypeError` no proprio Python, e e o comportamento
-    certo: subtrair hora local de UTC daria uma idade errada por horas, em
-    silencio.
+    **Todo instante que cruza esta fronteira tem fuso.** Misturar com e sem fuso
+    levanta `TypeError` no proprio Python, e e o comportamento certo: subtrair
+    hora local de UTC daria uma idade errada por horas. O caso silencioso so
+    existe se alguem "consertar" tirando o fuso de um dos lados, e ha teste para
+    isso.
+
+    A regra morde de verdade onde a data ENTRA no sistema, e nao aqui: quando o
+    `core-003` ler data de JSON, o conversor tem que EXIGIR o deslocamento, e
+    recusar texto sem fuso — a mesma regra do `_exigir_bool` em efeitos.py. Texto
+    sem fuso aceito la vira instante sem fuso aqui, e ai so falta um lado ter.
     """
     if ultimo_ponto is None:
         return None
@@ -91,7 +97,7 @@ def idade_do_ponto(ultimo_ponto: Optional[datetime], agora: datetime) -> Optiona
 
 
 def esta_degradada(
-    idade_do_ponto: timedelta,
+    idade: timedelta,
     rpo: timedelta,
     fator: float = FATOR_PADRAO,
 ) -> bool:
@@ -100,6 +106,11 @@ def esta_degradada(
     Recebe a idade ja calculada. E o que torna a funcao livre de relogio: quem
     chama fez a subtracao, com o `agora` que escolheu.
 
+    O parametro se chama `idade`, e nao `idade_do_ponto`, porque o segundo nome
+    e o da funcao deste modulo: a sombra a tornaria inalcancavel aqui dentro, e
+    quem tentasse chama-la receberia "'timedelta' object is not callable" — que
+    nao sugere a causa.
+
     Estritamente maior: no limite exato ainda nao degradou. A diferenca e de um
     instante, e importa so para o teste ser preciso sobre onde a fronteira mora.
     """
@@ -107,7 +118,7 @@ def esta_degradada(
         raise ValueError(f"RPO tem que ser positivo, e veio {rpo}")
     if fator <= 0:
         raise ValueError(f"fator tem que ser positivo, e veio {fator}")
-    return idade_do_ponto > rpo * fator
+    return idade > rpo * fator
 
 
 def taxa_de_falha(desfechos: Iterable[Desfecho]) -> Optional[float]:
@@ -121,6 +132,12 @@ def taxa_de_falha(desfechos: Iterable[Desfecho]) -> Optional[float]:
     zero diria "confiabilidade perfeita" sem evidencia nenhuma — e um parque
     inteiro que so teve `NUNCA_INICIOU` e exatamente o caso em que isso seria
     mais falso.
+
+    **O agregado correto e concatenar**, nunca tirar media. Para a taxa de um
+    parque, passe os desfechos de todas as VMs numa chamada so. Media das taxas
+    por VM esta errada de dois jeitos: pesa igual uma VM com duas tentativas e uma
+    com duzentas, e `None` nao tem media — descarta-lo em silencio e voltar a
+    confiabilidade perfeita sem evidencia, por outra porta.
 
     Repare no que isto NAO diz sobre `degradada`: `NUNCA_INICIOU` entra na idade
     do ponto, porque ciclo que nao aconteceu nao produziu ponto e a idade continua

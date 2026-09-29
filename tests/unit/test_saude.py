@@ -243,3 +243,11 @@ def test_degradada_nao_e_campo_em_lugar_nenhum_do_dominio():
                 if "degradad" in nome.lower():
                     guardados.append(f"{arquivo.name}:{no.lineno} {nome}")
     assert guardados == []
+
+
+def test_o_parametro_nao_sombreia_a_funcao_do_modulo():
+    """Com o parametro chamado `idade_do_ponto`, a funcao homonima ficava
+    inalcancavel dentro de `esta_degradada`, e o erro nao sugeria a causa."""
+    import inspect
+
+    assert "idade_do_ponto" not in inspect.signature(esta_degradada).parameters
