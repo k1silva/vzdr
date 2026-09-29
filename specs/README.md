@@ -41,11 +41,23 @@ O lugar dos fatos é [`docs/01-arquitetura-dr.md`](../docs/01-arquitetura-dr.md)
 primeiro arquivo que alguém abre ao começar uma spec — e pendência que mora só na prosa de
 outro documento some.
 
-## Antes de editar qualquer spec, a partir de agora
+## Antes de editar documento com afirmação cruzada, a partir de agora
 
 O **meta-checador bidirecional de coerência documento↔realidade** vem antes da próxima
-edição de spec, e obrigatoriamente antes da `dr-002`. Ele está na fatia de manutenção do
-[M1 do roadmap](../docs/03-roadmap.md).
+edição de **documento que carrega afirmação cruzada** — afirmação sobre o que outro
+documento diz, ou sobre o que o código ou a CI fazem —, e obrigatoriamente antes da
+`dr-002`. Ele está na fatia de manutenção do [M1 do roadmap](../docs/03-roadmap.md).
+
+**A regra é a propriedade, não o diretório.** Hoje esses documentos moram em `specs/` e em
+`docs/adr/`, e essa lista é o mecanismo — não a regra. O próximo lugar onde nascer
+documento com afirmação cruzada entra por ter a propriedade, e não por alguém lembrar de
+acrescentar o diretório; senão ele fica de fora por acidente, e ninguém percebe, porque a
+regra "estava sendo cumprida".
+
+ADR entra porque um dos três casos que motivaram a regra bidirecional do `AGENTS.md`
+**era** um ADR — um que dizia depender de revisão humana quando já não dependia. Gatilho
+mais estreito que o checador pelo qual ele espera deixa descoberta exatamente a classe que
+já pegou este projeto.
 
 O motivo de o gatilho ser este, e não uma data: cada spec editada antes de o checador
 existir é uma edição cuja coerência ninguém conferiu. Passada a segunda ou a terceira, a
