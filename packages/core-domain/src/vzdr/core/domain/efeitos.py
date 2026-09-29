@@ -125,7 +125,15 @@ class ChaveDeExclusao:
 
     @classmethod
     def de_json(cls, dados: Mapping[str, Any]) -> "ChaveDeExclusao":
-        return cls(vm_id=UUID(str(dados["vm_id"])), disco=str(dados["disco"]))
+        """Exige, nao coage — e aqui mais que em qualquer outro lugar.
+
+        Este e o campo que guarda P1 e P2. Com `str(dados["disco"])`, um `42`
+        virava `"42"`, e a chave reconstruida deixava de ser a chave que a
+        maquina criou: dois efeitos que deveriam colidir passavam a nao colidir,
+        e a exclusao deixava de excluir — sem erro, com a forma toda certa. Dois
+        `blockdev-backup` sobre o mesmo espelho, pela mesma porta do `"false"`.
+        """
+        return cls(vm_id=_exigir_uuid(dados, "vm_id"), disco=_exigir_texto(dados, "disco"))
 
 
 @dataclass(frozen=True)
@@ -460,7 +468,7 @@ class ResultadoDeLocalizacao(Resultado):
 
 # ── Conversao de corpo ─────────────────────────────────────────
 
-# O corpo do resultado e convertido e CONFERIDO, como o do efeito ja era. Copiar
+# Efeito e resultado sao convertidos e CONFERIDOS pelos mesmos auxiliares. Copiar
 # cru produzia um caso concreto e ruim: `{"sucesso": "false"}` virava a string
 # "false", que e verdadeira em Python, e um efeito que falhou era absorvido como
 # sucesso. Com `concluido`, o mesmo vira janela dada por copiada sem ter sido —
@@ -474,7 +482,7 @@ class ResultadoDeLocalizacao(Resultado):
 
 def _exigir(dados: Mapping[str, Any], nome: str) -> Any:
     if nome not in dados:
-        raise ValorDesconhecidoError(f"resultado sem o campo obrigatorio {nome!r}")
+        raise ValorDesconhecidoError(f"sem o campo obrigatorio {nome!r}")
     return dados[nome]
 
 
@@ -497,6 +505,30 @@ def _exigir_inteiro(dados: Mapping[str, Any], nome: str) -> int:
             f"{nome!r} tem que ser inteiro, e veio {valor!r} ({type(valor).__name__}). "
             "Numero em texto quebra a soma depois, longe daqui."
         )
+    return valor
+
+
+def _exigir_uuid(dados: Mapping[str, Any], nome: str) -> UUID:
+    """UUID em texto, e so em texto.
+
+    `UUID(str(...))` ja falhava fechado para lixo, mas com `ValueError` cru — e
+    quem trata "contrato mais novo que eu" devolvendo o efeito a fila pega
+    `ValorDesconhecidoError`, nao `ValueError`. Falha fechada com o tipo errado
+    vira excecao nao tratada no despachante.
+    """
+    valor = _exigir(dados, nome)
+    if not isinstance(valor, str):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser UUID em texto, e veio {valor!r}")
+    try:
+        return UUID(valor)
+    except ValueError as erro:
+        raise ValorDesconhecidoError(f"{nome!r} nao e UUID: {valor!r}") from erro
+
+
+def _exigir_mapa(dados: Mapping[str, Any], nome: str) -> Mapping[str, Any]:
+    valor = _exigir(dados, nome)
+    if not isinstance(valor, Mapping):
+        raise ValorDesconhecidoError(f"{nome!r} tem que ser objeto, e veio {valor!r}")
     return valor
 
 
@@ -596,12 +628,12 @@ def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
         )
 
     argumentos: dict[str, Any] = {
-        "tenant_id": UUID(str(dados["tenant_id"])),
-        "ciclo_id": UUID(str(dados["ciclo_id"])),
+        "tenant_id": _exigir_uuid(dados, "tenant_id"),
+        "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
     }
     nomes = _campos(classe)
     if "vm_id" in nomes:
-        chave = ChaveDeExclusao.de_json(dados["chave_de_exclusao"])
+        chave = ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave_de_exclusao"))
         argumentos["vm_id"] = chave.vm_id
         argumentos["disco"] = chave.disco
     return classe(**argumentos)
@@ -618,10 +650,12 @@ def resultado_de_json(dados: Mapping[str, Any]) -> Resultado:
     classe = catalogo[str(tipo)]
     chave_crua = dados.get("chave")
     argumentos: dict[str, Any] = {
-        "tenant_id": UUID(str(dados["tenant_id"])),
-        "ciclo_id": UUID(str(dados["ciclo_id"])),
+        "tenant_id": _exigir_uuid(dados, "tenant_id"),
+        "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
         "tipo_do_efeito": _exigir_texto(dados, "tipo_do_efeito"),
-        "chave": None if chave_crua is None else ChaveDeExclusao.de_json(chave_crua),
+        "chave": None
+        if chave_crua is None
+        else ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave")),
     }
     argumentos.update(classe._corpo_de_json(dados))
     return classe(**argumentos)

@@ -580,3 +580,69 @@ def test_tipo_duplicado_levanta():
         gc.collect()
 
     assert efeito_de_json(um(IniciarCopia).para_json()) == um(IniciarCopia)
+
+
+# ── A chave exige, nao coage ────────────────────────────────────────────────
+
+
+def test_disco_que_nao_e_texto_recusa():
+    """O campo que guarda P1 e P2 e o ultimo lugar para coagir.
+
+    Com `str(...)`, um `42` virava `"42"` e a chave reconstruida deixava de ser a
+    chave que a maquina criou. Dois efeitos que deveriam colidir passavam a nao
+    colidir, e a exclusao deixava de excluir — sem erro, com a forma toda certa.
+    """
+    dados = um(IniciarCopia).para_json()
+    dados["chave_de_exclusao"]["disco"] = 42
+    with pytest.raises(ValorDesconhecidoError, match="disco"):
+        efeito_de_json(dados)
+
+
+@pytest.mark.parametrize("campo", ["tenant_id", "ciclo_id"])
+def test_uuid_do_envelope_que_nao_e_texto_recusa_com_o_tipo_certo(campo):
+    """Falhava fechado antes, mas com `ValueError` cru.
+
+    Quem trata "contrato mais novo que eu" pega `ValorDesconhecidoError`. Falha
+    fechada com o tipo errado vira excecao nao tratada no despachante.
+    """
+    dados = um(IniciarCopia).para_json()
+    dados[campo] = 42
+    with pytest.raises(ValorDesconhecidoError, match=campo):
+        efeito_de_json(dados)
+
+
+def test_vm_id_que_nao_e_uuid_recusa_com_o_tipo_certo():
+    dados = um(IniciarCopia).para_json()
+    dados["chave_de_exclusao"]["vm_id"] = "nao-e-uuid"
+    with pytest.raises(ValorDesconhecidoError, match="vm_id"):
+        efeito_de_json(dados)
+
+
+@pytest.mark.parametrize("campo", ["tenant_id", "ciclo_id", "tipo_do_efeito"])
+def test_campo_do_envelope_ausente_recusa_com_o_tipo_certo(campo):
+    """`KeyError` cru tambem escaparia do despachante."""
+    dados = um(IniciarCopia).para_json()
+    if campo == "tipo_do_efeito":
+        dados = RESULTADOS[0].para_json()
+        del dados[campo]
+        with pytest.raises(ValorDesconhecidoError, match=campo):
+            resultado_de_json(dados)
+        return
+    del dados[campo]
+    with pytest.raises(ValorDesconhecidoError, match=campo):
+        efeito_de_json(dados)
+
+
+def test_chave_que_nao_e_objeto_recusa():
+    dados = um(IniciarCopia).para_json()
+    dados["chave_de_exclusao"] = "vda"
+    with pytest.raises(ValorDesconhecidoError, match="chave_de_exclusao"):
+        efeito_de_json(dados)
+
+
+def test_chave_do_resultado_tambem_exige():
+    """Simetria: o resultado le a chave pelo mesmo caminho do efeito."""
+    dados = RESULTADOS[0].para_json()
+    dados["chave"]["disco"] = 42
+    with pytest.raises(ValorDesconhecidoError, match="disco"):
+        resultado_de_json(dados)
