@@ -23,7 +23,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - Arquivos: `packages/core-domain/src/vzdr/core/domain/identidade.py`,
     `tests/unit/test_identidade.py`
 
-- [ ] **T3** — Efeitos e resultados como valores
+- [x] **T3** — Efeitos e resultados como valores
   - As três propriedades do ADR-0015, em código: serializável, resultado serializável e
     tolerante a repetição, `ciclo_id` em todo efeito.
   - **A serialização nasce junto do tipo**, com teste de ida e volta — não depois, quando
