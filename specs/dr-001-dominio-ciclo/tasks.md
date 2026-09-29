@@ -64,7 +64,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     continua ignorado; nenhum efeito serializado contém segunda expressão de tenant
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
-- [ ] **T4** — `saude.py`: `degradada` é conta
+- [x] **T4** — `saude.py`: `degradada` é conta
   - `esta_degradada(idade_do_ponto, rpo, fator=2.0)`. Nenhuma transição a produz, nenhum
     campo a guarda.
   - O `fator` é parâmetro com padrão: depende de perfil de parque, e a spec proíbe
