@@ -156,10 +156,25 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
       e divergia dele
-- [ ] **Sobrevivência do bitmap à migração automática do VHI** (M4 do ADR-0012) — migrar
-      uma VM descartável entre dois nós e conferir se o bitmap persiste. Exige cluster com
-      mais de um nó. Bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo:
-      a resposta muda como o teste é feito, ou se ele é necessário
+- [ ] **Sobrevivência do bitmap à migração e à queda** (M4 do ADR-0012) — desbloqueada: a
+      Virtuozzo respondeu ([P-001](pendencias.md), fechada), e a resposta diz **onde olhar**,
+      não o que se vai ver. Declaração não fecha medição. Em VM descartável, cluster com
+      mais de um nó, duas pernas:
+      - **saída pela porta** — criar bitmap persistente, migrar ao vivo, ler o bitmap no
+        destino e conferir nome, granularidade e conteúdo;
+      - **queda pela janela** — matar o processo QEMU da VM, reabrir, e ler o que o
+        `query-block` reporta do bitmap persistido. A lembrança de duas pessoas é que o
+        qcow2 marca como **inconsistente** o bitmap que não foi fechado limpo, e que o
+        `query-block` expõe isso — ninguém verificou. Se existir, é o sinal que substitui a
+        troca de nó: bitmap presente e consistente → confia; ausente ou marcado → resync.
+
+      E uma conferência que a resposta tornou necessária: o mecanismo só vale para bitmap
+      **persistente**. O repositório não registra como o bitmap temporário do laboratório
+      foi criado. A exigência certa não é "todo bitmap persistente": é **tudo que carrega a
+      janela é persistente** — os bitmaps dos checkpoints —, e o que não for precisa ter a
+      perda coberta por um caminho de falha que já existe. O temporário se encaixa: perdê-lo
+      no meio da cópia é "cópia falha no meio", da tabela de falhas da `dr-001`. Confirmar
+      os dois lados no laboratório
 - [ ] **Classificação das VMs por tier** — o critério escrito **antes** da lista, e a lista
       derivada dele. Na ordem inversa a classificação vira opinião por VM, e ninguém
       consegue dizer depois por que uma VM ficou no tier que ficou

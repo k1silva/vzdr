@@ -59,38 +59,6 @@ na terceira, a pendência não está sendo tocada e isso precisa parar a linha.
 
 ## Abertas
 
-### P-001 — a capability `dirty-bitmaps` está desligada no VHI
-
-| | |
-|---|---|
-| **Pergunta** | Por que a capability `dirty-bitmaps` do QEMU está com `state: false` neste parque, e existe forma suportada de ligá-la? |
-| **Dono** | Kawan |
-| **Aberta em** | 2026-09-23 |
-| **Revisar em** | 2026-10-08 |
-| **Depende de** | resposta do fornecedor |
-| **Estado** | aguardando o fornecedor |
-| **Revisões** | nenhuma |
-
-**O que ela bloqueia.** A medição **M4** do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md):
-se o bitmap sobrevive à migração automática do VHI. M4 exige cluster com mais de um nó e
-VM descartável, e a resposta do fornecedor muda como o teste é feito — ou se ele é
-necessário.
-
-**O que ela destrava.** M4, junto com M1, M2 e M3, fecha a **decisão 3** do mesmo ADR: se
-o resync diferencial é a próxima coisa depois da base ou se espera. **Desta pendência só é
-dona a M4** — as outras três são trabalho nosso e moram na [fase 0 do roadmap](03-roadmap.md),
-com exceção da M2, que tem pendência própria na P-002. Esta linha as cita para dizer de que
-a decisão 3 depende, e não para guardá-las: medição rastreada dentro do texto de uma
-pendência só é achada por quem lê a pendência inteira. Hoje essa decisão está
-`em análise`, e o diferencial está desenhado mas não priorizado.
-
-O sentido da resposta importa nos dois lados: se o bitmap **sobrevive**, a frequência de
-resync despenca e o diferencial perde urgência; se **não sobrevive**, ganha.
-
-**Onde mais aparece.** [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md) (contexto e M4),
-[`docs/03-roadmap.md`](03-roadmap.md) (checklist de medições),
-[`specs/dr-006-provisionamento/spec.md`](../specs/dr-006-provisionamento/spec.md) (em aberto).
-
 ### P-002 — distribuição do parque do cliente-alvo
 
 | | |
@@ -145,5 +113,57 @@ seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe 
 
 ## Fechadas
 
-Nenhuma ainda. Item fechado fica aqui com a data e a resposta — não some, senão perde-se
-o motivo de a decisão ter sido tomada como foi.
+Item fechado fica aqui com a data e a resposta — não some, senão perde-se o motivo de a
+decisão ter sido tomada como foi.
+
+### P-001 — a capability `dirty-bitmaps` está desligada no VHI
+
+| | |
+|---|---|
+| **Pergunta** | Por que a capability `dirty-bitmaps` do QEMU está com `state: false` neste parque, e existe forma suportada de ligá-la? |
+| **Dono** | Kawan |
+| **Aberta em** | 2026-09-23 |
+| **Revisar em** | 2026-10-08 |
+| **Depende de** | resposta do fornecedor |
+| **Estado** | **fechada em 2026-09-29** — o fornecedor respondeu |
+| **Revisões** | nenhuma |
+
+**O que ela bloqueia.** A medição **M4** do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md):
+se o bitmap sobrevive à migração automática do VHI. M4 exige cluster com mais de um nó e
+VM descartável, e a resposta do fornecedor muda como o teste é feito — ou se ele é
+necessário.
+
+**O que ela destrava.** M4, junto com M1, M2 e M3, fecha a **decisão 3** do mesmo ADR: se
+o resync diferencial é a próxima coisa depois da base ou se espera. **Desta pendência só é
+dona a M4** — as outras três são trabalho nosso e moram na [fase 0 do roadmap](03-roadmap.md),
+com exceção da M2, que tem pendência própria na P-002. Esta linha as cita para dizer de que
+a decisão 3 depende, e não para guardá-las: medição rastreada dentro do texto de uma
+pendência só é achada por quem lê a pendência inteira. Hoje essa decisão está
+`em análise`, e o diferencial está desenhado mas não priorizado.
+
+O sentido da resposta importa nos dois lados: se o bitmap **sobrevive**, a frequência de
+resync despenca e o diferencial perde urgência; se **não sobrevive**, ganha.
+
+**Onde mais aparece.** [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md) (contexto e M4),
+[`docs/03-roadmap.md`](03-roadmap.md) (checklist de medições),
+[`specs/dr-006-provisionamento/spec.md`](../specs/dr-006-provisionamento/spec.md) (em aberto).
+
+**A resposta.** O bitmap sobrevive à migração ao vivo, sem mudança de configuração. O
+`dirty-bitmaps` está desligado porque **não é usado**: ele governa transferir bitmap pelo
+canal de migração, o que só é necessário quando os discos **não** estão em storage
+compartilhado. No VHI estão, e o mecanismo é outro — a origem grava o bitmap dentro da
+imagem antes de entregar a VM, e o destino o lê ao ativar. O bitmap viaja com o disco, não
+com o fluxo de migração.
+
+**O erro que a pergunta carregava.** `state: false` foi lido como "o mecanismo não
+existe", e queria dizer "este mecanismo não é o usado". Fato lido como sinal de outra
+coisa — a família de "ausência de check parece aprovação".
+
+**O que a resposta fecha, e o que não fecha.** Fecha a pergunta desta pendência. Não fecha
+a **M4**, que continua na [fase 0 do roadmap](03-roadmap.md): a resposta é declaração, não
+medição, e agora a medição é barata e dirigida. E não fecha o caso que motivou o
+ADR-0012: a resposta é sobre a saída pela porta — migração graciosa. Host que cai não
+chega a gravar o bitmap na imagem; o resync controlado continua no desenho.
+
+**A condição.** Vale **porque o storage é compartilhado**. Em VHI isso é propriedade do
+produto, e vale para o cliente-alvo também — mas é condição, não lei universal.
