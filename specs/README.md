@@ -72,6 +72,21 @@ marcar `[x]` num `tasks.md` não cria afirmação cruzada que possa divergir. Na
 linha, pela mesma razão da declaração de revisão: juízo declarado em vez de juízo
 silencioso.
 
+**Conserto de contradição registrada não é deriva.** Edição cujo único efeito é remover
+uma contradição já registrada não cria afirmação — reconcilia duas que já existiam. Ela não
+espera pelo checador, com duas condições:
+
+- **o mecanismo que pega a contradição entra no mesmo commit**, de modo que edição e
+  verificação chegam juntas ao `main`;
+- **o registro prévio serve de evidência** — a contradição estava escrita antes, com as
+  linhas, e não é descoberta feita durante a edição.
+
+O motivo de estar escrito: o gatilho existe para que spec não derive antes de haver
+mecanismo que pegue deriva. Travar o conserto atrás da ferramenta que detecta o defeito é
+o gatilho trabalhando contra o próprio propósito — e esperar não melhora a linha de base,
+que está sabidamente não conferida. Sem isto escrito, o próximo conserto bate na mesma
+parede, e alguém resolve contornando em silêncio.
+
 ## O que toda spec responde
 
 1. **Comportamento normal** — o caminho feliz, passo a passo.
