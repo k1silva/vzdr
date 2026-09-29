@@ -240,6 +240,11 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
   permanente**: delegação sem escopo é override de banda sem prazo, que o
   [ADR-0013](docs/adr/0013-orcamento-de-banda-e-janelas.md) já recusou pelo mesmo motivo —
   o temporário vira permanente e ninguém lembra por quê.
+- **O campo do clique nasce `nao`, e quem mescla o corrige antes de mesclar.** A
+  delegação chega depois de o PR existir — aconteceu quatro vezes seguidas, e em nenhuma
+  foi desatenção: no momento do commit, o campo é **inconhecível**. Então ele nasce `nao`
+  por construção, e quem aperta o botão o edita como último ato antes do merge. O campo
+  deixa de ser uma afirmação que envelhece e passa a ser o registro do próprio merge.
 - **`git push` direto para `main` continua fora do alcance de qualquer agente**, em
   qualquer arranjo. O que a delegação dispensa é a leitura e o clique, nunca a decisão de
   quem manda.
