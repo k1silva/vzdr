@@ -35,6 +35,13 @@ O QUE ELE NAO PEGA, e isto e o limite mais importante dele:
 - **termo sem crase**, como a secao "Conceitos" da dr-001 escreve.
 
 E ignora blocos de codigo, pelo mesmo removedor do checador de declaracao.
+
+HOMONIMO. A unidade e o termo, entao dois conceitos DIFERENTES com o mesmo nome
+colidem. Ja existe um caso latente: a core-002 usa `degradada` para conexao, que
+e outra coisa. Hoje nao colide porque la aparece em tabela. Se colidir, o conserto
+e nomear os dois, e nao ensinar o checador a ignorar — `conexao_degradada` diz o
+que e; `degradada` sozinha em dois dominios e a ambiguidade que ele existe para
+pegar.
 """
 
 import re

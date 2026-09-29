@@ -10,12 +10,19 @@ sys.path.insert(0, str(RAIZ / "tests" / "invariants"))
 
 from check_definicao_unica import definicoes, verificar  # noqa: E402
 
-# As duas linhas REAIS, copiadas literalmente de onde estavam no main quando o
-# checador nasceu. A primeira execucao dele foi vermelha sobre elas, e este e o
-# registro permanente disso: nao depende de o repositorio continuar com a
-# contradicao, e reprova se o checador perder a capacidade de ve-la.
-DR001_REAL = "## `degradada` é derivada, não marcada\n"
-DR006_REAL = "- `degradada` — ciclo ativo mas fora do RPO, ou último ciclo falhou\n"
+# FIXTURE HISTORICA. NAO ATUALIZE QUANDO AS SPECS MUDAREM.
+#
+# Este e o texto real de 2026-09-29: specs/dr-001-dominio-ciclo/spec.md:384 e
+# specs/dr-006-provisionamento/spec.md:163, copiados literalmente e preservados
+# como ENTRADA. A primeira execucao do checador foi vermelha sobre eles.
+#
+# O assunto dos testes que usam isto e o CHECADOR, nao o repositorio. Depois da
+# resolucao as duas specs deixaram de conter estas linhas, e quem achar um teste
+# "afirmando" que `degradada` esta definida em dois lugares vai querer atualiza-lo
+# — e com isso destruir a unica prova de que o checador sabia reprovar o caso que
+# o motivou. Teste nenhum aqui le as specs de verdade.
+HISTORICO_DR001 = "## `degradada` é derivada, não marcada\n"
+HISTORICO_DR006 = "- `degradada` — ciclo ativo mas fora do RPO, ou último ciclo falhou\n"
 
 
 def montar(tmp_path: Path, specs: dict) -> Path:
@@ -26,26 +33,31 @@ def montar(tmp_path: Path, specs: dict) -> Path:
     return tmp_path
 
 
-def test_aceitacao_a_contradicao_real_de_degradada(tmp_path):
+def test_aceitacao_historica_a_contradicao_de_degradada_em_2026_09_29(tmp_path):
     """O teste de aceitacao: a primeira execucao do checador, preservada.
+
+    Fixture historica — ver o comentario de HISTORICO_DR001. Nao reflete o estado
+    atual das specs, e nao deve.
 
     Titulo numa spec, lista na outra. Com so uma das duas formas, o checador
     nasceria verde — a dr-001 nao tinha NENHUMA definicao em lista.
     """
-    raiz = montar(tmp_path, {"dr-001": DR001_REAL, "dr-006": DR006_REAL})
+    raiz = montar(tmp_path, {"dr-001": HISTORICO_DR001, "dr-006": HISTORICO_DR006})
     (falha,) = verificar(raiz)
     assert "`degradada` definido 2 vezes" in falha
     assert "dr-001/spec.md:1" in falha and "dr-006/spec.md:1" in falha
 
 
 def test_uma_definicao_passa(tmp_path):
-    raiz = montar(tmp_path, {"dr-001": DR001_REAL, "dr-006": "Ver a dr-001 para `degradada`.\n"})
+    raiz = montar(
+        tmp_path, {"dr-001": HISTORICO_DR001, "dr-006": "Ver a dr-001 para `degradada`.\n"}
+    )
     assert verificar(raiz) == []
 
 
 def test_duas_na_mesma_spec_tambem_reprova(tmp_path):
     """Dentro da mesma spec, duas definicoes podem discordar do mesmo jeito."""
-    raiz = montar(tmp_path, {"dr-001": DR001_REAL + "\n" + DR006_REAL})
+    raiz = montar(tmp_path, {"dr-001": HISTORICO_DR001 + "\n" + HISTORICO_DR006})
     assert len(verificar(raiz)) == 1
 
 
@@ -86,7 +98,7 @@ def test_formas_que_nao_contam(linha):
 
 @pytest.mark.parametrize("cerca", ["```", "~~~", "````"])
 def test_definicao_citada_em_bloco_de_codigo_nao_conta(cerca):
-    texto = f"Como a dr-006 dizia:\n\n{cerca}\n{DR006_REAL}{cerca}\n"
+    texto = f"Como a dr-006 dizia:\n\n{cerca}\n{HISTORICO_DR006}{cerca}\n"
     assert definicoes(texto) == []
 
 
@@ -97,7 +109,7 @@ def test_citacao_com_o_mesmo_texto_da_definicao_conta_uma_vez():
     linha. A definicao real e a citada numa cerca tem o mesmo texto, e as duas
     contavam — falso positivo justamente no caso "citei a definicao".
     """
-    texto = f"{DR006_REAL}\nComo escrito acima:\n\n```\n{DR006_REAL}```\n"
+    texto = f"{HISTORICO_DR006}\nComo escrito acima:\n\n```\n{HISTORICO_DR006}```\n"
     assert definicoes(texto) == [("degradada", 1)]
 
 
@@ -123,15 +135,15 @@ def test_o_limite_prosa_nos_dois_lados_passa(tmp_path):
 
 def test_plano_e_tarefas_nao_sao_lidos(tmp_path):
     """A definicao mora na spec. Restatear no plano e normal."""
-    raiz = montar(tmp_path, {"dr-001": DR001_REAL})
-    (raiz / "specs" / "dr-001" / "plan.md").write_text(DR001_REAL, encoding="utf-8")
+    raiz = montar(tmp_path, {"dr-001": HISTORICO_DR001})
+    (raiz / "specs" / "dr-001" / "plan.md").write_text(HISTORICO_DR001, encoding="utf-8")
     assert verificar(raiz) == []
 
 
 def test_mensagem_aponta_o_conserto(tmp_path, capsys, monkeypatch):
     import check_definicao_unica as modulo
 
-    raiz = montar(tmp_path, {"a": DR001_REAL, "b": DR006_REAL})
+    raiz = montar(tmp_path, {"a": HISTORICO_DR001, "b": HISTORICO_DR006})
     monkeypatch.setattr(modulo, "RAIZ", raiz)
     assert modulo.main() == 1
     saida = capsys.readouterr().out
