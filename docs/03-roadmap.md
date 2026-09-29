@@ -54,32 +54,40 @@ lê.
       verificado exige o mecanismo existir; afirmar que **não** é exige que ele não exista.
       Declaração estrutural, não textual — lista de exceção datada é o que se quer evitar.
 
-      **Decisões esperando por ele.** Todas editam spec, e o gatilho do `specs/README.md`
-      as segura. Moram aqui, e não em corpo de PR, porque decisão parada em PR some:
+      **Decisões esperando por ele.** Editam spec, e o gatilho do `specs/README.md` as
+      segura. Moram aqui, e não em corpo de PR, porque decisão parada em PR some. Não são
+      para responder agora — são para não serem respondidas por acidente, por quem estiver
+      digitando na hora:
 
-      1. **A `dr-006` contradiz a `dr-001` sobre `degradada`**, em duas coisas. Natureza: a
-         `dr-001` diz "derivada, não marcada", e a `dr-006` a tem como **estado** de uma
-         máquina, com transições. Limiar: a `dr-001` diz "passou de 2× o RPO, por tempo e não
-         por tentativas", e a `dr-006` diz "fora do RPO, **ou último ciclo falhou**". A
-         proposta: **ciclo de vida é marcado, saúde é derivada**. A máquina da `dr-006` fica
-         `pendente → provisionando → semeando → em_protecao`, e "em dia", "degradada" e "sem
-         ponto" saem de `saude.py`.
-      2. **O terceiro estado numa função só.** `idade_do_ponto` devolve `None` sem ponto, mas
-         `esta_degradada` não aceita `None`, e cada chamador reinventaria a decisão. E dentro
-         de "sem ponto" há **dois casos opostos**: VM ainda semeando, que é esperado, e VM em
-         proteção sem nenhum ponto, que é o pior caso do produto — o operador acha que está
-         protegido e não há o que restaurar. O dado que os distingue é o estado de ciclo de
-         vida do item 1. Nenhum documento diz se o seed produz o primeiro ponto; se não
-         produz, o pior caso acontece em toda VM entre o fim do seed e o primeiro ciclo.
-      3. `esta_degradada(idade_do_ponto, ...)` virou `esta_degradada(idade, ...)` no código,
-         por causa da sombra; `plan.md` e `tasks.md` da `dr-001` ainda mostram o nome velho.
-      4. **A linha de base do `specs/README.md` é falsa.** Ela afirma que `dr-001` e `dr-006`
-         conferem, "verificado à mão", e o item 1 mostra que não. O checador não pode nascer
-         verde sobre ela.
+      1. **O terceiro estado numa função só, e os dois casos dentro dele.** `idade_do_ponto`
+         devolve `None` sem ponto, mas `esta_degradada` não aceita `None`, e cada chamador
+         reinventaria a decisão. Dentro de "sem ponto" há **dois casos opostos**: VM antes
+         de `em_protecao`, que é esperado, e VM `em_protecao` sem nenhum ponto — o pior caso
+         do produto, pior que `degradada`, porque não há o que restaurar. O dado que os
+         distingue agora existe: o ciclo de vida da `dr-006`. Nenhum documento diz se o seed
+         produz o primeiro ponto; se não produz, toda VM passa pelo pior caso entre o fim do
+         seed e o primeiro ciclo, e alarmar ali seria ruído. A função de código,
+         `classificar_protecao`, é aditiva em `saude.py`.
+      2. **Quando uma VM multi-disco deixa `semeando`?** O R9 da `dr-006` só diz quando ela
+         ganha ponto — todos os volumes no mesmo ciclo, que é P5. Não diz quando o seed
+         termina: no último disco semeado, no primeiro, ou em outra condição. O item 1
+         depende disto, porque distinguir "ainda no seed" de "em proteção sem ponto" exige
+         saber onde fica a fronteira.
+      3. `esta_degradada(idade_do_ponto, ...)` virou `esta_degradada(idade, ...)` no código;
+         `plan.md` e `tasks.md` da `dr-001` ainda mostram o nome velho.
+
+      Os três ficaram fora do conserto de `degradada` (#28) de propósito. A isenção do
+      gatilho cobre edição cujo **único** efeito é remover contradição registrada, com o
+      mecanismo no mesmo commit. Os itens 1 e 2 são decisão nova, não reconciliação; o 3 é
+      divergência que nenhum mecanismo daquele commit pegaria.
+
+      **Resolvidas no #28:** a contradição entre `dr-001` e `dr-006` sobre `degradada`,
+      arbitrada por regra — "ciclo de vida é marcado, saúde é derivada" —, e a linha de base
+      falsa do `specs/README.md`.
 
       **E um limite deste checador como está desenhado**: ele confere afirmação de
-      verificação contra mecanismo. O item 1 é outra classe de defeito — o mesmo conceito
-      **definido em dois lugares**, que é "tenant se diz uma vez" aplicado a documento.
+      verificação contra mecanismo. Conceito **definido em dois lugares** é outra classe de
+      defeito, e tem checador próprio: `check_definicao_unica.py`, no `make invariants`.
 - [ ] **Todo arquivo de `tests/integration` referencia a fixture da conexão real.** Repare
       que a asserção é **positiva**. Procurar `unittest.mock` pega a forma óbvia e passa
       reto na que importa: uma classe `FakeQMP` escrita à mão, sem importar nada, satisfaz a
