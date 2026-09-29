@@ -896,3 +896,77 @@ def test_resposta_de_outro_tenant_ou_ciclo_nao_responde(campo):
     efeito = _disco("vda")
     outra = dataclasses.replace(_resposta(efeito), **{campo: uuid4()})
     assert not responde_a(outra, efeito)
+
+
+# ── As garantias do __post_init__ valem para TODA subclasse ─────────────────
+#
+# Em dataclass, uma subclasse que defina o proprio __post_init__ substitui o da
+# base sem erro nem aviso, e a garantia desaparece. Hoje nenhuma faz isso — mas
+# isso so vira propriedade se o teste percorrer o catalogo REAL de subclasses, e
+# nao uma lista que alguem escreveu. Uma subclasse nova sem amostra reprova aqui.
+
+TODOS_OS_RESULTADOS = sorted(_por_tipo(Resultado).values(), key=lambda c: c.TIPO)
+TODOS_OS_EFEITOS_DE_VM = sorted(
+    (c for c in _por_tipo(Efeito).values() if issubclass(c, EfeitoDeVm)), key=lambda c: c.TIPO
+)
+DUAS_CHAVES = (ChaveDeExclusao(vm_id=VM, disco="vda"), ChaveDeExclusao(vm_id=VM, disco="vdb"))
+
+
+def _amostra(classe):
+    return next(r for r in RESULTADOS if type(r) is classe)
+
+
+def test_as_amostras_cobrem_todo_tipo_de_resultado():
+    """Sem isto, o parametrizado abaixo cobriria so o que alguem lembrou."""
+    assert {type(r) for r in RESULTADOS} == set(TODOS_OS_RESULTADOS)
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_RESULTADOS, ids=lambda c: c.TIPO)
+def test_todo_resultado_canoniza_as_chaves(classe):
+    amostra = _amostra(classe)
+    a = dataclasses.replace(amostra, chaves=DUAS_CHAVES)
+    b = dataclasses.replace(amostra, chaves=tuple(reversed(DUAS_CHAVES)))
+    assert a == b
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_RESULTADOS, ids=lambda c: c.TIPO)
+def test_todo_resultado_recusa_chave_repetida(classe):
+    with pytest.raises(RegistroMalformadoError, match="repetida"):
+        dataclasses.replace(_amostra(classe), chaves=(DUAS_CHAVES[0], DUAS_CHAVES[0]))
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_RESULTADOS, ids=lambda c: c.TIPO)
+def test_todo_resultado_recusa_chaves_de_duas_vms(classe):
+    """Zero ou uma VM. Resultado com chaves de duas nunca responderia a nada, e o
+    efeito ficaria pendente para sempre esperando resposta que ja chegou."""
+    outra = ChaveDeExclusao(vm_id=uuid4(), disco="vda")
+    with pytest.raises(RegistroMalformadoError, match="VMs diferentes"):
+        dataclasses.replace(_amostra(classe), chaves=(DUAS_CHAVES[0], outra))
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_EFEITOS_DE_VM, ids=lambda c: c.TIPO)
+def test_todo_efeito_de_vm_canoniza_e_recusa(classe):
+    assert um(classe, discos=("vdb", "vda")) == um(classe, discos=("vda", "vdb"))
+    with pytest.raises(RegistroMalformadoError, match="repetido"):
+        um(classe, discos=("vda", "vda"))
+    with pytest.raises(RegistroMalformadoError, match="sem disco"):
+        um(classe, discos=())
+
+
+def test_ha_ao_menos_um_efeito_de_vm_no_catalogo():
+    """Parametrizado sobre lista vazia passa sem testar nada."""
+    assert TODOS_OS_EFEITOS_DE_VM
+
+
+def test_resultado_de_duas_vms_no_json_tambem_recusa():
+    """Os dois leitores iguais: o do efeito ja recusava; o do resultado aceitava,
+    canonizava, e deixava o efeito pendente para sempre."""
+    dados = RESULTADOS[1].para_json()
+    dados["chaves"].append({"vm_id": str(uuid4()), "disco": "vdb"})
+    with pytest.raises(RegistroMalformadoError, match="VMs diferentes"):
+        resultado_de_json(dados)
+
+
+def test_resultado_sem_chave_continua_legitimo():
+    """Zero VM e legitimo — efeito sem chave tem resultado sem chave."""
+    assert RESULTADOS[3].chaves == ()

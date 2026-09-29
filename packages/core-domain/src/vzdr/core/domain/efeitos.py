@@ -98,6 +98,14 @@ class RegistroMalformadoError(ValueError):
     """
 
 
+# **Nunca `except ValueError:` no caminho de despacho.** ValorDesconhecidoError e
+# RegistroMalformadoError herdam as duas de ValueError, e um `except` pelo
+# ancestral captura as duas — que pedem acoes opostas, reenviar e descartar. O
+# teste de que nenhuma herda da outra e necessario e nao suficiente. O remedio
+# nao e aqui: herdar de Exception direto perderia a informacao de que sao erro de
+# valor. E regra de quem despacha, na fila do core-003 e no protocolo do agente.
+
+
 class CatalogoAmbiguoError(RuntimeError):
     """Defeito DESTA VERSAO do codigo, e nao da mensagem: parar e aparecer.
 
@@ -461,12 +469,18 @@ class Resultado:
     - **sem chave** — `InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave
       nenhuma, e nada impede dois pendentes.
 
-    Nos dois ultimos casos a correlacao e inofensiva **porque a absorcao e
-    idempotente**, e isso e obrigacao e nao coincidencia: preempcao e idempotente
-    por construcao, e leitura repetida devolve o mesmo valor. No dia em que
-    existir uma preempcao que nao seja idempotente, esta e a linha que reprova a
-    ideia — e nao um docstring dizendo que a chave garante o que ela nunca
-    garantiu.
+    Na preempcao, a correlacao e inofensiva **porque a absorcao e idempotente**, e
+    isso e obrigacao e nao coincidencia. No dia em que existir uma preempcao que
+    nao seja idempotente, esta e a linha que reprova a ideia.
+
+    **Na classe sem chave, a correlacao NAO esta garantida hoje.** Idempotencia
+    cobre a repeticao; nao cobre a resposta ERRADA. `InventariarHypervisor` nao diz
+    qual hypervisor, `ConsultarNoDaVm` nao diz qual VM, e os resultados nao dizem
+    quem respondeu. Um inventario respondido pelo agente de outro hypervisor volta
+    com `nomes_encontrados` vazio, a reconciliacao le "nao ha orfao", e o orfao
+    fica — silencioso, com a forma toda certa. A versao anterior deste texto dizia
+    que a classe era segura; nao era. Quem decide o conserto e a T7, e nenhum
+    codigo deve correlacionar resultado desses dois efeitos antes disso.
 
     **Correlacao e IGUALDADE do conjunto de chaves; exclusao e INTERSECAO.** O
     mesmo campo tem duas relacoes, e confundi-las e o erro facil: `se_excluem`
@@ -497,6 +511,16 @@ class Resultado:
         # mesmo trabalho, e nenhum deles e o frouxo.
         if len(set(self.chaves)) != len(self.chaves):
             raise RegistroMalformadoError(f"resultado com chave repetida: {self.chaves}")
+        # ZERO OU UMA VM — e nao "exatamente uma", como no efeito de disco: resultado
+        # de efeito sem chave e legitimo. Sem esta conferencia, o leitor do efeito
+        # recusava chaves de duas VMs e o do resultado aceitava. Um resultado assim
+        # nunca responde a nada, porque `responde_a` compara conjuntos, e o efeito
+        # fica pendente para sempre esperando resposta que ja chegou e foi ignorada.
+        vms = {c.vm_id for c in self.chaves}
+        if len(vms) > 1:
+            raise RegistroMalformadoError(
+                f"resultado com chaves de VMs diferentes: {sorted(map(str, vms))}"
+            )
         # Ordem canonica, pelo mesmo motivo do EfeitoDeVm: a correlacao e por
         # IGUALDADE, e igualdade de tupla depende de ordem.
         object.__setattr__(self, "chaves", tuple(sorted(self.chaves, key=_ordem_da_chave)))
