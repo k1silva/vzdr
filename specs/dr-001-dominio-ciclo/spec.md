@@ -337,11 +337,14 @@ export — ele descreve a mecânica e não a identidade —, então não precisa
 
 ## Comportamento normal
 
-1. VM protegida entra em `aguardando seed`.
-2. Seed concluído → `protegida`, com uma janela aberta.
-3. A cada intervalo do tier, um ciclo é elegível.
-4. Ciclo fecha a janela corrente, abre a próxima, consolida as pendentes.
-5. Cópia confirmada → ponto de recuperação registrado, janelas consolidadas liberadas.
+Quando a VM entra e sai de proteção é ciclo de vida, e mora na
+[`dr-006`](../dr-006-provisionamento/spec.md). Esta spec não nomeia esses estados. O que a
+máquina do ciclo faz, com a VM em proteção:
+
+1. Há uma janela aberta.
+2. A cada intervalo do tier, um ciclo é elegível.
+3. Ciclo fecha a janela corrente, abre a próxima, consolida as pendentes.
+4. Cópia confirmada → ponto de recuperação registrado, janelas consolidadas liberadas.
 
 ## Reconciliação: o hypervisor tem a palavra sobre o hypervisor
 
@@ -400,9 +403,9 @@ O **motivo** sim é registro, porque é o que a interface mostra e o que decide 
 | `ciclo_falhou` | Segue tentando no ritmo do tier |
 | `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)) |
 
-**Esta é a única definição de `degradada`.** O ciclo de vida da VM — `pendente`,
-`provisionando`, `semeando`, `em_protecao` — é marcado e mora na
-[`dr-006`](../dr-006-provisionamento/spec.md); a saúde é derivada e mora aqui. A `dr-006`
+**Esta é a única definição de `degradada`.** O ciclo de vida da VM é marcado e mora na
+[`dr-006`](../dr-006-provisionamento/spec.md), que é quem nomeia os estados dele; a saúde é
+derivada e mora aqui. A `dr-006`
 já teve `degradada` como estado da máquina dela, com outro limiar, e a regra que resolveu a
 contradição é essa: **ciclo de vida é marcado, saúde é derivada.**
 
