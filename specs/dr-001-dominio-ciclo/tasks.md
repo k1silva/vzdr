@@ -13,7 +13,8 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - Arquivos: `docs/adr/0015-efeito-como-valor.md`
 
 - [x] **T2** — Identidade do ciclo
-  - `nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id)`,
+  - `nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e
+    `nome_do_export(ciclo_id, disco)` — o disco entrou depois, no #31,
     puras e determinísticas. O export entrou pelo cercamento: nome fixo por disco faz um
     cercamento atrasado derrubar o export do ciclo seguinte.
   - Vem antes dos efeitos porque eles carregam esses nomes.
@@ -32,7 +33,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     `(vm, disco)`. Nasce aqui e não na spec do protocolo: a fila só lê o que o valor
     carrega.
   - **A varredura do envelope do plano vira código aqui.** Campos: `tenant_id`, `ciclo_id`,
-    `alvo`, e `chave_de_exclusao` nos de disco. O que a tabela decidiu não ser campo fica
+    `alvo`, e `chaves_de_exclusao` nos de disco. O que a tabela decidiu não ser campo fica
     fora — e campo novo depois exige dizer por que não estava lá.
   - **Tenant se diz uma vez.** `tenant_id` no envelope e em nenhum corpo, nem como
     referência de onde derivá-lo. Com RLS, segunda expressão vira oráculo de existência.
@@ -65,7 +66,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 
 - [x] **T4** — `saude.py`: `degradada` é conta
-  - `esta_degradada(idade_do_ponto, rpo, fator=2.0)`. Nenhuma transição a produz, nenhum
+  - `esta_degradada(idade, rpo, fator=2.0)`. Nenhuma transição a produz, nenhum
     campo a guarda.
   - O `fator` é parâmetro com padrão: depende de perfil de parque, e a spec proíbe
     constante derivada de parque.
@@ -106,7 +107,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     hypervisor, não resultado de efeito pedido.
   - As cinco saídas da spec, e a regra de autoridade: hypervisor decide sobre o hypervisor,
     destino sobre o destino.
-  - **Liberação da chave de exclusão**: só por evidência de que o job acabou, nunca pelo
+  - **Liberação das chaves de exclusão**: só por evidência de que o job acabou, nunca pelo
     relógio do lease. É aqui que a propriedade 4 do ADR-0015 fecha.
   - Duas formas de evidência: `query-block-jobs` **sobre o hypervisor** — roteável por
     qualquer agente com acesso a ele, nunca pedida ao detentor do lease — e a VM não estar

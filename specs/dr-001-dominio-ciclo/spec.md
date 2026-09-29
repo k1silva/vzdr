@@ -47,7 +47,7 @@ chamada de função adiada; é um registro que viaja.
 | **Efeito é serializável** | O agente busca trabalho depois, de outro processo, talvez de outra máquina. Efeito que não cabe numa linha não sobrevive à fila |
 | **Resultado é serializável e tolera repetição** | A rede cai entre concluir e reportar, e o agente repete. O protocolo do agente exige reporte idempotente, e é aqui que isso desce |
 | **Todo efeito carrega o id do ciclo** | Senão um resultado atrasado do ciclo N chega quando a máquina já está no N+1, e ela o aceita como se fosse do atual |
-| **Todo efeito que toca disco carrega chave de exclusão** | O id do ciclo não cobre isto: dois `blockdev-backup` concorrentes sobre o mesmo disco são **do mesmo ciclo**. Ver abaixo |
+| **Todo efeito que toca disco segura chaves de exclusão, uma por disco** | O id do ciclo não cobre isto: dois `blockdev-backup` concorrentes sobre o mesmo disco são **do mesmo ciclo**. Ver abaixo |
 
 ### Heartbeat que para não prova que o trabalho parou
 
@@ -63,8 +63,9 @@ contabilidade, e o que está em jogo aqui são dois `blockdev-backup` escrevendo
 espelho. Resultado indefinido em cima do dado que o cliente vai usar no failover — é P1 e
 P2, não desenho de protocolo.
 
-Por isso **todo efeito que toca disco carrega uma chave de exclusão**, no mínimo
-`(vm, disco)`. Dois efeitos com a mesma chave nunca têm lease ao mesmo tempo,
+Por isso **todo efeito que toca disco segura chaves de exclusão, uma por disco que
+toca** — `(vm, disco)`. Dois efeitos cujas chaves **se intersectam** nunca têm lease ao
+mesmo tempo,
 independentemente de ciclo.
 
 #### Preempção: a única categoria que toma chave já tomada
@@ -215,7 +216,7 @@ e que nunca tiveram o mesmo tempo de vida:
 | Parte | Vida | Nome |
 | --- | --- | --- |
 | Volume espelho, anexação, `blockdev-add` | durável, atravessa ciclos | `(tenant_id, vm_id, disco)`, R3 da `dr-006` |
-| `block-export-add` / `block-export-del` | por ciclo | derivado do ciclo |
+| `block-export-add` / `block-export-del` | por ciclo e por disco | derivado do ciclo e do disco |
 
 O nó do `qemu-storage-daemon` é a anexação vista de dentro do daemon, e dura o que ela dura.
 O export é o nome exposto na rede. `block-export-del`, inclusive com `mode: hard`, **remove
@@ -280,7 +281,7 @@ nas últimas rodadas. Se ignorar o campo, pior.
 
 **Valor desconhecido de campo que carrega regra de segurança é recusa.** O efeito volta para
 a fila com "contrato mais novo que eu", e alguém vê. Vale para os três: `alvo`,
-`chave_de_exclusao` e a categoria de preempção — consumidor que não entende qualquer um
+`chaves_de_exclusao` e a categoria de preempção — consumidor que não entende qualquer um
 deles não pode executar assumindo o caso comum.
 
 A distinção é entre **informação** e **regra**. Campo desconhecido continua ignorável, que é
@@ -326,9 +327,16 @@ Vale para os três nomes que o ciclo cria:
   mata o job novo em vez do zumbi — o cercamento funciona e cerca a coisa errada, que é o
   pior defeito desta classe, porque parece ter dado certo.
 
+  E ele é o único dos três que leva **também o disco** no nome. O export é um por disco, e
+  o R5 da `dr-006` põe todos os discos de uma VM na **mesma** receptora — o mesmo servidor
+  NBD, que escolhe export por nome. Com nome só por ciclo, o segundo `block-export-add` de
+  uma VM com dois discos falharia. O checkpoint não leva disco porque é da VM, criado numa
+  chamada só; o bitmap temporário não leva porque o QEMU separa nomes de bitmap por nó de
+  bloco, e o mesmo nome em cada disco não colide.
+
 Com o nome derivado do ciclo, **órfão tem definição**: nome de ciclo que não está ativo. A
-limpeza deixa de ser heurística de prefixo, e **cercar identifica a instância, não o
-disco**.
+limpeza deixa de ser heurística de prefixo, e **cercar identifica a instância** — o ciclo
+e, no export, o disco.
 
 Isto emenda a `dr-006`, e a emenda está lá: o **R3** manda derivar todo nome de
 `(tenant_id, vm_id, disco)`, o que é certo para o volume espelho e a anexação, que
@@ -484,10 +492,12 @@ descreveria um sistema que não existe.
   alguém a quebrar otimizando, o produto passa a copiar terabytes por causa de um timeout
   de rede.
 - Todo efeito carrega o id do ciclo, e resultado de ciclo que não é o corrente é descartado.
-- **P1/P2:** dois efeitos com a mesma chave de exclusão nunca têm lease ao mesmo tempo, e
+- **P1/P2:** dois efeitos cujas chaves de exclusão se intersectam nunca têm lease ao mesmo
+  tempo, e
   chave de efeito que toca disco só é liberada por evidência do hypervisor — nunca pelo
   relógio do lease.
-- Nome de bitmap temporário e de checkpoint é derivado do ciclo, nunca fixo.
+- Nome de bitmap temporário e de checkpoint é derivado do ciclo, e o de export, do ciclo e
+  do disco — nunca fixo.
 - Ciclo encerrado sem registro de telemetria é ciclo incompleto, inclusive quando falhou.
 - `degradada` é calculada, nunca guardada.
 
@@ -501,9 +511,12 @@ descreveria um sistema que não existe.
 - [ ] **Falha de ciclo não dispara resync completo, em nenhum caminho** — o teste que
       protege a propriedade medida em 2026-09-18
 - [ ] Resultado atrasado do ciclo N, chegando no N+1, é descartado
-- [ ] Todo efeito que toca disco carrega chave de exclusão, e a chave sobrevive à
+- [ ] Todo efeito que toca disco segura chaves de exclusão, e elas sobrevivem à
       serialização — efeito sem chave não chega a existir
 - [ ] Dois efeitos do **mesmo** ciclo sobre o mesmo disco produzem a mesma chave
+- [ ] Efeito de VM e efeito de disco com **um** disco em comum se excluem — interseção, e
+      não identidade de conjuntos
+- [ ] Fechar a janela é **uma** unidade de execução, de VM, e não dois efeitos
 - [ ] Chave de disco **não** é liberada por lease expirado, e **é** liberada por evidência
 - [ ] VM que não está mais no nó gravado conta como evidência — nó morto não bloqueia disco
 - [ ] Cercar o destino **não** dispara resync completo: o custo é a janela pendente
