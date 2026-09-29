@@ -12,6 +12,7 @@ import pytest
 
 from vzdr.core.domain.identidade import (
     PREFIXO,
+    DiscoInvalidoError,
     Especie,
     NomeDeCiclo,
     NomeNossoIlegivel,
@@ -22,7 +23,12 @@ from vzdr.core.domain.identidade import (
     nome_do_export,
 )
 
-TRES = (nome_do_bitmap, nome_do_checkpoint, nome_do_export)
+
+def _export_vda(ciclo):
+    return nome_do_export(ciclo, "vda")
+
+
+TRES = (nome_do_bitmap, nome_do_checkpoint, _export_vda)
 
 
 @pytest.mark.parametrize("fabrica", TRES)
@@ -65,7 +71,7 @@ def test_o_nome_devolve_o_ciclo(fabrica):
     [
         (nome_do_bitmap, Especie.BITMAP),
         (nome_do_checkpoint, Especie.CHECKPOINT),
-        (nome_do_export, Especie.EXPORT),
+        (_export_vda, Especie.EXPORT),
     ],
 )
 def test_o_nome_devolve_a_especie(fabrica, especie):
@@ -115,7 +121,6 @@ def test_caracteres_seguros_para_qmp_e_libvirt(fabrica):
         "vzdrx-bmp-" + "a" * 32,
         "x-vzdr-bmp-" + "a" * 32,
         # lixo em volta
-        "vzdr-bmp-" + "a" * 32 + "-extra",
         " vzdr-bmp-" + "a" * 32,
         # `\n` no fim: em Python o `$` casa antes da quebra de linha final, e nome
         # chega de saida de comando, que termina em `\n`. Este caso reprovou a
@@ -180,7 +185,8 @@ def test_hex_maiusculo_nao_e_aceito():
 def test_ida_e_volta_de_qualquer_especie():
     ciclo = uuid4()
     for especie in Especie:
-        lido = ler_nome(nome_de(especie, ciclo))
+        disco = "vda" if especie is Especie.EXPORT else None
+        lido = ler_nome(nome_de(especie, ciclo, disco))
         assert lido is not None
         assert (lido.especie, lido.ciclo_id) == (especie, ciclo)
 
@@ -195,3 +201,72 @@ def test_tenant_nao_aparece_no_nome():
     nome = nome_do_bitmap(ciclo)
     assert nome == f"{PREFIXO}-bmp-{ciclo.hex}"
     assert nome.count("-") == 2
+
+
+# ── O export e por ciclo E por disco ────────────────────────────────────────
+
+
+def test_dois_discos_do_mesmo_ciclo_tem_exports_diferentes():
+    """O R5 da dr-006 poe os discos de uma VM na MESMA receptora, e o NBD escolhe
+    export por nome. Dois exports homonimos no mesmo servidor sao impossiveis: o
+    segundo `block-export-add` falha. A primeira versao nem recebia o disco."""
+    ciclo = uuid4()
+    assert nome_do_export(ciclo, "vda") != nome_do_export(ciclo, "vdb")
+
+
+def test_o_export_devolve_o_disco():
+    """Cercar identifica a instancia — e a instancia agora e (ciclo, disco)."""
+    ciclo = uuid4()
+    lido = ler_nome(nome_do_export(ciclo, "vdb"))
+    assert isinstance(lido, NomeDeCiclo)
+    assert (lido.especie, lido.ciclo_id, lido.disco) == (Especie.EXPORT, ciclo, "vdb")
+
+
+@pytest.mark.parametrize("disco", ["vd-a", "VDA", "vda ", "", "vda/1", "vdá", "vda\n"])
+def test_o_escritor_recusa_disco_que_o_leitor_nao_leria(disco):
+    """Exige, nao coage — do lado do escritor.
+
+    Um alvo com caractere fora de [a-z0-9] produziria um nome que `ler_nome`
+    devolveria como "nao e nosso", e o orfao nao seria limpo. O hifen fica de
+    fora porque e o separador do nome: com ele, o nome teria duas leituras.
+    """
+    with pytest.raises(DiscoInvalidoError):
+        nome_do_export(uuid4(), disco)
+
+
+@pytest.mark.parametrize("disco", ["vda", "sdb", "nvme0n1", "hdc"])
+def test_alvos_reais_de_disco_passam_e_voltam(disco):
+    ciclo = uuid4()
+    lido = ler_nome(nome_do_export(ciclo, disco))
+    assert isinstance(lido, NomeDeCiclo) and lido.disco == disco
+
+
+def test_tudo_que_o_escritor_produz_o_leitor_le():
+    """A simetria, afirmada direto: nao existe nome nosso que volte como alheio."""
+    ciclo = uuid4()
+    for especie in Especie:
+        disco = "vda" if especie is Especie.EXPORT else None
+        assert isinstance(ler_nome(nome_de(especie, ciclo, disco)), NomeDeCiclo), especie
+
+
+def test_bitmap_e_checkpoint_nao_levam_disco():
+    """Checkpoint e da VM, um por ciclo. Bitmap temporario tem o mesmo nome em
+    cada disco, e nao colide porque o QEMU separa nomes de bitmap por no."""
+    for especie in (Especie.BITMAP, Especie.CHECKPOINT):
+        with pytest.raises(DiscoInvalidoError):
+            nome_de(especie, uuid4(), "vda")
+
+
+def test_export_sem_disco_e_nosso_ilegivel():
+    """E exatamente o nome que a versao anterior produzia. Nosso pela forma, e
+    esta versao nao o interpreta: nao tocar, e reportar."""
+    ciclo = uuid4()
+    lido = ler_nome(f"{PREFIXO}-exp-{ciclo.hex}")
+    assert isinstance(lido, NomeNossoIlegivel) and lido.ciclo_id == ciclo
+
+
+def test_bitmap_com_sufixo_e_nosso_ilegivel_e_nao_alheio():
+    """Antes era "nao e nosso". Os dois nao tocam; este reporta — e e a resposta
+    certa para o dia em que uma versao mais nova puser disco no bitmap."""
+    lido = ler_nome(f"{PREFIXO}-bmp-{'a' * 32}-extra")
+    assert isinstance(lido, NomeNossoIlegivel)
