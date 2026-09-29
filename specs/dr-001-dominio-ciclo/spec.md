@@ -442,7 +442,6 @@ sobra um bitmap em vez de cem. Nenhuma das duas respostas toca a invariante.
 | Falha | O que acontece | Estado resultante |
 | --- | --- | --- |
 | Cópia falha no meio | Temporário descartado | Janela pendente acumula; próximo ciclo consolida duas |
-| Ciclo falha N vezes seguidas | Alerta, VM marcada `degradada` | Segue tentando; RPO em risco visível |
 | Divergência na reconciliação | Ciclo não executa | `precisa resync`, com o motivo |
 | Um volume falha numa VM multi-disco | Ponto de recuperação inteiro descartado | Nenhum snapshot registrado |
 
