@@ -47,14 +47,21 @@ O **meta-checador bidirecional de coerência documento↔realidade** vem antes d
 edição de spec, e obrigatoriamente antes da `dr-002`. Ele está na fatia de manutenção do
 [M1 do roadmap](../docs/03-roadmap.md).
 
-O motivo de o gatilho ser este, e não uma data: hoje a `dr-001` e a `dr-006` conferem
-porque foram editadas juntas e lidas juntas. **Isso é uma linha de base verificada à mão**,
-e é o melhor momento possível para o checador nascer — primeira execução verde, e o que ele
-achar depois é desvio de verdade.
+O motivo de o gatilho ser este, e não uma data: cada spec editada antes de o checador
+existir é uma edição cuja coerência ninguém conferiu. Passada a segunda ou a terceira, a
+primeira execução dele deixa de distinguir "desviou" de "nunca foi conferido", e um
+checador que não distingue as duas coisas nasce sem poder falhar.
 
-Cada spec editada antes de ele existir é uma edição cuja coerência ninguém conferiu. Passada
-a segunda ou a terceira, a primeira execução dele deixa de distinguir "desviou" de "nunca
-foi conferido", e um checador que não distingue as duas coisas nasce sem poder falhar.
+**Uma correção, e ela vale mais que o texto que substitui.** Esta seção dizia que a
+`dr-001` e a `dr-006` "conferem porque foram editadas juntas e lidas juntas", e chamava
+isso de linha de base verificada à mão. Era falso: as duas definem `degradada` de modos
+incompatíveis — derivada contra estado de máquina, 2× o RPO por tempo contra "último ciclo
+falhou". Duas pessoas leram as duas specs, e nenhuma olhou a seção de estados da `dr-006`.
+
+Verificação à mão que não verificou é o caso mais puro de afirmação com cara de conferência.
+A consequência para os checadores é o inverso do que este texto prometia: eles **não podem
+nascer verdes**, porque há contradição conhecida. Um checador que nasce vermelho sobre um
+achado real prova, no primeiro segundo de vida, que consegue reprovar.
 
 A `dr-001` T2–T8 não edita spec nenhuma, então a ordem combinada — código primeiro — não
 esbarra nisto.
