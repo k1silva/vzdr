@@ -76,10 +76,22 @@ lê.
       3. `esta_degradada(idade_do_ponto, ...)` virou `esta_degradada(idade, ...)` no código;
          `plan.md` e `tasks.md` da `dr-001` ainda mostram o nome velho.
 
-      Os três ficaram fora do conserto de `degradada` (#28) de propósito. A isenção do
+      4. **O disparo do resync deixa de ser a troca de nó**, se a M4 confirmar o sinal de
+         consistência. Troca de nó era proxy, e a resposta da Virtuozzo o torna errado nos
+         dois sentidos: migração graciosa troca de nó e não perde bitmap; queda pode perder
+         bitmap sem trocar de nó. A troca de nó passa a ser motivo para **ir olhar**, não
+         conclusão. A forma: **ADR novo**, e não reescrita do ADR-0012 — ADR registra por
+         que se decidiu naquele momento, e reescrever apaga o que se sabia. O novo carrega
+         a **procedência** (resposta da Virtuozzo mais medição da M4) e a **condição**
+         (storage compartilhado). O 0012 ganha nota de status com **data e motivo**,
+         apontando o trecho substituído — "substituído" responde o quê; quem lê depois
+         precisa do porquê. Resolve de passagem a candidata de separar a decisão 3.
+         **Bloqueado pela M4**: o e-mail diz onde olhar, não o que se vai ver.
+
+      Os quatro ficaram fora do conserto de `degradada` (#28) de propósito. A isenção do
       gatilho cobre edição cujo **único** efeito é remover contradição registrada, com o
-      mecanismo no mesmo commit. Os itens 1 e 2 são decisão nova, não reconciliação; o 3 é
-      divergência que nenhum mecanismo daquele commit pegaria.
+      mecanismo no mesmo commit. Os itens 1, 2 e 4 são decisão nova, não reconciliação; o 3
+      é divergência que nenhum mecanismo daquele commit pegaria.
 
       **Resolvidas no #28:** a contradição entre `dr-001` e `dr-006` sobre `degradada`,
       arbitrada por regra — "ciclo de vida é marcado, saúde é derivada" —, e a linha de base
@@ -156,10 +168,31 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
       e divergia dele
-- [ ] **Sobrevivência do bitmap à migração automática do VHI** (M4 do ADR-0012) — migrar
-      uma VM descartável entre dois nós e conferir se o bitmap persiste. Exige cluster com
-      mais de um nó. Bloqueado por [P-001](pendencias.md), chamado aberto com a Virtuozzo:
-      a resposta muda como o teste é feito, ou se ele é necessário
+- [ ] **Sobrevivência do bitmap à migração e à queda** (M4 do ADR-0012) — desbloqueada: a
+      Virtuozzo respondeu ([P-001](pendencias.md), fechada), e a resposta diz **onde olhar**,
+      não o que se vai ver. Declaração não fecha medição. Em VM descartável, cluster com
+      mais de um nó, duas pernas:
+      - **saída pela porta** — criar bitmap persistente, migrar ao vivo, ler o bitmap no
+        destino e conferir nome, granularidade e conteúdo;
+      - **queda pela janela** — matar o processo QEMU da VM, reabrir, e ler o que o
+        `query-block` reporta do bitmap persistido. A lembrança de duas pessoas é que o
+        qcow2 marca como **inconsistente** o bitmap que não foi fechado limpo, e que o
+        `query-block` expõe isso — ninguém verificou. Se existir, é o sinal que substitui a
+        troca de nó: bitmap presente e consistente → confia; ausente ou marcado → resync.
+
+      E uma conferência que a resposta tornou necessária: o mecanismo só vale para bitmap
+      **persistente**, e o repositório não registra como o bitmap temporário do laboratório
+      foi criado. A regra não é "todo bitmap persistente". É **persistente onde a perda
+      custa janela; não persistente onde a perda custa repetição**:
+      - os bitmaps dos checkpoints carregam a janela, e perdê-los é resync — persistentes;
+      - o temporário só congela a janela para uma cópia. Perdê-lo custa refazer a mescla, e
+        é a linha "cópia falha no meio" da tabela de falhas da `dr-001` — coberta de
+        verdade, não por acomodação. E ele **não deveria** ser persistente: persistente,
+        sobreviveria à queda e viraria órfão para o ciclo seguinte limpar, trabalho criado
+        sem benefício. Não persistente, evapora, que é o comportamento desejado.
+
+      Confirmar os dois lados no laboratório. Se o bitmap voltar **limpo** depois de uma
+      queda, o disparo por estado é pior que nenhum sinal — seria sinal errado.
 - [ ] **Classificação das VMs por tier** — o critério escrito **antes** da lista, e a lista
       derivada dele. Na ordem inversa a classificação vira opinião por VM, e ninguém
       consegue dizer depois por que uma VM ficou no tier que ficou

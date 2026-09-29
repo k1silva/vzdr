@@ -138,6 +138,14 @@ from vzdr.tools.dr import ...
   superusuário passa num teste que olha só `rolbypassrls` e ignora toda a política.
   Quando escrever um teste de controle de segurança, mute o controle e confirme que o
   teste reprova.
+- **Fato é o que ele diz, não o que ele parece sugerir.** A capability `dirty-bitmaps`
+  do QEMU aparecia com `state: false`, e foi lida como "o bitmap não sobrevive à
+  migração" — virou chamado com o fornecedor e medição bloqueada. Queria dizer "este
+  mecanismo não é o usado": com storage compartilhado, o bitmap viaja gravado na imagem, e
+  aquela capability só serve a disco não compartilhado. É a mesma família de ausência de
+  check lida como aprovação e de laço que não termina lido como paciência: um estado
+  observável tomado como sinal de outra coisa. Antes de concluir a partir de um fato,
+  pergunte **o que ele governa**.
 - **Onde dois caminhos fazem o mesmo trabalho, o defeito mora no lado mais solto.** Ler e
   escrever, efeito e resultado, origem e destino: a pergunta de revisão não é "este lado
   está certo?", é **"os dois são iguais?"**. Na T3 da `dr-001` foram quatro achados, e três
