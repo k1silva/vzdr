@@ -400,6 +400,12 @@ O **motivo** sim é registro, porque é o que a interface mostra e o que decide 
 | `ciclo_falhou` | Segue tentando no ritmo do tier |
 | `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)) |
 
+**Esta é a única definição de `degradada`.** O ciclo de vida da VM — `pendente`,
+`provisionando`, `semeando`, `em_protecao` — é marcado e mora na
+[`dr-006`](../dr-006-provisionamento/spec.md); a saúde é derivada e mora aqui. A `dr-006`
+já teve `degradada` como estado da máquina dela, com outro limiar, e a regra que resolveu a
+contradição é essa: **ciclo de vida é marcado, saúde é derivada.**
+
 E `degradada` **não é desprotegida**: os pontos de recuperação existentes continuam válidos.
 O que para é a criação de pontos novos no ritmo prometido. A leitura natural de "degradada"
 é "desprotegida", e a diferença é o produto inteiro.
