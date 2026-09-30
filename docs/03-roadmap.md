@@ -73,8 +73,13 @@ lê.
          termina: no último disco semeado, no primeiro, ou em outra condição. O item 1
          depende disto, porque distinguir "ainda no seed" de "em proteção sem ponto" exige
          saber onde fica a fronteira.
-      3. `esta_degradada(idade_do_ponto, ...)` virou `esta_degradada(idade, ...)` no código;
-         `plan.md` e `tasks.md` da `dr-001` ainda mostram o nome velho.
+      3. **O que o teste da T5 protege.** `tasks.md` pede "a comparação do nó é a primeira
+         coisa" — afirmação sobre a *implementação*, que o item 4 prevê trocar. Quando a M4
+         fechar, esse teste fica vermelho com a propriedade intacta, e alguém mantém o
+         mecanismo velho para mantê-lo verde. A propriedade que sobrevive à troca: **a
+         validade do bitmap é decidida antes de qualquer trabalho caro**. O código da T5
+         segue a propriedade; a redação de `tasks.md` muda quando o portão deixar, porque
+         escolher o que um teste protege é decisão de desenho.
 
       4. **O disparo do resync deixa de ser a troca de nó**, se a M4 confirmar o sinal de
          consistência. Troca de nó era proxy, e a resposta da Virtuozzo o torna errado nos
@@ -88,10 +93,12 @@ lê.
          precisa do porquê. Resolve de passagem a candidata de separar a decisão 3.
          **Bloqueado pela M4**: o e-mail diz onde olhar, não o que se vai ver.
 
-      Os quatro ficaram fora do conserto de `degradada` (#28) de propósito. A isenção do
-      gatilho cobre edição cujo **único** efeito é remover contradição registrada, com o
-      mecanismo no mesmo commit. Os itens 1, 2 e 4 são decisão nova, não reconciliação; o 3
-      é divergência que nenhum mecanismo daquele commit pegaria.
+      Os quatro são decisão de desenho, e o portão consolidado do `specs/README.md` os
+      segura: ele cobre desenho, não conserto.
+
+      **Resolvido no #31:** o nome do parâmetro de `esta_degradada` em `plan.md` e
+      `tasks.md`. Era afirmação que o código demonstrava falsa — conserto, pela regra
+      consolidada.
 
       **Resolvidas no #28:** a contradição entre `dr-001` e `dr-006` sobre `degradada`,
       arbitrada por regra — "ciclo de vida é marcado, saúde é derivada" —, e a linha de base

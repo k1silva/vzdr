@@ -1,7 +1,7 @@
 # ADR-0015: A máquina de estados pede efeitos; não os executa
 
 **Data:** 2026-09-25
-**Status:** aceito
+**Status:** aceito — propriedade 4 emendada em 2026-09-29 (ver a emenda na própria propriedade)
 
 ## Contexto
 
@@ -63,6 +63,22 @@ buraco que ninguém vê. É o tipo de defeito que só aparece em cliente com lin
 custa uma linha para fechar agora.
 
 ### 4. Todo efeito que toca disco carrega chave de exclusão
+
+> **Emenda de 2026-09-29.** O texto abaixo é o original, mantido como registro do que se
+> sabia. Duas correções, ambas por evidência:
+>
+> - **As chaves ficam no plural: uma por disco que o efeito toca.** Checkpoint e
+>   congelamento são da VM — feitos disco a disco, cada disco teria um instante diferente,
+>   e o ponto de recuperação pareceria válido sem ser. Esses efeitos seguram uma chave por
+>   disco, e a fila concede todas de uma vez ou nenhuma, para não abrir impasse entre dois
+>   efeitos segurando metades. A varredura do envelope perguntou o que a fila lê, e não de
+>   quantos discos.
+> - **"Mesma chave" passa a ser "chaves que se intersectam".** Lida sobre conjuntos, "mesma"
+>   viraria "conjuntos idênticos", e um efeito de VM sobre três discos conviveria com um
+>   efeito de disco sobre o segundo deles. Um disco em comum basta.
+>
+> O código está em `vzdr.core.domain.efeitos` (`EfeitoDeVm`, `se_excluem`), e o motivo de
+> fechar a janela ser **um** efeito, e não dois, está no docstring de `FecharJanela`.
 
 No mínimo `(vm, disco)`. Dois efeitos com a mesma chave nunca têm lease ao mesmo tempo,
 independentemente de ciclo.

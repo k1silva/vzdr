@@ -48,7 +48,8 @@ numa fechada. Cada item vira campo, ou vira decisão registrada de que **não** 
 | De que tenant é | **campo** `tenant_id`, e o **único** lugar onde tenant é dito | P9. A fila isola sem abrir o efeito. Nenhum corpo repete tenant ou referência de onde derivá-lo: duas expressões podem discordar, e com RLS uma delas vira oráculo de existência |
 | De que ciclo é | **campo** `ciclo_id` | Propriedade 3: descartar resultado atrasado |
 | Por onde se alcança quem executa | **campo** `alvo` | Os três caminhos de falha independentes |
-| Se conflita com outro efeito | **campo** `chave_de_exclusao`, nos de disco | Propriedade 4 |
+| Se conflita com outro efeito | **campo** `chaves_de_exclusao`, uma por disco, nos de disco | Propriedade 4. Excluem-se quando **se intersectam** |
+| De quantos discos | **tipo**: `EfeitoDeDisco` (um) ou `EfeitoDeVm` (todos) | Linha acrescentada depois — a varredura perguntou o que a fila lê, e não de quantos discos. Checkpoint e congelamento são da VM, e feitos disco a disco dariam um instante por disco |
 | Se pode tomar chave tomada | **categoria** `EfeitoDePreempcao` | Tipo, não *flag*: *flag* é ativável por quem não leu as obrigações |
 | Quanto tempo o lease dura | **não é campo** | O heartbeat governa. Valor fixo seria constante derivada de perfil de parque, que a spec proíbe |
 | Em que ordem despachar | **não é campo** | Deriva da categoria: preempção antes do resto. Campo de prioridade seria segunda fonte de verdade sobre a mesma coisa |
@@ -77,13 +78,13 @@ um conserto.
 É **conta**, e por isso vive em `saude.py`, não em `ciclo.py`:
 
 ```python
-def esta_degradada(idade_do_ponto: timedelta, rpo: timedelta, fator: float = 2.0) -> bool
+def esta_degradada(idade: timedelta, rpo: timedelta, fator: float = 2.0) -> bool
 ```
 
 Nenhuma transição a produz, nenhum campo a guarda. O `fator` é parâmetro com padrão,
 porque depende de perfil de parque — e a spec proíbe constante derivada de parque.
 
-**O relógio entra por parâmetro, nunca lido por dentro.** Quem recebe `idade_do_ponto` já
+**O relógio entra por parâmetro, nunca lido por dentro.** Quem recebe a `idade` já
 recebeu o resultado da subtração; nenhuma função deste módulo chama `now()`. Função que lê
 o relógio por dentro não é reproduzível, o teste não consegue fixar o instante, e a falha é
 silenciosa: ela passa hoje e reprova em outro fuso, em outro segundo, na virada do horário
@@ -98,7 +99,7 @@ podem discordar. É o mesmo raciocínio que recusou coluna `origem` na auditoria
 
 ### Identidade de ciclo
 
-`nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id)`,
+`nome_do_bitmap(ciclo_id)`, `nome_do_checkpoint(ciclo_id)` e `nome_do_export(ciclo_id, disco)`,
 puras e determinísticas. Órfão ganha definição — nome cujo ciclo não está ativo — e a
 reconciliação compara conjuntos em vez de casar prefixo.
 
@@ -163,9 +164,16 @@ class Efeito:
 class EfeitoDeDisco(Efeito):
     # ADR-0015, propriedade 4. Sem chave, dois blockdev-backup do MESMO ciclo
     # podem escrever o mesmo espelho — e o ciclo_id nao distingue.
-    def chave_de_exclusao(self) -> ChaveDeExclusao: ...   # no minimo (vm, disco)
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]: ...   # uma: (vm, disco)
 
-class CriarCheckpoint(Efeito): ...
+class EfeitoDeVm(Efeito):
+    # Age em todos os discos como unidade; segura uma chave por disco, e a fila
+    # concede todas de uma vez ou nenhuma.
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]: ...
+
+def se_excluem(a: Efeito, b: Efeito) -> bool: ...   # INTERSECAO, nao identidade
+
+class FecharJanela(EfeitoDeVm): ...   # congela + checkpoint, UMA unidade
 class IniciarCopia(Efeito): ...
 class DescartarBitmap(Efeito): ...
 class ConfirmarNoDestino(Efeito): ...

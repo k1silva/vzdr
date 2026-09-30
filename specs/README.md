@@ -84,20 +84,32 @@ marcar `[x]` num `tasks.md` não cria afirmação cruzada que possa divergir. Na
 linha, pela mesma razão da declaração de revisão: juízo declarado em vez de juízo
 silencioso.
 
-**Conserto de contradição registrada não é deriva.** Edição cujo único efeito é remover
-uma contradição já registrada não cria afirmação — reconcilia duas que já existiam. Ela não
-espera pelo checador, com duas condições:
+**O portão cobre desenho, não conserto.** Ele segura edição que **acrescenta ou muda
+decisão de desenho**. Não segura edição que **corrige afirmação demonstrada falsa por
+evidência** — e o PR que a faz nomeia a evidência.
 
-- **o mecanismo que pega a contradição entra no mesmo commit**, de modo que edição e
-  verificação chegam juntas ao `main`;
-- **o registro prévio serve de evidência** — a contradição estava escrita antes, com as
-  linhas, e não é descoberta feita durante a edição.
+O motivo: o portão existe para que documento não derive antes de haver mecanismo que pegue
+deriva. Travar o conserto atrás da ferramenta que detecta o defeito é o portão trabalhando
+contra o próprio propósito, e esperar não melhora a linha de base, que está sabidamente
+errada.
 
-O motivo de estar escrito: o gatilho existe para que spec não derive antes de haver
-mecanismo que pegue deriva. Travar o conserto atrás da ferramenta que detecta o defeito é
-o gatilho trabalhando contra o próprio propósito — e esperar não melhora a linha de base,
-que está sabidamente não conferida. Sem isto escrito, o próximo conserto bate na mesma
-parede, e alguém resolve contornando em silêncio.
+Esta regra substitui duas isenções que vinham se acumulando, e que eram casos dela:
+
+- **contradição já registrada entre documentos**, como `degradada` definida de dois modos
+  na `dr-001` e na `dr-006`. A evidência era o registro prévio, com as linhas, e o
+  mecanismo que pega a contradição entrou no mesmo commit;
+- **afirmação que torna o desenho impossível de implementar**, como o nome do export sem o
+  disco: o NBD recusa dois exports homônimos no mesmo servidor, e o R5 da `dr-006` põe
+  todos os discos de uma VM na mesma receptora.
+
+Duas isenções em duas rodadas não eram duas exceções; eram o sinal de que a condição
+estava errada. Ela dizia "antes de editar spec", quando o que queria impedir era **desenho
+novo sem mecanismo que pegue deriva**.
+
+**O que não passa por aqui**, e é onde a regra morde: renomear uma coisa para o nome
+certo, quando a spec não deveria nomeá-la; registrar um caso novo que a spec não previa;
+escolher entre duas saídas possíveis. Tudo isso é decisão de desenho, mesmo quando nasce
+de um conserto. **Na dúvida, é desenho.**
 
 ## O que toda spec responde
 
