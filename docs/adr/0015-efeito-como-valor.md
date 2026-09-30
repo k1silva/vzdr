@@ -218,4 +218,12 @@ Nova, e é conferido na resposta. "A VM não está neste nó" é desfecho própr
 O `vm_id` dos efeitos de leitura **não** é chave de exclusão: com chave, a consulta de
 evidência esperaria o lease preso pela cópia zumbi que ela existe para investigar.
 
+**Uma segunda receptora é valor novo de `Alvo`, e não `no` afrouxado.** O critério que pôs
+o nó no efeito de agente — falham separado, logo são alvos diferentes — vale igual para
+duas receptoras. Hoje há uma, e não morde. Mas o conserto óbvio de amanhã, permitir `no`
+num efeito de receptora, mudaria o significado de um campo existente, de "proibido aqui"
+para "permitido aqui" — o que este ADR proíbe: um efeito assim chegando numa versão antiga
+cairia em `RegistroMalformadoError`, que descarta. Valor novo de `Alvo` é aditivo: a versão
+antiga o recusa com `ValorDesconhecidoError` e devolve à fila, que é o caminho desenhado.
+
 Procedência: revisão do #31, e o PR que implementa esta emenda.

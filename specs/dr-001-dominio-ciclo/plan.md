@@ -74,7 +74,9 @@ regra valer, e a de sujeito protege o dia em que alguém a quebrar sem perceber.
 **Tipos removidos.** `criar_checkpoint` e `inventariar_hypervisor` deixaram de existir, e
 um registro guardado com eles é tipo desconhecido — que pede reenvio, e reenviaria para
 sempre. Hoje não há fila nem agente em produção, então remover é de graça. Depois do
-primeiro deploy, remover tipo exige caminho de descontinuação, e isso é da `core-003`.
+primeiro deploy, remover tipo exige caminho de descontinuação, e isso é da `core-003` — com
+o gatilho na lista de [antes de cada deploy](../../deploy/README.md), que é o único lugar
+consultado no dia em que o preço aparece.
 
 Um quarto alvo — `API_DA_NUVEM_DE_DESTINO` — é previsível e **não** entra agora: nenhum
 efeito da v1 o usa, e o cercamento por security group que o exigiria está registrado como
