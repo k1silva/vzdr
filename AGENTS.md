@@ -138,6 +138,16 @@ from vzdr.tools.dr import ...
   superusuário passa num teste que olha só `rolbypassrls` e ignora toda a política.
   Quando escrever um teste de controle de segurança, mute o controle e confirme que o
   teste reprova.
+
+  **E ao mutar, rode sem bytecode e apague o `__pycache__` ao restaurar.** O Python
+  valida o `.pyc` pela data de modificação, em segundos, e pelo tamanho do fonte. Uma
+  mutação do mesmo tamanho — `todos` trocado por `set()` — desfeita no mesmo segundo
+  deixa o bytecode **da versão mutada** valendo sobre o fonte restaurado. Aconteceu: um
+  teste passou a reprovar sobre código correto, e `inspect.getsource` mostrava o código
+  limpo, porque lê o `.py`. Restaurar o fonte não restaura o comportamento. Pior que a
+  reprovação espúria é o sentido contrário: a rodada da mutação seguinte executando o
+  bytecode da anterior, e o resultado dela sendo sobre outra coisa.
+  `PYTHONDONTWRITEBYTECODE=1`, e o cache apagado antes e depois de cada rodada.
 - **Fato é o que ele diz, não o que ele parece sugerir.** A capability `dirty-bitmaps`
   do QEMU aparecia com `state: false`, e foi lida como "o bitmap não sobrevive à
   migração" — virou chamado com o fornecedor e medição bloqueada. Queria dizer "este
