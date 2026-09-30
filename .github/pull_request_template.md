@@ -8,6 +8,9 @@ alguém apagá-la, e é isso que torna o esquecimento visível em vez de silenci
 
 Delegação é decisão do humano e vale para ESTE PR, nunca como modo permanente.
 Ver AGENTS.md, "Branch e PR".
+
+O clique do merge responde-se `nao` ao abrir o PR: a delegação, quando vem, chega
+depois. Quem mesclar corrige a linha antes de mesclar — é o último ato do merge.
 -->
 
 - **Revisou o diff**: `<quem>`

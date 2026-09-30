@@ -169,6 +169,13 @@ from vzdr.tools.dr import ...
   definição **declarada** em forma estrutural; a definida em prosa só esta pergunta pega.
   Conceito mora num lugar, e os outros apontam para ele — "tenant se diz uma vez",
   aplicado a documento.
+- **Teste afirma propriedade — nunca posição nem contagem.** Três vezes o mesmo padrão:
+  o teste de pendências preso à contagem de abertas, o de fronteira que comparava uma
+  entrada com ela mesma, e um teste de efeito preso a `RESULTADOS[3]`. Os três passavam
+  por um fato que não era o fato de interesse. Contagem continua certa se o leitor achar o
+  item errado no lugar do certo; índice quebra quando alguém reordena sem quebrar nada.
+  Afirme o que tem que ser verdade — sobre o catálogo inteiro, pelos IDs, pela
+  propriedade — e confira que reordenar não quebra.
 - Seção de configuração do `mypy` que não casa com nenhum módulo **falha o build**.
   O `mypy` trata isso como nota e sai com código 0, então a regra daquela seção
   simplesmente deixa de ser aplicada sem ninguém ver. `scripts/checar_mypy.py`
@@ -240,6 +247,18 @@ a tarefa estava mal fatiada — pare e proponha a divisão.
   permanente**: delegação sem escopo é override de banda sem prazo, que o
   [ADR-0013](docs/adr/0013-orcamento-de-banda-e-janelas.md) já recusou pelo mesmo motivo —
   o temporário vira permanente e ninguém lembra por quê.
+- **O campo do clique nasce `nao`, e quem mescla o corrige antes de mesclar.** A
+  delegação chega depois de o PR existir — aconteceu quatro vezes seguidas, e em nenhuma
+  foi desatenção: no momento do commit, o campo é **inconhecível**. Então ele nasce `nao`
+  por construção, e quem aperta o botão o edita como último ato antes do merge. O campo
+  deixa de ser uma afirmação que envelhece e passa a ser o registro do próprio merge.
+
+  **E esta regra não é mecanizada de propósito.** Num repositório onde mecanismo vence
+  intenção, regra procedimental sem explicação é convite para alguém a mecanizar — um
+  verificador exigindo `sim` antes do merge. Isso destruiria o campo: quem escreve o corpo
+  satisfaria a exigência escrevendo `sim` sem delegação nenhuma, e o campo existe
+  exatamente para **não** ser satisfazível por quem o escreve. A única fonte da delegação
+  é a mensagem do humano, e nenhum job a vê. Aqui, mecanizar é falsificar.
 - **`git push` direto para `main` continua fora do alcance de qualquer agente**, em
   qualquer arranjo. O que a delegação dispensa é a leitura e o clique, nunca a decisão de
   quem manda.
