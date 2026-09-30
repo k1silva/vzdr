@@ -332,6 +332,16 @@ RESULTADOS = [
 ]
 
 
+def _do_efeito(tipo_do_efeito):
+    """A amostra que responde a um tipo de efeito — escolhida pelo que ela e, e nao
+    pela posicao na lista."""
+    return next(r for r in RESULTADOS if r.tipo_do_efeito == tipo_do_efeito)
+
+
+def _com_chave():
+    return next(r for r in RESULTADOS if r.chaves)
+
+
 @pytest.mark.parametrize("resultado", RESULTADOS, ids=lambda r: f"{r.TIPO}-{r.tipo_do_efeito}")
 def test_resultado_ida_e_volta(resultado):
     assert resultado_de_json(json.loads(json.dumps(resultado.para_json()))) == resultado
@@ -364,8 +374,9 @@ def test_resultado_repetido_e_o_mesmo_valor():
     reportes iguais tem que ser indistinguiveis, senao quem absorve nao tem como
     desduplicar. O que a maquina FAZ com a repeticao e da T6.
     """
-    a, b = RESULTADOS[2], dataclasses.replace(RESULTADOS[2])
-    assert a == b and a.para_json() == b.para_json()
+    for a in RESULTADOS:
+        b = dataclasses.replace(a)
+        assert a == b and a.para_json() == b.para_json()
 
 
 def test_resultado_correlaciona_sem_id_proprio():
@@ -377,15 +388,16 @@ def test_resultado_correlaciona_sem_id_proprio():
     seria segunda forma de dizer a mesma coisa.
     """
     efeito = um(IniciarCopia)
-    resultado = RESULTADOS[2]
+    resultado = _do_efeito("iniciar_copia")
     assert resultado.ciclo_id == efeito.ciclo_id
     assert resultado.tipo_do_efeito == efeito.TIPO
     assert resultado.chaves == efeito.chaves_de_exclusao()
 
 
 def test_resultado_de_efeito_sem_disco_nao_carrega_chave():
-    assert RESULTADOS[3].chaves == ()
-    assert RESULTADOS[3].para_json()["chaves"] == []
+    inventario = _do_efeito("inventariar_hypervisor")
+    assert inventario.chaves == ()
+    assert inventario.para_json()["chaves"] == []
 
 
 # ── O envelope e fechado ────────────────────────────────────────────────────
@@ -660,7 +672,7 @@ def test_campo_do_envelope_ausente_recusa_com_o_tipo_certo(campo):
     """`KeyError` cru tambem escaparia do despachante."""
     dados = um(IniciarCopia).para_json()
     if campo == "tipo_do_efeito":
-        dados = RESULTADOS[0].para_json()
+        dados = _com_chave().para_json()
         del dados[campo]
         with pytest.raises(RegistroMalformadoError, match=campo):
             resultado_de_json(dados)
@@ -679,7 +691,7 @@ def test_chave_que_nao_e_objeto_recusa():
 
 def test_chave_do_resultado_tambem_exige():
     """Simetria: o resultado le a chave pelo mesmo caminho do efeito."""
-    dados = RESULTADOS[0].para_json()
+    dados = _com_chave().para_json()
     dados["chaves"][0]["disco"] = 42
     with pytest.raises(RegistroMalformadoError, match="disco"):
         resultado_de_json(dados)
@@ -961,12 +973,19 @@ def test_ha_ao_menos_um_efeito_de_vm_no_catalogo():
 def test_resultado_de_duas_vms_no_json_tambem_recusa():
     """Os dois leitores iguais: o do efeito ja recusava; o do resultado aceitava,
     canonizava, e deixava o efeito pendente para sempre."""
-    dados = RESULTADOS[1].para_json()
+    dados = _com_chave().para_json()
     dados["chaves"].append({"vm_id": str(uuid4()), "disco": "vdb"})
     with pytest.raises(RegistroMalformadoError, match="VMs diferentes"):
         resultado_de_json(dados)
 
 
-def test_resultado_sem_chave_continua_legitimo():
-    """Zero VM e legitimo — efeito sem chave tem resultado sem chave."""
-    assert RESULTADOS[3].chaves == ()
+@pytest.mark.parametrize("classe", TODOS_OS_RESULTADOS, ids=lambda c: c.TIPO)
+def test_todo_resultado_aceita_ficar_sem_chave(classe):
+    """Zero VM e legitimo — efeito sem chave tem resultado sem chave.
+
+    Afirma a propriedade sobre todo tipo de resultado, e nao sobre o elemento que
+    por acaso estava numa posicao da lista. A versao anterior dizia
+    `RESULTADOS[3].chaves == ()`: reordenar a lista quebrava o teste sem quebrar
+    nada, e trocar o elemento deixava como conserto "escolhe outro indice".
+    """
+    assert dataclasses.replace(_amostra(classe), chaves=()).chaves == ()
