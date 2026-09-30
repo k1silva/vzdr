@@ -46,7 +46,14 @@ outro documento some.
 O **meta-checador bidirecional de coerência documento↔realidade** vem antes da próxima
 edição de **documento que carrega afirmação cruzada** — afirmação sobre o que outro
 documento diz, ou sobre o que o código ou a CI fazem —, e obrigatoriamente antes da
-`dr-002`. Ele está na fatia de manutenção do [M1 do roadmap](../docs/03-roadmap.md).
+`dr-002`.
+
+**Ele existe, e cobre por documento**: `tests/invariants/check_afirmacao_tem_mecanismo.py`
+cobre hoje o plano da `dr-001` e o ADR-0015, e imprime em toda execução o que ainda não
+cobre. O portão passa a valer **por documento**: em documento coberto, edição de desenho
+passa, porque o mecanismo que pega deriva existe; em documento ainda não coberto, desenho
+continua esperando — ou a cobertura cresce até ele primeiro. Cobrir é acrescentar o
+documento ao checador, nunca afrouxar o critério.
 
 **A regra é a propriedade, não o diretório.** Hoje esses documentos moram em `specs/` e em
 `docs/adr/`, e essa lista é o mecanismo — não a regra. O próximo lugar onde nascer

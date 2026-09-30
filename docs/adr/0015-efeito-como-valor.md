@@ -37,6 +37,8 @@ Quatro propriedades, e nenhuma é opcional:
 
 ### 1. O efeito é serializável
 
+**Mecanismo:** `tests/unit/test_efeitos.py::test_ida_e_volta`.
+
 Não é *closure*, não é referência a objeto vivo, não é função. É um registro que cabe numa
 linha de fila.
 
@@ -46,6 +48,8 @@ reinício. Efeito que só existe na memória de quem o criou não sobrevive a na
 
 ### 2. O resultado é serializável e tolera repetição
 
+**Mecanismo:** `tests/unit/test_efeitos.py::test_resultado_ida_e_volta`, `tests/unit/test_efeitos.py::test_resultado_repetido_e_o_mesmo_valor`; a absorção sem duplicar estado, `dr-001/T6`.
+
 Pelo mesmo motivo, e mais um: o agente pode entregar o **mesmo resultado duas vezes**. Rede
 que cai entre concluir e reportar, *retry*, reinício no meio do reporte.
 
@@ -53,6 +57,8 @@ A máquina absorve a repetição sem duplicar estado. Isso é desenho de protoco
 tratamento de exceção — retrofitar depois é onde se ganha ciclo duplicado em produção.
 
 ### 3. Todo efeito carrega o id do ciclo
+
+**Mecanismo:** `tests/unit/test_efeitos.py::test_ciclo_id_viaja`, `tests/unit/test_efeitos.py::test_resultado_sem_ciclo_id_nao_existe`; o descarte do resultado atrasado, `dr-001/T6`.
 
 Resultado do ciclo N que chega quando a máquina já está em N+1 é **descartado**, não
 aplicado.
@@ -63,6 +69,8 @@ buraco que ninguém vê. É o tipo de defeito que só aparece em cliente com lin
 custa uma linha para fechar agora.
 
 ### 4. Todo efeito que toca disco carrega chave de exclusão
+
+**Mecanismo:** `tests/unit/test_efeitos.py::test_efeito_de_vm_e_efeito_de_disco_com_um_disco_em_comum_se_excluem`, `tests/unit/test_efeitos.py::test_so_preempcao_toma_chave_tomada`; a liberação só por evidência, `dr-001/T7`.
 
 > **Emenda de 2026-09-29.** O texto abaixo é o original, mantido como registro do que se
 > sabia. Duas correções, ambas por evidência:

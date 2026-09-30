@@ -213,21 +213,26 @@ tipos de entrada e a função ramificar no começo.
 
 ## Riscos
 
+Toda linha nomeia o **mecanismo** que a mantém verdadeira — teste, checador, medição, ou a
+tarefa ainda aberta que vai criá-lo. `tests/invariants/check_afirmacao_tem_mecanismo.py`
+confere que cada um existe, e que tarefa feita não continua sendo citada no lugar do
+mecanismo.
+
 | Risco | Mitigação |
 | --- | --- |
-| A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec |
-| A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada |
-| A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela |
-| Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante |
-| Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa |
-| O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela |
-| Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três |
-| Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante |
-| `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir |
-| Resultado atrasado aceito como do ciclo corrente | O id do ciclo está no tipo, não na convenção, e há teste do descarte. `Resultado` sem `ciclo_id` não compila |
-| `degradada` virar campo "por conveniência" ao integrar com o `core-003` | Ela é função e não existe como campo; guardá-la exigiria criar o campo, o que aparece na revisão |
-| A forma do efeito endurecer errada | É o ADR-0015, escrito antes das três implementações existirem |
-| Alguém derivar constante do laboratório | A spec tem seção própria dizendo que perfil de parque vira parâmetro com padrão |
+| A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec **Mecanismo:** Mecanismo ainda não existe: `T6`. |
+| A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada **Mecanismo:** Mecanismo ainda não existe: `T7`. |
+| A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela **Mecanismo:** `tests/unit/test_efeitos.py::test_so_preempcao_toma_chave_tomada`; a liberação da chave, `T7`. |
+| Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
+| Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
+| O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura`. |
+| Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três **Mecanismo:** Mecanismo ainda não existe: `T7`. |
+| Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante **Mecanismo:** `tests/unit/test_saude.py::test_nenhuma_funcao_do_modulo_le_o_relogio`. |
+| `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir **Mecanismo:** `tests/unit/test_saude.py::test_degradada_nao_e_coluna_em_migracao_nenhuma` — que não existia: esta linha dizia só "o plano já diz", e o meta-checador a pegou. |
+| Resultado atrasado aceito como do ciclo corrente | O id do ciclo está no tipo, não na convenção, e há teste do descarte. `Resultado` sem `ciclo_id` não compila **Mecanismo:** `tests/unit/test_efeitos.py::test_ciclo_id_viaja`, `tests/unit/test_efeitos.py::test_resultado_sem_ciclo_id_nao_existe`; o descarte, `T6`. |
+| `degradada` virar campo "por conveniência" ao integrar com o `core-003` | Ela é função e não existe como campo; guardá-la exigiria criar o campo, o que aparece na revisão **Mecanismo:** `tests/unit/test_saude.py::test_degradada_nao_e_campo_em_lugar_nenhum_do_dominio`. |
+| A forma do efeito endurecer errada | É o ADR-0015, escrito antes das três implementações existirem **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura` — o ADR escrito cedo é a intenção; o que a mantém é o envelope fechado em teste. |
+| Alguém derivar constante do laboratório | A spec tem seção própria dizendo que perfil de parque vira parâmetro com padrão **Mecanismo:** `tests/unit/test_saude.py::test_o_fator_e_parametro_e_muda_a_fronteira`. |
 
 ## Decisões que viram ADR
 

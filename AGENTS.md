@@ -138,6 +138,16 @@ from vzdr.tools.dr import ...
   superusuário passa num teste que olha só `rolbypassrls` e ignora toda a política.
   Quando escrever um teste de controle de segurança, mute o controle e confirme que o
   teste reprova.
+
+  **E ao mutar, rode sem bytecode e apague o `__pycache__` ao restaurar.** O Python
+  valida o `.pyc` pela data de modificação, em segundos, e pelo tamanho do fonte. Uma
+  mutação do mesmo tamanho — `todos` trocado por `set()` — desfeita no mesmo segundo
+  deixa o bytecode **da versão mutada** valendo sobre o fonte restaurado. Aconteceu: um
+  teste passou a reprovar sobre código correto, e `inspect.getsource` mostrava o código
+  limpo, porque lê o `.py`. Restaurar o fonte não restaura o comportamento. Pior que a
+  reprovação espúria é o sentido contrário: a rodada da mutação seguinte executando o
+  bytecode da anterior, e o resultado dela sendo sobre outra coisa.
+  `PYTHONDONTWRITEBYTECODE=1`, e o cache apagado antes e depois de cada rodada.
 - **Fato é o que ele diz, não o que ele parece sugerir.** A capability `dirty-bitmaps`
   do QEMU aparecia com `state: false`, e foi lida como "o bitmap não sobrevive à
   migração" — virou chamado com o fornecedor e medição bloqueada. Queria dizer "este
@@ -184,19 +194,35 @@ from vzdr.tools.dr import ...
 
 ## Fronteiras — a CI verifica
 
-- `vzdr.core.domain` não importa nada de IO: sem libvirt, sem rede, sem banco, sem subprocess.
-- Nenhum módulo do núcleo importa de `vzdr.tools.*`. O núcleo não conhece as features.
-- Uma feature não importa de outra feature. Conversam por eventos.
+Cada linha nomeia **quem** verifica, e não só o quê. Esta seção dizia o que era verificado
+sem nomear o checador, e o meta-checador acusou na primeira execução seis checadores do
+build que nenhuma afirmação reivindicava. Checador sem afirmação é o que alguém apaga no
+dia em que ele der trabalho, sem saber o que apagou.
+
+- `vzdr.core.domain` não importa nada de IO: sem libvirt, sem rede, sem banco, sem
+  subprocess — `check_core_domain_pure.py`.
+- Nenhum módulo do núcleo importa de `vzdr.tools.*`, e uma feature não importa de outra
+  feature; conversam por eventos — `check_import_boundaries.py`.
 - O agente não fala com o banco. Fala com a API — e isso passou a ser **verificado**:
   `psycopg` não é da biblioteca padrão e não está em `TERCEIROS_PERMITIDOS`, então
   `check_alvo_py39.py` recusa. Até a core-002 esta linha estava sob "a CI verifica"
   sem nenhuma CI verificando.
-- Pendência de `docs/pendencias.md` com data de revisão vencida falha o build. É o
+- Pendência de `docs/pendencias.md` com data de revisão vencida falha o build —
+  `check_pendencias.py`. É o
   único checador que falha por tempo passar, e não pelo que você mudou — o conserto
   legítimo é mudar o estado ou mudar a data com motivo.
-- `tenant_id` em toda tabela que guarda dado de tenant, desde a primeira migração.
-  A lista de exceções é fechada e justificada em `specs/core-001-tenancy/spec.md`;
-  acrescentar exceção é alterar a spec, não editar o checador.
+- `tenant_id` em toda tabela que guarda dado de tenant, desde a primeira migração —
+  `check_tenant_id.py`. A lista de exceções é fechada e justificada em
+  `specs/core-001-tenancy/spec.md`; acrescentar exceção é alterar a spec, não editar o
+  checador.
+- Evento declarado numa spec e evento emitido no código são o mesmo conjunto, nos dois
+  sentidos — `check_eventos.py`.
+- Toda conexão com o banco passa pela porta única de `scripts/ambiente_db.py`, que recusa
+  host que não seja o local — `check_dsn_guardada.py`.
+- Toda afirmação de desenho num documento coberto nomeia o mecanismo que a mantém
+  verdadeira, todo mecanismo nomeado existe, e todo checador do build é reivindicado por
+  alguma afirmação — `check_afirmacao_tem_mecanismo.py`. Cobre hoje o plano da `dr-001` e o
+  ADR-0015; o que falta cobrir é impresso em toda execução.
 
 ## O que NUNCA fazer
 
