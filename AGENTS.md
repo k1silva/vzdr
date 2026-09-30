@@ -148,6 +148,13 @@ from vzdr.tools.dr import ...
   seguir**: isso pega a classe inteira — bytecode velho, módulo em memória, escrita
   malfeita —, sem precisar saber a causa. E âncora que não bate é erro, e não pulo: a
   versão à mão imprimia um aviso e seguia, contando como rodada uma mutação que não rodou.
+
+  **E a mensagem de commit cola as linhas que o arnês imprimiu — não as reescreve.** Uma
+  mensagem já afirmou "a conferência reprova" sobre uma mutação que nem tinha rodado: a
+  verificação falhou, o `;` deixou o commit seguir, e a frase estava escrita à mão. Com a
+  linha colada, a frase não existe sem a verificação: se o arnês não rodou, não há linha;
+  se a mutação sobreviveu, a linha diz `SOBREVIVEU` e a mensagem se contradiz sozinha. O
+  `&&` protege quem lembra dele; a linha colada protege quem não lembrou.
 - **Fato é o que ele diz, não o que ele parece sugerir.** A capability `dirty-bitmaps`
   do QEMU aparecia com `state: false`, e foi lida como "o bitmap não sobrevive à
   migração" — virou chamado com o fornecedor e medição bloqueada. Queria dizer "este
