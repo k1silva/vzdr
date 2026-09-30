@@ -1,6 +1,7 @@
 """Saude da protecao: conta sobre fatos, com o relogio vindo de fora."""
 
 import ast
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -251,3 +252,49 @@ def test_o_parametro_nao_sombreia_a_funcao_do_modulo():
     import inspect
 
     assert "idade_do_ponto" not in inspect.signature(esta_degradada).parameters
+
+
+# ── degradada nao vira coluna ───────────────────────────────────────────────
+
+MIGRACOES = Path(__file__).resolve().parents[2] / "deploy" / "migrations"
+
+
+def _colunas_degradadas(sql: str) -> list[str]:
+    """Todo identificador SQL que nomeie degradada — coluna, view ou indice.
+
+    Estrito de proposito: nenhuma migracao precisa do nome, entao falso positivo
+    custa renomear, e falso negativo custa a segunda fonte de verdade.
+    """
+    # Sem `\b`: o sublinhado e caractere de palavra, entao `\b` nao separa
+    # `vm_` de `degradadas`, e o nome no meio de um identificador passava.
+    return re.findall(r"degradad\w*", sql, re.IGNORECASE)
+
+
+def test_degradada_nao_e_coluna_em_migracao_nenhuma():
+    """O risco que o plano dizia conter com "o plano ja diz" — intencao, e nao
+    mecanismo. O meta-checador pegou isso na primeira execucao.
+
+    A resposta a "liste as VMs degradadas" e view ou expressao computada, nao
+    coluna: a partir da coluna existem duas fontes de verdade que podem
+    discordar. Uma view chamada `vm_saude` com a conta dentro passa aqui; uma
+    coluna `degradada` nao.
+    """
+    assert MIGRACOES.is_dir()
+    achados = {
+        arquivo.name: _colunas_degradadas(arquivo.read_text(encoding="utf-8"))
+        for arquivo in sorted(MIGRACOES.glob("*.sql"))
+    }
+    assert {nome: nomes for nome, nomes in achados.items() if nomes} == {}
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "ALTER TABLE vm_protegida ADD COLUMN degradada boolean;",
+        "CREATE TABLE x (id uuid, Degradada BOOLEAN NOT NULL);",
+        "CREATE INDEX vm_degradadas ON vm_protegida (id);",
+    ],
+)
+def test_o_detector_de_coluna_pega_cada_forma(sql):
+    """Detector que nunca reprovou e combinado com cara de verificado."""
+    assert _colunas_degradadas(sql)
