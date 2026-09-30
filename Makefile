@@ -58,6 +58,7 @@ invariants:
 	$(BIN)/python tests/invariants/check_pendencias.py
 	$(BIN)/python tests/invariants/check_eventos.py
 	$(BIN)/python tests/invariants/check_definicao_unica.py
+	$(BIN)/python tests/invariants/check_afirmacao_tem_mecanismo.py
 
 # Fora do `invariants` de proposito: aquele e deterministico e roda sem rede.
 # Este precisa do corpo do PR, entao tem alvo proprio — e FALHA sem entrada, em

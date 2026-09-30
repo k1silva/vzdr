@@ -50,7 +50,11 @@ onde um documento afirma que algo é verificado e nada verifica.
 O motivo está em [`specs/README.md`](../specs/README.md), onde quem vai editar uma spec o
 lê.
 
-- [ ] **Meta-checador bidirecional de coerência documento↔realidade.** Afirmar que algo é
+- [x] **Meta-checador bidirecional de coerência documento↔realidade** —
+      `check_afirmacao_tem_mecanismo.py`, cobrindo por documento: hoje o plano da `dr-001`
+      e o ADR-0015, com o resto impresso em toda execução. Nasceu vermelho nos três lugares
+      previstos antes de rodar, e com um defeito próprio que a primeira execução mostrou.
+      O texto original deste item segue: Afirmar que algo é
       verificado exige o mecanismo existir; afirmar que **não** é exige que ele não exista.
       Declaração estrutural, não textual — lista de exceção datada é o que se quer evitar.
 
