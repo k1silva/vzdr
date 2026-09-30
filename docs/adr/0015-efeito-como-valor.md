@@ -1,7 +1,7 @@
 # ADR-0015: A máquina de estados pede efeitos; não os executa
 
 **Data:** 2026-09-25
-**Status:** aceito — propriedade 4 emendada em 2026-09-29 (ver a emenda na própria propriedade)
+**Status:** aceito — propriedade 4 emendada em 2026-09-29; envelope emendado em 2026-09-30 (ver as emendas no fim)
 
 ## Contexto
 
@@ -200,3 +200,22 @@ Fica mais difícil em três pontos concretos:
 Uma consequência que vale nomear porque parece detalhe: **o id do ciclo no efeito é o que
 permite descartar sem ambiguidade**. Sem ele, "resultado atrasado" e "resultado do ciclo
 atual" são indistinguíveis, e não há conserto posterior que recupere a informação perdida.
+
+## Emenda de 2026-09-30: o efeito diz sobre o que ele é
+
+O texto acima é o original. Esta emenda acrescenta, e não reescreve.
+
+**Todo efeito tem sujeito** — o `vm_id` da VM do ciclo —, e **o efeito de agente diz em qual
+nó roda**. A varredura do envelope perguntou o que o despachante lê e nunca perguntou se o
+efeito tem sujeito, e dois efeitos de leitura nasceram sem: um inventário que não dizia de
+onde, e uma consulta que não dizia de quem. Um inventário respondido pelo agente de outro
+nó voltava vazio, e a reconciliação lia "não há órfão".
+
+O critério do `Alvo` — mesmo alvo quando falham juntos — alcança o nó: agentes de nós
+diferentes falham separado. O nó vem declarado, com a procedência da última consulta ao
+Nova, e é conferido na resposta. "A VM não está neste nó" é desfecho próprio.
+
+O `vm_id` dos efeitos de leitura **não** é chave de exclusão: com chave, a consulta de
+evidência esperaria o lease preso pela cópia zumbi que ela existe para investigar.
+
+Procedência: revisão do #31, e o PR que implementa esta emenda.

@@ -59,6 +59,22 @@ numa fechada. Cada item vira campo, ou vira decisão registrada de que **não** 
 | Versão do contrato | **não é campo** | Evolução aditiva: campo novo é opcional e nunca muda significado. Versão explícita convidaria a ramificar por versão. **Só é correto porque valor desconhecido de campo de segurança é recusa** — sem isso seria aposta de que todos os consumidores estão na mesma versão |
 | O que fazer com valor que não se conhece | **não é campo, é regra** | Campo desconhecido se ignora; valor desconhecido de `alvo`, chave ou categoria se **recusa**, devolvendo o efeito à fila. A distinção é entre informação e regra |
 | O que a preempção faz com o detentor da chave | **não é campo, é regra** | **Coexiste.** Preempção não precisa de exclusividade, precisa de permissão para agir apesar da chave — e não é escritor |
+| **Sobre o que o efeito é** | **campo** `vm_id`, em todo efeito | Linha acrescentada depois, e é a pergunta que produziu o achado inteiro: a varredura perguntou o que o despachante lê, e **nunca perguntou se o efeito tem sujeito**. Dois efeitos de leitura nasceram sem — um inventário que não dizia de onde, uma consulta que não dizia de quem. Quem guardar efeitos usa chave estrangeira **composta** `(tenant_id, vm_id)`, o padrão da `core-001`: com `vm_id` só, a integridade referencial ignora RLS e vira oráculo de existência |
+| **Em qual nó roda** | **campo** `no`, obrigatório no efeito de agente e proibido nos outros | O `Alvo` é por modo de falha, e agentes de nós diferentes falham separado: "agente de origem" sem o nó não é um alvo, são vários. O despachante **não** resolve o nó a partir do `vm_id` — seria ler fora do envelope, e na reconciliação resolver é exatamente o que está em dúvida depois de uma migração. O nó vem **declarado, com procedência** (a última localização que o Nova informou), e é **conferido** na resposta |
+| Quem respondeu | **campo** `no_que_respondeu`, no resultado | Resultado de outro nó não responde. E quando o nó é o certo mas a VM já saiu dele, a resposta é `ResultadoVmAusente` — nunca inventário vazio, que seria verdade sobre o nó e mentira sobre a VM |
+| O `vm_id` da leitura é chave de exclusão? | **não, e é deliberado** | Com chave, a consulta de evidência só rodaria com o lease livre — e o lease está preso pela cópia zumbi que é a razão de ela existir. Deadlock, e não se resolve com preempção: preempção retira capacidade de escrever, e uma leitura não retira nada de ninguém. Registrado aqui porque o atalho de pôr o `vm_id` na chave "de graça" é tentador, e alguém generalizaria |
+
+**Um ciclo é de uma VM só.** Nenhum documento o afirmava, e três pressupunham: o
+`EstadoDoCiclo` tem um `vm_id`; o ciclo "fecha **a** janela", e a janela é o bitmap de uma
+VM; o ponto de recuperação é "de todos os volumes de **uma** VM, do mesmo ciclo" (P5).
+Fica afirmado aqui. Por isso o `vm_id` do efeito é a VM do ciclo, e `responde_a` compara
+o sujeito mesmo que o ciclo já o determine: a igualdade de ciclo protege enquanto a
+regra valer, e a de sujeito protege o dia em que alguém a quebrar sem perceber.
+
+**Tipos removidos.** `criar_checkpoint` e `inventariar_hypervisor` deixaram de existir, e
+um registro guardado com eles é tipo desconhecido — que pede reenvio, e reenviaria para
+sempre. Hoje não há fila nem agente em produção, então remover é de graça. Depois do
+primeiro deploy, remover tipo exige caminho de descontinuação, e isso é da `core-003`.
 
 Um quarto alvo — `API_DA_NUVEM_DE_DESTINO` — é previsível e **não** entra agora: nenhum
 efeito da v1 o usa, e o cercamento por security group que o exigiria está registrado como
@@ -177,7 +193,8 @@ class FecharJanela(EfeitoDeVm): ...   # congela + checkpoint, UMA unidade
 class IniciarCopia(Efeito): ...
 class DescartarBitmap(Efeito): ...
 class ConfirmarNoDestino(Efeito): ...
-class InventariarHypervisor(Efeito): ...   # a reconciliação
+class InventariarVm(Efeito): ...           # da VM, no no declarado; nunca chave
+class ResultadoVmAusente(Resultado): ... # "a VM nao esta neste no"
 class EfeitoDePreempcao(EfeitoDeDisco):
     # A unica categoria que toma chave JA tomada — sem isso o cercamento e
     # impossivel, porque a chave esta presa por quem ele vai derrubar.
