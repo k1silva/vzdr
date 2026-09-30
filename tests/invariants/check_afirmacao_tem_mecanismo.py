@@ -205,8 +205,13 @@ def verificar(raiz: Path) -> list[str]:
 
     agents = raiz / "AGENTS.md"
     if agents.exists():
-        for item in _CRASE.findall(agents.read_text(encoding="utf-8")):
-            reivindicados.add(Path(item.strip()).name)
+        # LINHA A LINHA, e fora de bloco de codigo. A primeira versao pareava as
+        # crases no arquivo inteiro de uma vez, e cada cerca de tres crases
+        # deslocava o pareamento de todas as seguintes: na primeira execucao,
+        # tres checadores nomeados em crase no AGENTS.md sairam como orfaos.
+        for _, linha in linhas_fora_de_blocos(agents.read_text(encoding="utf-8")):
+            for item in _CRASE.findall(linha):
+                reivindicados.add(Path(item.strip()).name)
 
     makefile = raiz / "Makefile"
     no_build = (

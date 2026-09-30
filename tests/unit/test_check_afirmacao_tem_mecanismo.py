@@ -171,3 +171,16 @@ def test_referencias_reconhece_as_quatro_formas():
         "M4",
         "T7",
     ]
+
+
+def test_cerca_de_codigo_antes_da_reivindicacao_nao_a_esconde(tmp_path):
+    """O defeito da primeira execucao real. Pareando crases no arquivo inteiro, a
+    cerca de tres crases deslocava todos os pares seguintes, e tres checadores
+    nomeados no AGENTS.md sairam como orfaos."""
+    agents = "Comandos:\n\n```bash\nmake check\n```\n\nO `check_a.py` verifica a regra A.\n"
+    assert verificar(montar(tmp_path, agents=agents)) == []
+
+
+def test_nome_dentro_de_bloco_de_codigo_nao_reivindica(tmp_path):
+    agents = "```\nO `check_a.py` verifica.\n```\n"
+    assert verificar(montar(tmp_path, agents=agents))
