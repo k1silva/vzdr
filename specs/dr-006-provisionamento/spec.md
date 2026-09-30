@@ -47,7 +47,7 @@ Automático, por VM:
 | Anexar na receptora | Nova `POST /servers/{id}/os-volume_attachments`, receptora escolhida pelo pool |
 | Achar o device | Serial: `/dev/disk/by-id/virtio-<prefixo-do-volume-id>` — nunca `lsblk` por ordem |
 | Anexar o nó no daemon | QMP no receptor: `blockdev-add`. **Durável**, nome de R3 — é a anexação vista de dentro do `qemu-storage-daemon` |
-| Publicar o export | QMP no receptor: `block-export-add`. **Por ciclo**, nome derivado do ciclo. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) como `PublicarExport`, não por este fluxo |
+| Publicar o export | QMP no receptor: `block-export-add`. **Por ciclo e por disco**, nome derivado dos dois. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) como `PublicarExport`, não por este fluxo |
 | **Derrubar o export para cercar** | QMP no receptor: `block-export-del` com `mode: hard`. Pedido pela [`dr-001`](../dr-001-dominio-ciclo/spec.md) quando um agente fica inalcançável com job escrevendo — ver "Cercar o escritor zumbi" |
 | Disparar o seed | Agente do hypervisor: checkpoint + `blockdev-backup` full, com throttle |
 | Entrar no ciclo | Agendador, na frequência do RPO daquela VM |
@@ -109,8 +109,10 @@ plataforma procura. Se existe e confere, adota. Se existe e diverge, para e repo
 "conserta" sozinho.
 
 **O export é a exceção, e não por conveniência.** Ele é por ciclo, e seu nome deriva do
-ciclo, como o bitmap temporário e o checkpoint — a regra de identidade da
-[`dr-001`](../dr-001-dominio-ciclo/spec.md). Repare que `blockdev-add` e `block-export-add`
+ciclo **e do disco** — a regra de identidade da
+[`dr-001`](../dr-001-dominio-ciclo/spec.md). O disco é necessário por causa do R5 abaixo:
+todos os discos de uma VM ficam na mesma receptora, e o servidor NBD dela não aceita dois
+exports com o mesmo nome. Repare que `blockdev-add` e `block-export-add`
 estavam num passo só e **nunca tiveram o mesmo tempo de vida**: o nó é a anexação vista de
 dentro do daemon e dura o que ela dura; o export é o nome exposto na rede. O
 `block-export-del`, inclusive com `mode: hard`, remove o export e **deixa o nó** — o volume

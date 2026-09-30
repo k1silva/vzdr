@@ -23,7 +23,7 @@ Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 
 import enum
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Any, ClassVar, Optional, TypeVar
 from uuid import UUID
 
@@ -31,17 +31,20 @@ __all__ = [
     "PREEMPCAO_DESPEJA_DETENTOR",
     "Alvo",
     "CercarDestino",
+    "CatalogoAmbiguoError",
     "ChaveDeExclusao",
     "ConfirmarNoDestino",
     "ConsultarNoDaVm",
-    "CriarCheckpoint",
     "DescartarBitmap",
     "Efeito",
     "EfeitoDeDisco",
     "EfeitoDePreempcao",
+    "EfeitoDeVm",
+    "FecharJanela",
     "IniciarCopia",
     "InventariarHypervisor",
     "PublicarExport",
+    "RegistroMalformadoError",
     "Resultado",
     "ResultadoDeCopia",
     "ResultadoDeInventario",
@@ -50,12 +53,20 @@ __all__ = [
     "ValorDesconhecidoError",
     "efeito_de_json",
     "pode_tomar_chave_tomada",
+    "chaves_de",
+    "responde_a",
     "resultado_de_json",
+    "se_excluem",
 ]
 
 
 class ValorDesconhecidoError(ValueError):
-    """Valor que esta versao nao interpreta, num campo que carrega regra.
+    """Valor que esta versao nao interpreta, num campo que carrega regra:
+    REENVIAR e alarmar — "contrato mais novo que eu".
+
+    Sao tres casos, e so eles: tipo de efeito, tipo de resultado e alvo que esta
+    versao nao conhece. Registro quebrado nao e isto, e levanta
+    `RegistroMalformadoError`, que pede a acao contraria.
 
     Campo desconhecido se **ignora** — e o que "evolucao aditiva" significa, e e o
     que permite a versao do contrato nao ser campo. Valor desconhecido de campo
@@ -68,6 +79,38 @@ class ValorDesconhecidoError(ValueError):
 
     Mesma regra do `ler_nome` em identidade.py, outro modulo: la a especie
     desconhecida vira um terceiro estado em vez de virar "nao e nosso".
+    """
+
+
+class RegistroMalformadoError(ValueError):
+    """Registro quebrado: DESCARTAR e alarmar. Nunca reenviar.
+
+    Campo ausente, tipo errado, UUID que nao e UUID, chave repetida, efeito de
+    disco com duas chaves, alvo que contradiz o tipo, efeito de VM sem disco. Nada
+    disso e "contrato mais novo": a evolucao do contrato e aditiva e nunca remove
+    campo nem muda significado de campo existente (ADR-0015), entao nenhuma versao
+    futura manda isto.
+
+    Existe separado de `ValorDesconhecidoError` porque o TIPO da excecao e o que
+    decide a acao de quem trata, e as duas acoes sao opostas. Reenviar um registro
+    quebrado e devolve-lo a fila para sempre — o laco que nao termina, com outra
+    roupa.
+    """
+
+
+# **Nunca `except ValueError:` no caminho de despacho.** ValorDesconhecidoError e
+# RegistroMalformadoError herdam as duas de ValueError, e um `except` pelo
+# ancestral captura as duas — que pedem acoes opostas, reenviar e descartar. O
+# teste de que nenhuma herda da outra e necessario e nao suficiente. O remedio
+# nao e aqui: herdar de Exception direto perderia a informacao de que sao erro de
+# valor. E regra de quem despacha, na fila do core-003 e no protocolo do agente.
+
+
+class CatalogoAmbiguoError(RuntimeError):
+    """Defeito DESTA VERSAO do codigo, e nao da mensagem: parar e aparecer.
+
+    Duas classes declarando o mesmo `TIPO`. Reenviar a mensagem entraria em laco,
+    e descarta-la jogaria fora registro valido. Nao e dela o defeito.
     """
 
 
@@ -178,22 +221,62 @@ class Efeito:
 
 @dataclass(frozen=True)
 class EfeitoDeDisco(Efeito):
-    """Efeito que toca disco, e por isso carrega chave de exclusao."""
+    """Efeito que toca UM disco, e por isso segura uma chave de exclusao."""
 
     vm_id: UUID
     disco: str
 
-    def chave_de_exclusao(self) -> ChaveDeExclusao:
-        """Deterministica: mesmo disco, mesma chave, em qualquer ciclo.
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]:
+        """Uma so, e ainda assim no plural — o envelope e o mesmo para todos.
 
-        Nao entra o `ciclo_id` de proposito. Se entrasse, dois ciclos sobre o
-        mesmo disco teriam chaves diferentes e poderiam escrever juntos — que e
-        exatamente o que a chave existe para impedir.
+        Deterministica: mesmo disco, mesma chave, em qualquer ciclo. Nao entra o
+        `ciclo_id` de proposito: se entrasse, dois ciclos sobre o mesmo disco
+        teriam chaves diferentes e poderiam escrever juntos.
         """
-        return ChaveDeExclusao(vm_id=self.vm_id, disco=self.disco)
+        return (ChaveDeExclusao(vm_id=self.vm_id, disco=self.disco),)
 
     def _corpo_json(self) -> dict[str, Any]:
-        return {"chave_de_exclusao": self.chave_de_exclusao().para_json()}
+        return {"chaves_de_exclusao": [c.para_json() for c in self.chaves_de_exclusao()]}
+
+
+@dataclass(frozen=True)
+class EfeitoDeVm(Efeito):
+    """Efeito que age em TODOS os discos da VM de uma vez, como unidade.
+
+    Existe porque a varredura do envelope perguntou o que a fila le, e nao de
+    quantos discos. Checkpoint e congelamento sao da VM: feitos disco a disco, cada
+    disco teria um instante diferente, e com banco num disco e log noutro o ponto
+    de recuperacao pareceria valido e nao seria — sem erro em lugar nenhum,
+    aparecendo so no restore.
+
+    Segura UMA CHAVE POR DISCO. A fila concede o lease so se todas estiverem
+    livres, de uma vez: adquirir chave por chave abriria espaco para dois efeitos
+    segurando metades e esperando um pelo outro.
+    """
+
+    vm_id: UUID
+    discos: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.discos:
+            raise RegistroMalformadoError(f"{type(self).__name__} sem disco nenhum nao age em nada")
+        if len(set(self.discos)) != len(self.discos):
+            raise RegistroMalformadoError(
+                f"{type(self).__name__} com disco repetido: {self.discos}"
+            )
+        # ORDEM CANONICA. Sem ela, `("vda", "vdb")` e `("vdb", "vda")` seriam
+        # valores diferentes com o mesmo conjunto de chaves, e tres coisas
+        # quebrariam em silencio: a fila deixaria de desduplicar pedido igual, o
+        # resultado deixaria de correlacionar por igualdade, e a ida e volta pelo
+        # JSON construiria outro objeto. E alcancavel: a maquina monta a lista a
+        # partir da VM, e a reconciliacao a partir do inventario do hypervisor.
+        object.__setattr__(self, "discos", tuple(sorted(self.discos)))
+
+    def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]:
+        return tuple(ChaveDeExclusao(vm_id=self.vm_id, disco=d) for d in self.discos)
+
+    def _corpo_json(self) -> dict[str, Any]:
+        return {"chaves_de_exclusao": [c.para_json() for c in self.chaves_de_exclusao()]}
 
 
 @dataclass(frozen=True)
@@ -229,13 +312,60 @@ def pode_tomar_chave_tomada(efeito: Efeito) -> bool:
     return isinstance(efeito, EfeitoDePreempcao)
 
 
+def chaves_de(efeito: Efeito) -> tuple[ChaveDeExclusao, ...]:
+    """As chaves que o efeito segura — nenhuma, se ele nao toca disco."""
+    if isinstance(efeito, (EfeitoDeDisco, EfeitoDeVm)):
+        return efeito.chaves_de_exclusao()
+    return ()
+
+
+def _ordem_da_chave(chave: ChaveDeExclusao) -> tuple[str, str]:
+    return (str(chave.vm_id), chave.disco)
+
+
+def se_excluem(a: Efeito, b: Efeito) -> bool:
+    """Dois efeitos se excluem quando as chaves deles SE INTERSECTAM.
+
+    Nao "quando tem a mesma chave". Com chave no plural, "mesma" passa a ser lida
+    como "conjuntos identicos", e ai um efeito de VM sobre `vda, vdb, vdc` e um
+    efeito de disco sobre `vdb` conviveriam — o defeito voltando pela porta da
+    generalizacao. Um disco em comum basta.
+
+    Isto e a regra; quem pode agir APESAR dela e outra pergunta, respondida por
+    `pode_tomar_chave_tomada`.
+    """
+    return bool(set(chaves_de(a)) & set(chaves_de(b)))
+
+
 # ── Os efeitos ──────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class CriarCheckpoint(EfeitoDeDisco):
+class FecharJanela(EfeitoDeVm):
+    """Fecha a janela corrente e abre a proxima, numa unidade so.
+
+    Sao dois passos na descricao — congelar a janela acumulada num bitmap
+    temporario, e criar o checkpoint que passa a acumular a proxima — e UM na
+    execucao. A pergunta que decide nao e quantos passos a prosa descreve: e se
+    existe um instante entre os dois em que uma escrita se perde. Existe. Uma
+    escrita que chegue entre o congelamento e o checkpoint cai no bitmap velho,
+    que ja foi mesclado e nao sera lido de novo, e nao cai no novo, que ainda nao
+    existe. Some das duas contabilidades: nenhum erro, um bloco a menos no
+    espelho. E por isso que o backup incremental do QEMU faz as duas coisas numa
+    `transaction` so, e o laboratorio ja usava `transaction` para a mescla.
+
+    O onus da prova fica invertido: um efeito ate a medicao provar que da para
+    separar. Separar depois e facil; descobrir a perda em producao nao tem volta.
+
+    E da VM, e nao do disco, pelo mesmo motivo por outro lado: checkpoint por
+    disco daria um instante por disco.
+
+    Antes havia `CriarCheckpoint`, efeito de disco, e nenhum efeito criava o
+    bitmap temporario — embora `DescartarBitmap` o removesse.
+    """
+
     ALVO = Alvo.AGENTE_DE_ORIGEM
-    TIPO = "criar_checkpoint"
+    TIPO = "fechar_janela"
 
 
 @dataclass(frozen=True)
@@ -339,12 +469,25 @@ class Resultado:
     - **sem chave** — `InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave
       nenhuma, e nada impede dois pendentes.
 
-    Nos dois ultimos casos a correlacao e inofensiva **porque a absorcao e
-    idempotente**, e isso e obrigacao e nao coincidencia: preempcao e idempotente
-    por construcao, e leitura repetida devolve o mesmo valor. No dia em que
-    existir uma preempcao que nao seja idempotente, esta e a linha que reprova a
-    ideia — e nao um docstring dizendo que a chave garante o que ela nunca
-    garantiu.
+    Na preempcao, a correlacao e inofensiva **porque a absorcao e idempotente**, e
+    isso e obrigacao e nao coincidencia. No dia em que existir uma preempcao que
+    nao seja idempotente, esta e a linha que reprova a ideia.
+
+    **Na classe sem chave, a correlacao NAO esta garantida hoje.** Idempotencia
+    cobre a repeticao; nao cobre a resposta ERRADA. `InventariarHypervisor` nao diz
+    qual hypervisor, `ConsultarNoDaVm` nao diz qual VM, e os resultados nao dizem
+    quem respondeu. Um inventario respondido pelo agente de outro hypervisor volta
+    com `nomes_encontrados` vazio, a reconciliacao le "nao ha orfao", e o orfao
+    fica — silencioso, com a forma toda certa. A versao anterior deste texto dizia
+    que a classe era segura; nao era. Quem decide o conserto e a T7, e nenhum
+    codigo deve correlacionar resultado desses dois efeitos antes disso.
+
+    **Correlacao e IGUALDADE do conjunto de chaves; exclusao e INTERSECAO.** O
+    mesmo campo tem duas relacoes, e confundi-las e o erro facil: `se_excluem`
+    existe e esta pronta, e usada para correlacionar faria um resultado de
+    `FecharJanela` sobre `vda, vdb` casar com um `IniciarCopia` sobre `vdb`. Para
+    correlacionar existe `responde_a`. E e por causa da igualdade que a ordem
+    canonica das chaves nao e estetica.
 
     `tenant_id` esta aqui pelo mesmo motivo que esta no efeito: o resultado
     atravessa a mesma fila e a mesma tabela sob RLS, e quem isola nao deveria
@@ -357,10 +500,30 @@ class Resultado:
     tenant_id: UUID
     ciclo_id: UUID
     tipo_do_efeito: str
-    #: Sem padrao: quem nao tem chave passa `None` explicitamente. Com padrao
-    #: aqui, toda subclasse seria obrigada a ter padrao tambem — e ai `sucesso`
-    #: e `concluido` ganhariam um, o que faria silencio significar sucesso.
-    chave: Optional[ChaveDeExclusao]
+    #: As mesmas chaves do efeito que este resultado responde — no plural, como
+    #: no efeito. Sem padrao: quem nao tem chave passa `()` explicitamente. Com
+    #: padrao aqui, toda subclasse seria obrigada a ter padrao tambem — e ai
+    #: `sucesso` e `concluido` ganhariam um, e silencio significaria sucesso.
+    chaves: tuple[ChaveDeExclusao, ...]
+
+    def __post_init__(self) -> None:
+        # A mesma recusa que a leitura do JSON ja fazia: dois caminhos que fazem o
+        # mesmo trabalho, e nenhum deles e o frouxo.
+        if len(set(self.chaves)) != len(self.chaves):
+            raise RegistroMalformadoError(f"resultado com chave repetida: {self.chaves}")
+        # ZERO OU UMA VM — e nao "exatamente uma", como no efeito de disco: resultado
+        # de efeito sem chave e legitimo. Sem esta conferencia, o leitor do efeito
+        # recusava chaves de duas VMs e o do resultado aceitava. Um resultado assim
+        # nunca responde a nada, porque `responde_a` compara conjuntos, e o efeito
+        # fica pendente para sempre esperando resposta que ja chegou e foi ignorada.
+        vms = {c.vm_id for c in self.chaves}
+        if len(vms) > 1:
+            raise RegistroMalformadoError(
+                f"resultado com chaves de VMs diferentes: {sorted(map(str, vms))}"
+            )
+        # Ordem canonica, pelo mesmo motivo do EfeitoDeVm: a correlacao e por
+        # IGUALDADE, e igualdade de tupla depende de ordem.
+        object.__setattr__(self, "chaves", tuple(sorted(self.chaves, key=_ordem_da_chave)))
 
     def para_json(self) -> dict[str, Any]:
         dados: dict[str, Any] = {
@@ -369,8 +532,7 @@ class Resultado:
             "ciclo_id": str(self.ciclo_id),
             "tipo_do_efeito": self.tipo_do_efeito,
         }
-        if self.chave is not None:
-            dados["chave"] = self.chave.para_json()
+        dados["chaves"] = [c.para_json() for c in self.chaves]
         dados.update(self._corpo_json())
         return dados
 
@@ -466,6 +628,24 @@ class ResultadoDeLocalizacao(Resultado):
         return {"no_atual": _exigir_texto(dados, "no_atual")}
 
 
+def responde_a(resultado: Resultado, efeito: Efeito) -> bool:
+    """Este resultado e deste efeito? Por IGUALDADE, nunca por intersecao.
+
+    Existe para que a funcao certa seja a que esta a mao. Sem ela, quem precisasse
+    correlacionar encontraria `se_excluem` pronta — e um resultado de `FecharJanela`
+    sobre `vda, vdb` passaria a responder a um `IniciarCopia` sobre `vdb`.
+
+    Tenant, ciclo, tipo e o conjunto inteiro de chaves. Tenant entra porque
+    correlacao que cruzasse tenant seria o oraculo que o ADR-0006 fecha.
+    """
+    return (
+        resultado.tenant_id == efeito.tenant_id
+        and resultado.ciclo_id == efeito.ciclo_id
+        and resultado.tipo_do_efeito == efeito.TIPO
+        and set(resultado.chaves) == set(chaves_de(efeito))
+    )
+
+
 # ── Conversao de corpo ─────────────────────────────────────────
 
 # Efeito e resultado sao convertidos e CONFERIDOS pelos mesmos auxiliares. Copiar
@@ -482,14 +662,14 @@ class ResultadoDeLocalizacao(Resultado):
 
 def _exigir(dados: Mapping[str, Any], nome: str) -> Any:
     if nome not in dados:
-        raise ValorDesconhecidoError(f"sem o campo obrigatorio {nome!r}")
+        raise RegistroMalformadoError(f"sem o campo obrigatorio {nome!r}")
     return dados[nome]
 
 
 def _exigir_bool(dados: Mapping[str, Any], nome: str) -> bool:
     valor = _exigir(dados, nome)
     if not isinstance(valor, bool):
-        raise ValorDesconhecidoError(
+        raise RegistroMalformadoError(
             f"{nome!r} tem que ser booleano, e veio {valor!r} ({type(valor).__name__}). "
             'Texto nao vira booleano por conveniencia: "false" e verdadeiro.'
         )
@@ -501,7 +681,7 @@ def _exigir_inteiro(dados: Mapping[str, Any], nome: str) -> int:
     # `isinstance(True, int)` e verdadeiro em Python, entao booleano precisa ser
     # recusado a mao — senao `True` entra como 1 na telemetria.
     if isinstance(valor, bool) or not isinstance(valor, int):
-        raise ValorDesconhecidoError(
+        raise RegistroMalformadoError(
             f"{nome!r} tem que ser inteiro, e veio {valor!r} ({type(valor).__name__}). "
             "Numero em texto quebra a soma depois, longe daqui."
         )
@@ -518,24 +698,36 @@ def _exigir_uuid(dados: Mapping[str, Any], nome: str) -> UUID:
     """
     valor = _exigir(dados, nome)
     if not isinstance(valor, str):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser UUID em texto, e veio {valor!r}")
+        raise RegistroMalformadoError(f"{nome!r} tem que ser UUID em texto, e veio {valor!r}")
     try:
         return UUID(valor)
     except ValueError as erro:
-        raise ValorDesconhecidoError(f"{nome!r} nao e UUID: {valor!r}") from erro
+        raise RegistroMalformadoError(f"{nome!r} nao e UUID: {valor!r}") from erro
 
 
-def _exigir_mapa(dados: Mapping[str, Any], nome: str) -> Mapping[str, Any]:
+def _exigir_chaves(dados: Mapping[str, Any], nome: str) -> tuple[ChaveDeExclusao, ...]:
+    """Lista de chaves; vazia vale, repetida nao.
+
+    Mesmo caminho para efeito e resultado — dois leitores de chave seriam dois
+    lados, e um deles viraria o frouxo.
+    """
     valor = _exigir(dados, nome)
-    if not isinstance(valor, Mapping):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser objeto, e veio {valor!r}")
-    return valor
+    if isinstance(valor, (str, Mapping)) or not isinstance(valor, (list, tuple)):
+        raise RegistroMalformadoError(f"{nome!r} tem que ser lista de chaves, e veio {valor!r}")
+    chaves = []
+    for item in valor:
+        if not isinstance(item, Mapping):
+            raise RegistroMalformadoError(f"{nome!r} tem item que nao e objeto: {item!r}")
+        chaves.append(ChaveDeExclusao.de_json(item))
+    if len(set(chaves)) != len(chaves):
+        raise RegistroMalformadoError(f"{nome!r} com chave repetida")
+    return tuple(chaves)
 
 
 def _exigir_texto(dados: Mapping[str, Any], nome: str) -> str:
     valor = _exigir(dados, nome)
     if not isinstance(valor, str):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser texto, e veio {valor!r}")
+        raise RegistroMalformadoError(f"{nome!r} tem que ser texto, e veio {valor!r}")
     return valor
 
 
@@ -544,17 +736,17 @@ def _texto_ou_nada(dados: Mapping[str, Any], nome: str) -> Optional[str]:
     if valor is None:
         return None
     if not isinstance(valor, str):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser texto ou nada, e veio {valor!r}")
+        raise RegistroMalformadoError(f"{nome!r} tem que ser texto ou nada, e veio {valor!r}")
     return valor
 
 
 def _exigir_lista_de_texto(dados: Mapping[str, Any], nome: str) -> tuple[str, ...]:
     valor = _exigir(dados, nome)
     if isinstance(valor, str) or not isinstance(valor, (list, tuple)):
-        raise ValorDesconhecidoError(f"{nome!r} tem que ser lista de texto, e veio {valor!r}")
+        raise RegistroMalformadoError(f"{nome!r} tem que ser lista de texto, e veio {valor!r}")
     for item in valor:
         if not isinstance(item, str):
-            raise ValorDesconhecidoError(f"{nome!r} tem item que nao e texto: {item!r}")
+            raise RegistroMalformadoError(f"{nome!r} tem item que nao e texto: {item!r}")
     return tuple(valor)
 
 
@@ -589,17 +781,13 @@ def _por_tipo(raiz: type[T]) -> dict[str, type[T]]:
             continue
         anterior = achados.get(tipo)
         if anterior is not None:
-            raise ValorDesconhecidoError(
+            raise CatalogoAmbiguoError(
                 f"TIPO {tipo!r} declarado por duas classes: "
                 f"{anterior.__name__} e {classe.__name__}. Uma delas venceria "
                 "conforme a ordem de visita, que nao e estavel."
             )
         achados[tipo] = classe
     return achados
-
-
-def _campos(classe: type) -> dict[str, Any]:
-    return {campo.name: campo for campo in fields(classe)}
 
 
 def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
@@ -622,7 +810,7 @@ def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
             "errado, que e o defeito que o Alvo existe para impedir."
         ) from erro
     if alvo is not classe.ALVO:
-        raise ValorDesconhecidoError(
+        raise RegistroMalformadoError(
             f"{classe.TIPO!r} declara alvo {classe.ALVO.value!r}, e o efeito "
             f"chegou com {alvo.value!r}. Contradicao nao se resolve escolhendo um."
         )
@@ -631,11 +819,22 @@ def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
         "tenant_id": _exigir_uuid(dados, "tenant_id"),
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
     }
-    nomes = _campos(classe)
-    if "vm_id" in nomes:
-        chave = ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave_de_exclusao"))
-        argumentos["vm_id"] = chave.vm_id
-        argumentos["disco"] = chave.disco
+    if issubclass(classe, (EfeitoDeDisco, EfeitoDeVm)):
+        chaves = _exigir_chaves(dados, "chaves_de_exclusao")
+        vms = {c.vm_id for c in chaves}
+        if len(vms) != 1:
+            raise RegistroMalformadoError(
+                f"{classe.TIPO!r} com chaves de VMs diferentes: {sorted(map(str, vms))}"
+            )
+        argumentos["vm_id"] = chaves[0].vm_id
+        if issubclass(classe, EfeitoDeDisco):
+            if len(chaves) != 1:
+                raise RegistroMalformadoError(
+                    f"{classe.TIPO!r} age num disco so, e chegou com {len(chaves)} chaves"
+                )
+            argumentos["disco"] = chaves[0].disco
+        else:
+            argumentos["discos"] = tuple(c.disco for c in chaves)
     return classe(**argumentos)
 
 
@@ -648,14 +847,11 @@ def resultado_de_json(dados: Mapping[str, Any]) -> Resultado:
             f"tipo de resultado desconhecido: {tipo!r}. Esta versao conhece {sorted(catalogo)}."
         )
     classe = catalogo[str(tipo)]
-    chave_crua = dados.get("chave")
     argumentos: dict[str, Any] = {
         "tenant_id": _exigir_uuid(dados, "tenant_id"),
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
         "tipo_do_efeito": _exigir_texto(dados, "tipo_do_efeito"),
-        "chave": None
-        if chave_crua is None
-        else ChaveDeExclusao.de_json(_exigir_mapa(dados, "chave")),
+        "chaves": _exigir_chaves(dados, "chaves"),
     }
     argumentos.update(classe._corpo_de_json(dados))
     return classe(**argumentos)

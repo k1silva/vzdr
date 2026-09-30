@@ -29,10 +29,11 @@ Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 import enum
 import re
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 from uuid import UUID
 
 __all__ = [
+    "DiscoInvalidoError",
     "Especie",
     "Leitura",
     "NomeDeCiclo",
@@ -65,10 +66,15 @@ class Especie(enum.Enum):
 
 @dataclass(frozen=True)
 class NomeDeCiclo:
-    """Nome nosso, de especie que esta versao interpreta."""
+    """Nome nosso, de especie que esta versao interpreta.
+
+    `disco` so existe no export, e e obrigatorio nele. Bitmap e checkpoint nao o
+    tem, e pelo motivo oposto em cada um — ver `nome_de`.
+    """
 
     especie: Especie
     ciclo_id: UUID
+    disco: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -97,46 +103,95 @@ class NomeNossoIlegivel:
 Leitura = Union[NomeDeCiclo, NomeNossoIlegivel, None]
 
 
+class DiscoInvalidoError(ValueError):
+    """Disco que o leitor nao conseguiria ler de volta.
+
+    O escritor recusa o que o leitor recusaria. Se `nome_do_export` aceitasse
+    qualquer texto, um alvo de disco com caractere fora de `[a-z0-9]` produziria
+    um nome que `ler_nome` devolveria como "nao e nosso" — a pior das respostas,
+    porque e nao limpar orfao nosso. E a assimetria de sempre, no sentido
+    contrario: aqui o escritor aceitava o que o leitor recusa.
+    """
+
+
+#: Alvo de disco como a libvirt o nomeia: `vda`, `vdb`, `sda`, `nvme0n1`. Sem
+#: hifen, porque o hifen e o separador do nome — com ele, `vzdr-exp-<hex>-a-b`
+#: teria duas leituras.
+_DISCO = re.compile(r"[a-z0-9]+")
+
 # 32 digitos hexadecimais minusculos: e o `UUID.hex`, sem hifens.
 #
 # Minusculo e exigencia, nao estilo. Aceitar maiusculo faria dois nomes
 # diferentes mapearem para o mesmo ciclo, e "orfao e nome cujo ciclo nao esta
 # ativo" deixaria de ser uma definicao para virar uma consulta com empate.
+#
 # `fullmatch`, e sem `^...$`: em Python o `$` casa TAMBEM antes de uma quebra de
 # linha final, entao `vzdr-bmp-<hex>\n` passava por nosso. Nome chega de saida de
 # comando, e saida de comando termina em `\n` — o defeito nao seria raro, e o
 # preco dele e tratar como nosso um nome que nao e exatamente o nosso.
-_LEITOR = re.compile(re.escape(PREFIXO) + r"-(?P<especie>[a-z]{3})-(?P<ciclo>[0-9a-f]{32})")
+_LEITOR = re.compile(
+    re.escape(PREFIXO) + r"-(?P<especie>[a-z]{3})-(?P<ciclo>[0-9a-f]{32})(?:-(?P<disco>[a-z0-9]+))?"
+)
+
+#: Quais especies levam disco no nome. So o export.
+#:
+#: - export: um por disco, e o R5 da dr-006 poe todos os discos de uma VM na
+#:   MESMA receptora — o mesmo servidor NBD. O NBD escolhe export por nome, entao
+#:   dois exports do mesmo ciclo com o mesmo nome no mesmo servidor sao
+#:   impossiveis: o segundo `block-export-add` falha.
+#: - checkpoint: e da VM, criado numa chamada so sobre todos os discos. Um nome
+#:   por ciclo e o certo.
+#: - bitmap temporario: o QEMU separa nomes de bitmap por no de bloco, entao o
+#:   mesmo nome em cada disco nao colide.
+_COM_DISCO = frozenset({Especie.EXPORT})
 
 
-def nome_de(especie: Especie, ciclo_id: UUID) -> str:
-    """O nome de uma especie para um ciclo.
+def nome_de(especie: Especie, ciclo_id: UUID, disco: Optional[str] = None) -> str:
+    """O nome de uma especie para um ciclo — e, no export, para um disco.
 
-    Deterministico: o mesmo par sempre produz a mesma string, em qualquer
-    processo e em qualquer execucao. E o que permite o agente reencontrar o
-    recurso depois de um reinicio, sem guardar nada.
+    Deterministico: os mesmos argumentos sempre produzem a mesma string, em
+    qualquer processo e em qualquer execucao. E o que permite o agente
+    reencontrar o recurso depois de um reinicio, sem guardar nada.
+
+    Disco onde nao cabe, ou falta onde e obrigatorio, e recusa: o nome sairia
+    num formato que `ler_nome` nao devolve como nosso.
     """
+    if especie in _COM_DISCO:
+        if disco is None:
+            raise DiscoInvalidoError(f"{especie.name} exige o disco no nome")
+        if not _DISCO.fullmatch(disco):
+            raise DiscoInvalidoError(
+                f"disco {disco!r} fora de [a-z0-9]: o nome sairia num formato que "
+                "ler_nome nao reconheceria como nosso, e o orfao nao seria limpo"
+            )
+        return f"{PREFIXO}-{especie.value}-{ciclo_id.hex}-{disco}"
+    if disco is not None:
+        raise DiscoInvalidoError(f"{especie.name} e por ciclo, e nao leva disco no nome")
     return f"{PREFIXO}-{especie.value}-{ciclo_id.hex}"
 
 
 def nome_do_bitmap(ciclo_id: UUID) -> str:
-    """O bitmap temporario do ciclo."""
+    """O bitmap temporario do ciclo — o mesmo nome em cada disco, e nao colide."""
     return nome_de(Especie.BITMAP, ciclo_id)
 
 
 def nome_do_checkpoint(ciclo_id: UUID) -> str:
-    """O checkpoint que o ciclo cria."""
+    """O checkpoint que o ciclo cria, um so para a VM inteira."""
     return nome_de(Especie.CHECKPOINT, ciclo_id)
 
 
-def nome_do_export(ciclo_id: UUID) -> str:
-    """O export publicado no destino, por ciclo.
+def nome_do_export(ciclo_id: UUID, disco: str) -> str:
+    """O export publicado no destino, por ciclo E por disco.
 
-    Por ciclo, e nao por disco: com nome por disco, um cercamento atrasado
-    derrubaria o export do ciclo seguinte. Ver a emenda ao R3 em
-    specs/dr-006-provisionamento/spec.md.
+    Por ciclo, e nao so por disco: com nome por disco, um cercamento atrasado
+    derrubaria o export do ciclo seguinte (emenda ao R3 da dr-006).
+
+    E por disco, e nao so por ciclo: o R5 da dr-006 poe os discos de uma VM na
+    mesma receptora, e o NBD nao aceita dois exports com o mesmo nome no mesmo
+    servidor. A primeira versao desta funcao nao recebia o disco, e numa VM de
+    dois discos o segundo `block-export-add` falharia.
     """
-    return nome_de(Especie.EXPORT, ciclo_id)
+    return nome_de(Especie.EXPORT, ciclo_id, disco)
 
 
 def ler_nome(nome: str) -> Leitura:
@@ -144,9 +199,12 @@ def ler_nome(nome: str) -> Leitura:
 
     - `None` — nao e nosso. `tmp1`, `dr-1727280000`, um bitmap que o cliente
       mantem por conta dele. Nao tocar.
-    - `NomeDeCiclo` — nosso, especie conhecida. Candidato a orfao.
-    - `NomeNossoIlegivel` — nosso pela forma, especie que esta versao nao
-      interpreta. Nao tocar **e** reportar.
+    - `NomeDeCiclo` — nosso, especie conhecida e forma certa para ela. Candidato
+      a orfao.
+    - `NomeNossoIlegivel` — nosso pela forma geral, mas que esta versao nao
+      interpreta: especie desconhecida, ou especie conhecida com o disco onde nao
+      cabe ou faltando onde e obrigatorio. Nao tocar **e** reportar. Um export
+      sem disco e exatamente o nome que a versao anterior desta funcao produzia.
 
     Nada aqui levanta excecao: nome alheio e o caso COMUM numa varredura de
     hypervisor, e excecao empurraria quem varre a envolver cada nome num `try`.
@@ -156,8 +214,11 @@ def ler_nome(nome: str) -> Leitura:
         return None
     crua = casou.group("especie")
     ciclo_id = UUID(hex=casou.group("ciclo"))
+    disco = casou.group("disco")
     try:
         especie = Especie(crua)
     except ValueError:
         return NomeNossoIlegivel(especie_crua=crua, ciclo_id=ciclo_id)
-    return NomeDeCiclo(especie=especie, ciclo_id=ciclo_id)
+    if (especie in _COM_DISCO) != (disco is not None):
+        return NomeNossoIlegivel(especie_crua=crua, ciclo_id=ciclo_id)
+    return NomeDeCiclo(especie=especie, ciclo_id=ciclo_id, disco=disco)
