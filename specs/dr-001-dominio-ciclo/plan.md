@@ -240,7 +240,7 @@ mecanismo.
 | Risco | Mitigação |
 | --- | --- |
 | A invariante da falha cair numa "otimização" | Teste **parametrizado sobre a enumeração de falhas**, afirmando que nenhum caminho produz resync completo. É o teste mais importante do projeto, não só da spec **Mecanismo:** Mecanismo ainda não existe: `T6`. |
-| A evidência ser pedida ao detentor do lease | A spec diz explicitamente que a consulta é sobre o hypervisor e roteável por qualquer agente com acesso a ele. É a implementação natural e é a errada **Mecanismo:** Mecanismo ainda não existe: `T7`. |
+| A evidência ser pedida à instância que detém o lease | A consulta vai para o **nó declarado** no envelope e é respondida por quem serve aquele nó, nunca pela instância que detém o lease; resposta de outro nó não responde. Pedir ao detentor é a implementação natural e é a errada **Mecanismo:** `tests/unit/test_efeitos.py::test_resposta_de_outro_no_nao_responde`; a consulta pedida ao nó e não ao detentor, `T7`. |
 | A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela **Mecanismo:** `tests/unit/test_efeitos.py::test_so_preempcao_toma_chave_tomada`; a liberação da chave, `T7`. |
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
 | Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
