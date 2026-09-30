@@ -27,7 +27,7 @@ from vzdr.core.domain.efeitos import (
     EfeitoDeVm,
     FecharJanela,
     IniciarCopia,
-    InventariarHypervisor,
+    InventariarVm,
     PublicarExport,
     RegistroMalformadoError,
     Resultado,
@@ -35,6 +35,7 @@ from vzdr.core.domain.efeitos import (
     ResultadoDeInventario,
     ResultadoDeLocalizacao,
     ResultadoSimples,
+    ResultadoVmAusente,
     ValorDesconhecidoError,
     _por_tipo,
     chaves_de,
@@ -57,15 +58,19 @@ DE_DISCO = (
     CercarDestino,
 )
 DE_VM = (FecharJanela,)
-SEM_DISCO = (InventariarHypervisor, ConsultarNoDaVm)
+SEM_DISCO = (InventariarVm, ConsultarNoDaVm)
+
+
+NO = "no-01"
 
 
 def um(classe, **troca):
-    base = {"tenant_id": TENANT, "ciclo_id": CICLO}
+    no = NO if classe.ALVO is Alvo.AGENTE_DE_ORIGEM else None
+    base = {"tenant_id": TENANT, "ciclo_id": CICLO, "vm_id": VM, "no": no}
     if issubclass(classe, EfeitoDeDisco):
-        base.update(vm_id=VM, disco="vda")
+        base.update(disco="vda")
     elif issubclass(classe, EfeitoDeVm):
-        base.update(vm_id=VM, discos=("vda", "vdb"))
+        base.update(discos=("vda", "vdb"))
     base.update(troca)
     return classe(**base)
 
@@ -151,7 +156,7 @@ def test_a_chave_sobrevive_a_serializacao(efeito):
 def test_efeito_sem_disco_nao_tem_chave():
     """Inventariar e consultar o Nova nao escrevem nada; exigir chave deles
     faria a exclusao bloquear leitura."""
-    assert chaves_de(um(InventariarHypervisor)) == ()
+    assert chaves_de(um(InventariarVm)) == ()
 
 
 # ── Preempcao ───────────────────────────────────────────────────────────────
@@ -191,7 +196,7 @@ def test_preempcao_repetida_e_o_mesmo_valor():
         (FecharJanela, Alvo.AGENTE_DE_ORIGEM),
         (IniciarCopia, Alvo.AGENTE_DE_ORIGEM),
         (DescartarBitmap, Alvo.AGENTE_DE_ORIGEM),
-        (InventariarHypervisor, Alvo.AGENTE_DE_ORIGEM),
+        (InventariarVm, Alvo.AGENTE_DE_ORIGEM),
         (PublicarExport, Alvo.RECEPTORA),
         (ConfirmarNoDestino, Alvo.RECEPTORA),
         (CercarDestino, Alvo.RECEPTORA),
@@ -210,7 +215,7 @@ def test_a_consulta_ao_nova_nao_e_do_agente():
     no unico cenario em que serve — e um no morto bloquearia aquele disco para
     sempre.
     """
-    assert um(ConsultarNoDaVm).alvo is not um(InventariarHypervisor).alvo
+    assert um(ConsultarNoDaVm).alvo is not um(InventariarVm).alvo
 
 
 @pytest.mark.parametrize("efeito", TODOS, ids=lambda e: e.TIPO)
@@ -266,7 +271,13 @@ def test_alvo_que_contradiz_o_tipo_recusa():
 
 def test_tipo_de_resultado_desconhecido_recusa():
     dados = ResultadoSimples(
-        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(), sucesso=True
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="x",
+        vm_id=VM,
+        no_que_respondeu=None,
+        chaves=(),
+        sucesso=True,
     ).para_json()
     dados["tipo"] = "telepatia"
     with pytest.raises(ValorDesconhecidoError):
@@ -295,6 +306,8 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="descartar_bitmap",
+        vm_id=VM,
+        no_que_respondeu=NO,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=True,
     ),
@@ -302,6 +315,8 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="cercar_destino",
+        vm_id=VM,
+        no_que_respondeu=None,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=False,
         motivo="export ja nao existia",
@@ -310,6 +325,8 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="iniciar_copia",
+        vm_id=VM,
+        no_que_respondeu=NO,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         bytes_transferidos=17_510_400,
         concluido=True,
@@ -317,7 +334,9 @@ RESULTADOS = [
     ResultadoDeInventario(
         tenant_id=TENANT,
         ciclo_id=CICLO,
-        tipo_do_efeito="inventariar_hypervisor",
+        tipo_do_efeito="inventariar_vm",
+        vm_id=VM,
+        no_que_respondeu=NO,
         chaves=(),
         job_em_curso=True,
         nomes_encontrados=("vzdr-bmp-" + "a" * 32,),
@@ -326,8 +345,18 @@ RESULTADOS = [
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="consultar_no_da_vm",
+        vm_id=VM,
+        no_que_respondeu=None,
         chaves=(),
         no_atual="node-02",
+    ),
+    ResultadoVmAusente(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="inventariar_vm",
+        vm_id=VM,
+        no_que_respondeu="no-01",
+        chaves=(),
     ),
 ]
 
@@ -349,7 +378,14 @@ def test_resultado_ida_e_volta(resultado):
 
 def test_resultado_sem_ciclo_id_nao_existe():
     with pytest.raises(TypeError):
-        ResultadoSimples(tenant_id=TENANT, tipo_do_efeito="x", chaves=(), sucesso=True)
+        ResultadoSimples(
+            tenant_id=TENANT,
+            tipo_do_efeito="x",
+            vm_id=VM,
+            no_que_respondeu=None,
+            chaves=(),
+            sucesso=True,
+        )
 
 
 def test_silencio_nao_pode_significar_sucesso():
@@ -361,10 +397,23 @@ def test_silencio_nao_pode_significar_sucesso():
     obrigatorios.
     """
     with pytest.raises(TypeError):
-        ResultadoSimples(tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=())
+        ResultadoSimples(
+            tenant_id=TENANT,
+            ciclo_id=CICLO,
+            tipo_do_efeito="x",
+            vm_id=VM,
+            no_que_respondeu=None,
+            chaves=(),
+        )
     with pytest.raises(TypeError):
         ResultadoDeCopia(
-            tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(), bytes_transferidos=0
+            tenant_id=TENANT,
+            ciclo_id=CICLO,
+            tipo_do_efeito="x",
+            vm_id=VM,
+            no_que_respondeu=None,
+            chaves=(),
+            bytes_transferidos=0,
         )
 
 
@@ -395,7 +444,7 @@ def test_resultado_correlaciona_sem_id_proprio():
 
 
 def test_resultado_de_efeito_sem_disco_nao_carrega_chave():
-    inventario = _do_efeito("inventariar_hypervisor")
+    inventario = _do_efeito("inventariar_vm")
     assert inventario.chaves == ()
     assert inventario.para_json()["chaves"] == []
 
@@ -410,23 +459,19 @@ def test_o_envelope_tem_exatamente_os_campos_da_varredura():
     por que ele nao estava na tabela do plano. Sem isto, o envelope volta a
     crescer de emenda em emenda, que foi o que a varredura fechou.
     """
-    assert {c.name for c in dataclasses.fields(Efeito)} == {"tenant_id", "ciclo_id"}
-    assert {c.name for c in dataclasses.fields(EfeitoDeDisco)} == {
-        "tenant_id",
-        "ciclo_id",
-        "vm_id",
-        "disco",
-    }
+    # Segundo caso de "campo novo depois", e o motivo de nao estarem na tabela: a
+    # varredura perguntou o que o despachante le, e NUNCA perguntou se o efeito tem
+    # sujeito. `vm_id` diz sobre o que o efeito e; `no` diz onde o efeito de agente
+    # roda, porque agentes de nos diferentes falham separado e o Alvo e por modo
+    # de falha.
+    envelope = {"tenant_id", "ciclo_id", "vm_id", "no"}
+    assert {c.name for c in dataclasses.fields(Efeito)} == envelope
+    assert {c.name for c in dataclasses.fields(EfeitoDeDisco)} == envelope | {"disco"}
     # O primeiro caso de "campo novo depois", e o motivo de ele nao estar na
     # tabela: a varredura perguntou O QUE a fila le, e nao DE QUANTOS DISCOS.
     # Checkpoint e congelamento sao da VM, e feitos disco a disco dariam um
     # instante por disco.
-    assert {c.name for c in dataclasses.fields(EfeitoDeVm)} == {
-        "tenant_id",
-        "ciclo_id",
-        "vm_id",
-        "discos",
-    }
+    assert {c.name for c in dataclasses.fields(EfeitoDeVm)} == envelope | {"discos"}
 
 
 def test_todo_efeito_declara_tipo_e_alvo():
@@ -452,6 +497,8 @@ def _simples(**troca):
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
+        "vm_id": str(VM),
+        "no_que_respondeu": NO,
         "chaves": [],
         "sucesso": True,
         "motivo": None,
@@ -480,6 +527,8 @@ def test_copia_nao_concluida_nao_vira_concluida():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
+        "vm_id": str(VM),
+        "no_que_respondeu": NO,
         "chaves": [{"vm_id": str(VM), "disco": "vda"}],
         "bytes_transferidos": 1,
         "concluido": "false",
@@ -495,6 +544,8 @@ def test_numero_em_texto_recusa():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
+        "vm_id": str(VM),
+        "no_que_respondeu": NO,
         "chaves": [],
         "bytes_transferidos": "17510400",
         "concluido": True,
@@ -511,6 +562,8 @@ def test_booleano_nao_passa_por_inteiro():
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
+        "vm_id": str(VM),
+        "no_que_respondeu": NO,
         "chaves": [],
         "bytes_transferidos": True,
         "concluido": True,
@@ -532,7 +585,9 @@ def test_texto_no_lugar_de_lista_recusa():
         "tipo": "inventario",
         "tenant_id": str(TENANT),
         "ciclo_id": str(CICLO),
-        "tipo_do_efeito": "inventariar_hypervisor",
+        "tipo_do_efeito": "inventariar_vm",
+        "vm_id": str(VM),
+        "no_que_respondeu": NO,
         "chaves": [],
         "job_em_curso": False,
         "nomes_encontrados": "vzdr-bmp-x",
@@ -564,6 +619,8 @@ def test_dois_cercamentos_do_mesmo_ciclo_e_disco_sao_iguais():
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="cercar_destino",
+        vm_id=VM,
+        no_que_respondeu=None,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=True,
     )
@@ -571,16 +628,18 @@ def test_dois_cercamentos_do_mesmo_ciclo_e_disco_sao_iguais():
 
 
 def test_efeito_sem_chave_tambem_depende_de_idempotencia():
-    """`InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave nenhuma.
+    """`InventariarVm` e `ConsultarNoDaVm` nao tem chave nenhuma.
 
     Nada impede dois pendentes; e inofensivo porque sao leituras, e leitura
     repetida devolve o mesmo valor.
     """
-    assert um(InventariarHypervisor) == um(InventariarHypervisor)
+    assert um(InventariarVm) == um(InventariarVm)
     b = ResultadoDeLocalizacao(
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito="consultar_no_da_vm",
+        vm_id=VM,
+        no_que_respondeu=None,
         chaves=(),
         no_atual="node-02",
     )
@@ -736,7 +795,7 @@ def test_efeitos_de_vms_diferentes_nunca_se_excluem():
 
 def test_efeito_sem_disco_nao_exclui_ninguem():
     """Leitura nao bloqueia escrita, e nao e bloqueada por ela."""
-    assert not se_excluem(um(InventariarHypervisor), _vm("vda", "vdb"))
+    assert not se_excluem(um(InventariarVm), _vm("vda", "vdb"))
     assert not se_excluem(um(ConsultarNoDaVm), _disco("vda"))
 
 
@@ -783,10 +842,22 @@ def test_json_com_ordem_invertida_constroi_o_mesmo_valor():
 def test_chaves_do_resultado_tambem_sao_canonicas():
     a, b = (ChaveDeExclusao(vm_id=VM, disco=d) for d in ("vda", "vdb"))
     r1 = ResultadoSimples(
-        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(a, b), sucesso=True
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="x",
+        vm_id=VM,
+        no_que_respondeu=None,
+        chaves=(a, b),
+        sucesso=True,
     )
     r2 = ResultadoSimples(
-        tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(b, a), sucesso=True
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito="x",
+        vm_id=VM,
+        no_que_respondeu=None,
+        chaves=(b, a),
+        sucesso=True,
     )
     assert r1 == r2
 
@@ -796,7 +867,13 @@ def test_resultado_com_chave_repetida_nao_existe():
     a = ChaveDeExclusao(vm_id=VM, disco="vda")
     with pytest.raises(RegistroMalformadoError, match="repetida"):
         ResultadoSimples(
-            tenant_id=TENANT, ciclo_id=CICLO, tipo_do_efeito="x", chaves=(a, a), sucesso=True
+            tenant_id=TENANT,
+            ciclo_id=CICLO,
+            tipo_do_efeito="x",
+            vm_id=VM,
+            no_que_respondeu=None,
+            chaves=(a, a),
+            sucesso=True,
         )
 
 
@@ -851,6 +928,8 @@ def test_resultado_de_efeito_de_vm_carrega_todas_as_chaves():
         tenant_id=TENANT,
         ciclo_id=CICLO,
         tipo_do_efeito=efeito.TIPO,
+        vm_id=efeito.vm_id,
+        no_que_respondeu=efeito.no,
         chaves=efeito.chaves_de_exclusao(),
         sucesso=True,
     )
@@ -866,6 +945,8 @@ def _resposta(efeito):
         tenant_id=efeito.tenant_id,
         ciclo_id=efeito.ciclo_id,
         tipo_do_efeito=efeito.TIPO,
+        vm_id=efeito.vm_id,
+        no_que_respondeu=efeito.no,
         chaves=chaves_de(efeito),
         sucesso=True,
     )
@@ -989,3 +1070,171 @@ def test_todo_resultado_aceita_ficar_sem_chave(classe):
     nada, e trocar o elemento deixava como conserto "escolhe outro indice".
     """
     assert dataclasses.replace(_amostra(classe), chaves=()).chaves == ()
+
+
+# ── Todo efeito tem sujeito; o de agente diz o no ───────────────────────────
+
+TODOS_OS_EFEITOS = sorted(_por_tipo(Efeito).values(), key=lambda c: c.TIPO)
+DE_AGENTE = [c for c in TODOS_OS_EFEITOS if c.ALVO is Alvo.AGENTE_DE_ORIGEM]
+SEM_AGENTE = [c for c in TODOS_OS_EFEITOS if c.ALVO is not Alvo.AGENTE_DE_ORIGEM]
+
+
+def _variantes(efeito):
+    """Efeitos DIFERENTES do mesmo tipo, tenant e ciclo — um por eixo de identidade."""
+    yield "outra VM", dataclasses.replace(efeito, vm_id=uuid4())
+    if efeito.no is not None:
+        yield "outro no", dataclasses.replace(efeito, no="no-99")
+    if isinstance(efeito, EfeitoDeDisco):
+        yield "outro disco", dataclasses.replace(efeito, disco="vdz")
+    if isinstance(efeito, EfeitoDeVm):
+        yield "outros discos", dataclasses.replace(efeito, discos=("vdx", "vdy"))
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_EFEITOS, ids=lambda c: c.TIPO)
+def test_nenhum_resultado_responde_a_outro_efeito_do_mesmo_tipo(classe):
+    """A propriedade que teria pegado a classe sem chave na T3, e que passa a pegar
+    o proximo efeito que alguem acrescentar sem sujeito.
+
+    Percorre o catalogo REAL. Para cada tipo, o resultado de um efeito responde a
+    ele e a nenhum outro do mesmo tipo, tenant e ciclo — mude a VM, o no, o disco.
+    """
+    efeito = um(classe)
+    assert responde_a(_resposta(efeito), efeito)
+    for eixo, outro in _variantes(efeito):
+        assert not responde_a(_resposta(efeito), outro), eixo
+
+
+def test_o_catalogo_de_efeitos_nao_esta_vazio():
+    assert TODOS_OS_EFEITOS and DE_AGENTE and SEM_AGENTE
+
+
+@pytest.mark.parametrize("classe", DE_AGENTE, ids=lambda c: c.TIPO)
+def test_efeito_de_agente_sem_no_nao_existe(classe):
+    """Agentes de nos diferentes falham separado: sem o no, "agente de origem"
+    nao e um alvo, sao varios."""
+    with pytest.raises(RegistroMalformadoError, match="em qual no"):
+        um(classe, no=None)
+
+
+@pytest.mark.parametrize("classe", SEM_AGENTE, ids=lambda c: c.TIPO)
+def test_efeito_que_nao_roda_em_agente_nao_leva_no(classe):
+    with pytest.raises(RegistroMalformadoError, match="nao leva no"):
+        um(classe, no="no-01")
+
+
+@pytest.mark.parametrize("no", ["", " no-01", "no 01", "no/01", "-no"])
+def test_no_malformado_recusa(no):
+    with pytest.raises(RegistroMalformadoError):
+        um(IniciarCopia, no=no)
+
+
+@pytest.mark.parametrize("classe", TODOS_OS_EFEITOS, ids=lambda c: c.TIPO)
+def test_sujeito_e_no_sobrevivem_a_serializacao(classe):
+    efeito = um(classe)
+    lido = efeito_de_json(json.loads(json.dumps(efeito.para_json())))
+    assert (lido.vm_id, lido.no) == (efeito.vm_id, efeito.no)
+
+
+def test_chaves_de_outra_vm_que_nao_o_sujeito_recusa():
+    """Duas expressoes da VM no mesmo efeito tem que concordar — senao a fila
+    exclui por uma VM e o agente age sobre outra."""
+    dados = _disco("vda").para_json()
+    dados["vm_id"] = str(uuid4())
+    with pytest.raises(RegistroMalformadoError, match="diferentes do sujeito"):
+        efeito_de_json(dados)
+
+
+# ── Leitura nao segura chave ────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("classe", [InventariarVm, ConsultarNoDaVm], ids=lambda c: c.TIPO)
+def test_leitura_nao_segura_chave_e_nao_espera_o_zumbi(classe):
+    """O vm_id da leitura NAO e chave, e isto e deliberado.
+
+    Com chave, a consulta de evidencia so rodaria com o lease livre — e o lease
+    esta preso pela copia zumbi que e a razao de ela existir. Deadlock, e nao se
+    resolve com preempcao: uma leitura nao retira nada de ninguem.
+    """
+    leitura = um(classe)
+    copia_zumbi = um(IniciarCopia, disco="vda")
+    assert chaves_de(leitura) == ()
+    assert not se_excluem(leitura, copia_zumbi)
+
+
+# ── "A VM nao esta aqui" e desfecho proprio ─────────────────────────────────
+
+
+def test_vm_ausente_responde_e_nao_e_inventario_vazio():
+    """A VM migrou entre a indicacao do Nova e a execucao. O no respondeu e o
+    indicado — a conferencia de no passa. Um inventario vazio seria verdade sobre
+    o no e mentira sobre a VM; a resposta e outra coisa, de outro tipo."""
+    inventario = um(InventariarVm)
+    ausente = ResultadoVmAusente(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito=inventario.TIPO,
+        vm_id=inventario.vm_id,
+        no_que_respondeu=inventario.no,
+        chaves=(),
+    )
+    assert responde_a(ausente, inventario)
+    assert not isinstance(ausente, ResultadoDeInventario)
+
+
+@pytest.mark.parametrize("classe", DE_AGENTE, ids=lambda c: c.TIPO)
+def test_todo_efeito_de_agente_pode_ouvir_vm_ausente(classe):
+    """Qualquer efeito de agente pode chegar a um no de onde a VM ja saiu."""
+    efeito = um(classe)
+    ausente = ResultadoVmAusente(
+        tenant_id=efeito.tenant_id,
+        ciclo_id=efeito.ciclo_id,
+        tipo_do_efeito=efeito.TIPO,
+        vm_id=efeito.vm_id,
+        no_que_respondeu=efeito.no,
+        chaves=chaves_de(efeito),
+    )
+    assert responde_a(ausente, efeito)
+
+
+def test_resposta_de_outro_no_nao_responde():
+    """O agente de outro no nao responde por este."""
+    inventario = um(InventariarVm)
+    de_outro_no = dataclasses.replace(_resposta(inventario), no_que_respondeu="no-02")
+    assert not responde_a(de_outro_no, inventario)
+
+
+# ── O resultado confere o pareamento do no, dos dois lados ──────────────────
+
+
+def _resultado_para(tipo, no):
+    return ResultadoSimples(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito=tipo,
+        vm_id=VM,
+        no_que_respondeu=no,
+        chaves=(),
+        sucesso=True,
+    )
+
+
+@pytest.mark.parametrize("classe", DE_AGENTE, ids=lambda c: c.TIPO)
+def test_resposta_a_efeito_de_agente_sem_no_nao_existe(classe):
+    with pytest.raises(RegistroMalformadoError, match="sem dizer qual no"):
+        _resultado_para(classe.TIPO, None)
+
+
+@pytest.mark.parametrize("classe", SEM_AGENTE, ids=lambda c: c.TIPO)
+def test_resposta_a_efeito_sem_agente_com_no_nao_existe(classe):
+    """O caso que motivou a conferencia: uma resposta a ConfirmarNoDestino dizendo
+    um no nunca responderia a nada, e pela P2 a janela nao seria liberada — o ciclo
+    travaria esperando uma confirmacao que ja chegou."""
+    with pytest.raises(RegistroMalformadoError, match="nao roda num agente"):
+        _resultado_para(classe.TIPO, "no-01")
+
+
+@pytest.mark.parametrize("no", [None, "no-01"])
+def test_tipo_de_efeito_desconhecido_nao_e_conferido(no):
+    """Contrato mais novo: recusar como malformado descartaria o que deveria ser
+    reenviado. A conferencia so vale quando o tipo e conhecido."""
+    assert _resultado_para("efeito_de_uma_versao_futura", no).no_que_respondeu == no

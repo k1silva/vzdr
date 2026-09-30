@@ -7,6 +7,19 @@
 | Receptor | VM no DC-2 | systemd, uma unidade `qemu-nbd` por volume espelho |
 | PostgreSQL | Junto da API | Gerenciado ou container |
 
+## Antes de cada deploy
+
+Lista curta, e cada linha existe porque o preço dela só aparece no deploy — e nada no
+repositório percebe um deploy. Item registrado só no documento onde nasceu fica esperando
+alguém lembrar no dia.
+
+- [ ] **Algum tipo de efeito ou de resultado foi removido desde o último deploy?** Então ele
+      precisa de caminho de descontinuação antes. Um registro guardado com tipo removido é
+      tipo desconhecido para a versão nova, e tipo desconhecido pede **reenvio** — que
+      reenviaria para sempre. Antes do primeiro deploy remover é de graça, e foi assim que
+      `criar_checkpoint` e `inventariar_hypervisor` saíram
+      ([`dr-001`, plano](../specs/dr-001-dominio-ciclo/plan.md)). Depois dele, não.
+
 ## Migrações
 
 `migrations/` guarda o SQL versionado. A CI verifica que toda tabela que guarda dado de
