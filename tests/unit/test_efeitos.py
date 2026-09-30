@@ -307,7 +307,7 @@ RESULTADOS = [
         ciclo_id=CICLO,
         tipo_do_efeito="descartar_bitmap",
         vm_id=VM,
-        no_que_respondeu=None,
+        no_que_respondeu=NO,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         sucesso=True,
     ),
@@ -326,7 +326,7 @@ RESULTADOS = [
         ciclo_id=CICLO,
         tipo_do_efeito="iniciar_copia",
         vm_id=VM,
-        no_que_respondeu=None,
+        no_que_respondeu=NO,
         chaves=(ChaveDeExclusao(vm_id=VM, disco="vda"),),
         bytes_transferidos=17_510_400,
         concluido=True,
@@ -336,7 +336,7 @@ RESULTADOS = [
         ciclo_id=CICLO,
         tipo_do_efeito="inventariar_vm",
         vm_id=VM,
-        no_que_respondeu=None,
+        no_que_respondeu=NO,
         chaves=(),
         job_em_curso=True,
         nomes_encontrados=("vzdr-bmp-" + "a" * 32,),
@@ -498,7 +498,7 @@ def _simples(**troca):
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
         "vm_id": str(VM),
-        "no_que_respondeu": None,
+        "no_que_respondeu": NO,
         "chaves": [],
         "sucesso": True,
         "motivo": None,
@@ -528,7 +528,7 @@ def test_copia_nao_concluida_nao_vira_concluida():
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
         "vm_id": str(VM),
-        "no_que_respondeu": None,
+        "no_que_respondeu": NO,
         "chaves": [{"vm_id": str(VM), "disco": "vda"}],
         "bytes_transferidos": 1,
         "concluido": "false",
@@ -545,7 +545,7 @@ def test_numero_em_texto_recusa():
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
         "vm_id": str(VM),
-        "no_que_respondeu": None,
+        "no_que_respondeu": NO,
         "chaves": [],
         "bytes_transferidos": "17510400",
         "concluido": True,
@@ -563,7 +563,7 @@ def test_booleano_nao_passa_por_inteiro():
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "iniciar_copia",
         "vm_id": str(VM),
-        "no_que_respondeu": None,
+        "no_que_respondeu": NO,
         "chaves": [],
         "bytes_transferidos": True,
         "concluido": True,
@@ -587,7 +587,7 @@ def test_texto_no_lugar_de_lista_recusa():
         "ciclo_id": str(CICLO),
         "tipo_do_efeito": "inventariar_vm",
         "vm_id": str(VM),
-        "no_que_respondeu": None,
+        "no_que_respondeu": NO,
         "chaves": [],
         "job_em_curso": False,
         "nomes_encontrados": "vzdr-bmp-x",
@@ -1201,3 +1201,40 @@ def test_resposta_de_outro_no_nao_responde():
     inventario = um(InventariarVm)
     de_outro_no = dataclasses.replace(_resposta(inventario), no_que_respondeu="no-02")
     assert not responde_a(de_outro_no, inventario)
+
+
+# ── O resultado confere o pareamento do no, dos dois lados ──────────────────
+
+
+def _resultado_para(tipo, no):
+    return ResultadoSimples(
+        tenant_id=TENANT,
+        ciclo_id=CICLO,
+        tipo_do_efeito=tipo,
+        vm_id=VM,
+        no_que_respondeu=no,
+        chaves=(),
+        sucesso=True,
+    )
+
+
+@pytest.mark.parametrize("classe", DE_AGENTE, ids=lambda c: c.TIPO)
+def test_resposta_a_efeito_de_agente_sem_no_nao_existe(classe):
+    with pytest.raises(RegistroMalformadoError, match="sem dizer qual no"):
+        _resultado_para(classe.TIPO, None)
+
+
+@pytest.mark.parametrize("classe", SEM_AGENTE, ids=lambda c: c.TIPO)
+def test_resposta_a_efeito_sem_agente_com_no_nao_existe(classe):
+    """O caso que motivou a conferencia: uma resposta a ConfirmarNoDestino dizendo
+    um no nunca responderia a nada, e pela P2 a janela nao seria liberada — o ciclo
+    travaria esperando uma confirmacao que ja chegou."""
+    with pytest.raises(RegistroMalformadoError, match="nao roda num agente"):
+        _resultado_para(classe.TIPO, "no-01")
+
+
+@pytest.mark.parametrize("no", [None, "no-01"])
+def test_tipo_de_efeito_desconhecido_nao_e_conferido(no):
+    """Contrato mais novo: recusar como malformado descartaria o que deveria ser
+    reenviado. A conferencia so vale quando o tipo e conhecido."""
+    assert _resultado_para("efeito_de_uma_versao_futura", no).no_que_respondeu == no

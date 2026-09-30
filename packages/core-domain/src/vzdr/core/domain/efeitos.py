@@ -529,21 +529,20 @@ class Resultado:
       chave ja tomada e coexiste com quem a tinha. Dois `CercarDestino` do mesmo
       ciclo e disco podem ficar pendentes juntos, e o caminho esta descrito em
       PREEMPCAO_DESPEJA_DETENTOR: reentrega por retry;
-    - **sem chave** — `InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave
-      nenhuma, e nada impede dois pendentes.
+    - **sem chave** — `InventariarVm` e `ConsultarNoDaVm` nao tem chave nenhuma,
+      e nada impede dois pendentes.
 
     Na preempcao, a correlacao e inofensiva **porque a absorcao e idempotente**, e
     isso e obrigacao e nao coincidencia. No dia em que existir uma preempcao que
     nao seja idempotente, esta e a linha que reprova a ideia.
 
-    **Na classe sem chave, a correlacao NAO esta garantida hoje.** Idempotencia
-    cobre a repeticao; nao cobre a resposta ERRADA. `InventariarHypervisor` nao diz
-    qual hypervisor, `ConsultarNoDaVm` nao diz qual VM, e os resultados nao dizem
-    quem respondeu. Um inventario respondido pelo agente de outro hypervisor volta
-    com `nomes_encontrados` vazio, a reconciliacao le "nao ha orfao", e o orfao
-    fica — silencioso, com a forma toda certa. A versao anterior deste texto dizia
-    que a classe era segura; nao era. Quem decide o conserto e a T7, e nenhum
-    codigo deve correlacionar resultado desses dois efeitos antes disso.
+    Na classe sem chave, idempotencia cobre a repeticao e NAO cobre a resposta
+    errada — e o que a garante e o SUJEITO e o NO. Houve uma versao em que o
+    inventario nao dizia de onde, a consulta nao dizia de quem, e os resultados
+    nao diziam quem respondeu: um inventario respondido pelo agente de outro no
+    voltava vazio, a reconciliacao lia "nao ha orfao", e o orfao ficava. Uma versao
+    ainda anterior deste texto dizia que a classe era segura; nao era. Hoje
+    `responde_a` compara sujeito e no, e "a VM nao esta aqui" e `ResultadoVmAusente`.
 
     **Correlacao e IGUALDADE do conjunto de chaves; exclusao e INTERSECAO.** O
     mesmo campo tem duas relacoes, e confundi-las e o erro facil: `se_excluem`
@@ -593,6 +592,26 @@ class Resultado:
             )
         if self.no_que_respondeu is not None and not _no_valido(self.no_que_respondeu):
             raise RegistroMalformadoError(f"no_que_respondeu invalido: {self.no_que_respondeu!r}")
+        # O MESMO PAREAMENTO que o efeito confere, do lado do resultado. Sem isto,
+        # `ResultadoSimples(tipo_do_efeito="confirmar_no_destino", no_que_respondeu=
+        # "no-01")` seria construtivel e nunca responderia a nada — o efeito de
+        # receptora tem `no` None. E o efeito pendurado seria um ConfirmarNoDestino:
+        # pela P2 a janela nao e liberada, o ciclo trava e o checkpoint nao sai.
+        #
+        # So quando o tipo e CONHECIDO. Tipo desconhecido e contrato mais novo, e
+        # recusar como malformado descartaria o que deveria ser reenviado.
+        classe = _por_tipo(Efeito).get(self.tipo_do_efeito)
+        if classe is not None:
+            de_agente = classe.ALVO is Alvo.AGENTE_DE_ORIGEM
+            if de_agente and self.no_que_respondeu is None:
+                raise RegistroMalformadoError(
+                    f"resposta a {self.tipo_do_efeito!r}, que roda num agente, sem dizer qual no"
+                )
+            if not de_agente and self.no_que_respondeu is not None:
+                raise RegistroMalformadoError(
+                    f"resposta a {self.tipo_do_efeito!r}, que nao roda num agente, "
+                    f"dizendo no {self.no_que_respondeu!r}"
+                )
         # Ordem canonica, pelo mesmo motivo do EfeitoDeVm: a correlacao e por
         # IGUALDADE, e igualdade de tupla depende de ordem.
         object.__setattr__(self, "chaves", tuple(sorted(self.chaves, key=_ordem_da_chave)))
