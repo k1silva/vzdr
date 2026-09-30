@@ -184,3 +184,19 @@ def test_cerca_de_codigo_antes_da_reivindicacao_nao_a_esconde(tmp_path):
 def test_nome_dentro_de_bloco_de_codigo_nao_reivindica(tmp_path):
     agents = "```\nO `check_a.py` verifica.\n```\n"
     assert verificar(montar(tmp_path, agents=agents))
+
+
+def test_tarefa_solta_num_adr_reprova(tmp_path):
+    """Num ADR, `T7` nao diz de qual spec e a tarefa."""
+    adr = ADR_OK.replace("`tests/unit/test_x.py::test_relogio`", "`T7`")
+    assert any("tarefa sem spec" in f for f in verificar(montar(tmp_path, adr=adr)))
+
+
+def test_tarefa_qualificada_num_adr_passa(tmp_path):
+    adr = ADR_OK.replace("`tests/unit/test_x.py::test_relogio`", "`dr-001/T7`")
+    assert verificar(montar(tmp_path, adr=adr)) == []
+
+
+def test_tarefa_qualificada_feita_reprova(tmp_path):
+    adr = ADR_OK.replace("`tests/unit/test_x.py::test_relogio`", "`dr-001/T2`")
+    assert any("tarefa esta feita" in f for f in verificar(montar(tmp_path, adr=adr)))

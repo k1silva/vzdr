@@ -68,6 +68,9 @@ _TESTE = re.compile(r"(?P<arquivo>(?:tests|scripts|packages)/[\w/.-]+\.py)::(?P<
 _ARQUIVO = re.compile(r"(?:tests|scripts|packages)/[\w/.-]+\.py")
 _MEDICAO = re.compile(r"M\d+")
 _TAREFA = re.compile(r"T\d+")
+#: `dr-001/T6` — tarefa com a spec dita. Obrigatoria fora de um plano: num ADR, `T6`
+#: solto nao diz de qual spec e a tarefa.
+_TAREFA_QUALIFICADA = re.compile(r"(?P<spec>[a-z]+-\d+)/(?P<tarefa>T\d+)")
 _CHECADOR_NO_MAKEFILE = re.compile(r"tests/invariants/(check_\w+\.py)")
 
 
@@ -81,6 +84,7 @@ def referencias(texto: str) -> list[str]:
             or _ARQUIVO.fullmatch(item)
             or _MEDICAO.fullmatch(item)
             or _TAREFA.fullmatch(item)
+            or _TAREFA_QUALIFICADA.fullmatch(item)
         ):
             achadas.append(item)
     return achadas
@@ -135,11 +139,15 @@ def _medicoes(raiz: Path) -> set[str]:
 
 
 def _tarefas(raiz: Path, documento: str) -> dict[str, bool]:
-    """T<n> -> feita?"""
+    """T<n> -> feita? — das tarefas do proprio plano."""
     tasks = TAREFAS.get(documento)
     if tasks is None or not (raiz / tasks).exists():
         return {}
-    texto = (raiz / tasks).read_text(encoding="utf-8")
+    return _tarefas_de(raiz / tasks)
+
+
+def _tarefas_de(caminho: Path) -> dict[str, bool]:
+    texto = caminho.read_text(encoding="utf-8")
     return {
         m.group(2): m.group(1).lower() == "x"
         for m in re.finditer(r"^- \[( |x|X)\] \*\*(T\d+)\*\*", texto, re.MULTILINE)
@@ -165,7 +173,17 @@ def _problema_da_referencia(
         return None if (raiz / ref).exists() else f"`{ref}`: o arquivo nao existe"
     if _MEDICAO.fullmatch(ref):
         return None if ref in medicoes else f"`{ref}`: a medicao nao existe no ADR-0012"
+    qualificada = _TAREFA_QUALIFICADA.fullmatch(ref)
+    if qualificada:
+        candidatos = sorted(raiz.glob(f"specs/{qualificada.group('spec')}-*/tasks.md"))
+        if len(candidatos) != 1:
+            return f"`{ref}`: a spec {qualificada.group('spec')} nao tem tasks.md unico"
+        return _problema_da_referencia(
+            raiz, qualificada.group("tarefa"), _tarefas_de(candidatos[0]), medicoes
+        )
     if _TAREFA.fullmatch(ref):
+        if not tarefas:
+            return f"`{ref}`: tarefa sem spec — fora de um plano, escreva `spec/{ref}`"
         if ref not in tarefas:
             return f"`{ref}`: a tarefa nao existe"
         if tarefas[ref]:
