@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.mutacao import AncoraError, LinhaDeBaseError, RestauroFalhouError, rodar
+from scripts.mutacao import (
+    AncoraError,
+    LinhaDeBaseError,
+    MutacaoInvalidaError,
+    RestauroFalhouError,
+    rodar,
+)
 
 MODULO = "def dobro(x):\n    return x * 2\n"
 TESTE = "from modulo import dobro\n\n\ndef test_dobro():\n    assert dobro(3) == 6\n"
@@ -97,3 +103,18 @@ def test_nao_deixa_bytecode(tmp_path):
     raiz = projeto(tmp_path)
     rodar(raiz, "modulo.py", ["test_modulo.py"], {"a": ("x * 2", "x + 2")})
     assert not list(raiz.rglob("__pycache__"))
+
+
+def test_mutacao_que_nao_compila_e_erro_e_nao_reprovacao(tmp_path):
+    """Vermelho certo pelo motivo errado. Um typo na mutacao quebra a coleta, a
+    saida e nao-zero, e o controle sairia registrado como protegido sem nada ter
+    sido exercitado."""
+    with pytest.raises(MutacaoInvalidaError, match="nao compila"):
+        rodar(projeto(tmp_path), "modulo.py", ["test_modulo.py"], {"typo": ("x * 2", "x +* 2")})
+
+
+def test_mutacao_invalida_e_recusada_antes_de_tocar_o_arquivo(tmp_path):
+    raiz = projeto(tmp_path)
+    with pytest.raises(MutacaoInvalidaError):
+        rodar(raiz, "modulo.py", ["test_modulo.py"], {"typo": ("x * 2", "x +* 2")})
+    assert (raiz / "modulo.py").read_text(encoding="utf-8") == MODULO

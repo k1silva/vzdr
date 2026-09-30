@@ -35,11 +35,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["AncoraError", "LinhaDeBaseError", "Rodada", "RestauroFalhouError", "rodar"]
+__all__ = [
+    "AncoraError",
+    "LinhaDeBaseError",
+    "MutacaoInvalidaError",
+    "RestauroFalhouError",
+    "Rodada",
+    "rodar",
+]
 
 
 class AncoraError(Exception):
     """O trecho a mutar nao aparece exatamente uma vez."""
+
+
+class MutacaoInvalidaError(Exception):
+    """O texto mutado nem compila.
+
+    Um arquivo que nao compila quebra a coleta do pytest, a saida e nao-zero, e
+    sairia impresso "REPROVA ok" — o controle registrado como protegido sem nada
+    ter sido exercitado. E a ancora errada uma camada acima: a mutacao rodou, e nao
+    mediu nada. Vermelho certo pelo motivo errado.
+    """
 
 
 class LinhaDeBaseError(Exception):
@@ -85,6 +102,9 @@ def _testes_passam(raiz: Path, testes: list[str]) -> bool:
     resultado = subprocess.run(
         [
             sys.executable,
+            # PREVENCAO, e nao codigo morto, embora a mutacao que o tira sobreviva:
+            # o defeito que o -B previne depende de tempo (mesmo tamanho, mesmo
+            # segundo), e nenhum teste deterministico o reproduz. Ver o docstring.
             "-B",
             "-m",
             "pytest",
@@ -112,14 +132,29 @@ def rodar(
     """Aplica cada mutacao, roda, desfaz, e exige verde antes da seguinte.
 
     Levanta em vez de reportar quando o proprio instrumento nao e confiavel —
-    linha de base vermelha, ancora errada, restauro que nao restaurou. Esses nao
-    sao resultados de mutacao; sao motivos para nao acreditar em nenhum.
+    linha de base vermelha, ancora errada, mutacao que nao compila, restauro que
+    nao restaurou. Esses nao sao resultados de mutacao; sao motivos para nao
+    acreditar em nenhum.
+
+    O LIMITE, declarado: o arnes distingue "reprovou" de "passou", e nunca
+    "reprovou por causa da mutacao" de "reprovou por outro motivo". O `compile()`
+    fecha a causa mais provavel e mais barata — o texto mutado nem ser Python. As
+    outras ficam por conta de quem escreve a mutacao: importar algo que nao existe,
+    por exemplo, compila e quebra a coleta do mesmo jeito.
     """
     caminho = raiz / arquivo
     original = caminho.read_text(encoding="utf-8")
-    for nome, (velho, _) in mutacoes.items():
+    for nome, (velho, novo) in mutacoes.items():
         if original.count(velho) != 1:
             raise AncoraError(f"{nome!r}: o trecho aparece {original.count(velho)} vezes, e nao 1")
+        if caminho.suffix == ".py":
+            try:
+                compile(original.replace(velho, novo), str(caminho), "exec")
+            except SyntaxError as erro:
+                raise MutacaoInvalidaError(
+                    f"{nome!r}: o texto mutado nao compila ({erro.msg}, linha {erro.lineno}) — "
+                    "a reprovacao seria da coleta, e nao do teste"
+                ) from erro
     if not _testes_passam(raiz, testes):
         raise LinhaDeBaseError("os testes ja reprovam sem mutacao nenhuma")
 
