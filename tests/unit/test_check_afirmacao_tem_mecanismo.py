@@ -14,6 +14,7 @@ sys.path.insert(0, str(RAIZ / "tests" / "invariants"))
 from check_afirmacao_tem_mecanismo import (  # noqa: E402
     afirmacoes_do_adr,
     afirmacoes_do_plano,
+    ainda_nao_cobertos,
     referencias,
     verificar,
 )
@@ -200,3 +201,60 @@ def test_tarefa_qualificada_num_adr_passa(tmp_path):
 def test_tarefa_qualificada_feita_reprova(tmp_path):
     adr = ADR_OK.replace("`tests/unit/test_x.py::test_relogio`", "`dr-001/T2`")
     assert any("tarefa esta feita" in f for f in verificar(montar(tmp_path, adr=adr)))
+
+
+# ── O que nao e coberto e derivado, nao escrito ─────────────────────────────
+
+
+def test_documento_novo_aparece_como_nao_coberto_sem_ninguem_lembrar(tmp_path):
+    """A lista a mao deixava spec ou ADR novo nascer invisivel. Por subtracao, ele
+    aparece no dia em que existe."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/adr/0099-novo.md").write_text("# ADR novo\n", encoding="utf-8")
+    (raiz / "specs/dr-099-nova").mkdir(parents=True)
+    (raiz / "specs/dr-099-nova/spec.md").write_text("# spec\n", encoding="utf-8")
+    faltam = ainda_nao_cobertos(raiz)
+    assert "docs/adr/0099-novo.md" in faltam
+    assert "specs/dr-099-nova/spec.md" in faltam
+
+
+def test_coberto_e_molde_nao_aparecem(tmp_path):
+    raiz = montar(tmp_path)
+    (raiz / "specs/_template").mkdir(parents=True)
+    (raiz / "specs/_template/plan.md").write_text("# molde\n", encoding="utf-8")
+    (raiz / "docs/adr/template.md").write_text("# molde\n", encoding="utf-8")
+    faltam = ainda_nao_cobertos(raiz)
+    assert "specs/dr-001-dominio-ciclo/plan.md" not in faltam
+    assert "docs/adr/0015-efeito-como-valor.md" not in faltam
+    assert not any("template" in f for f in faltam)
+
+
+# ── O AGENTS.md tambem e auditado, e nao so colhido ─────────────────────────
+
+
+def test_checador_apagado_com_a_linha_do_agents_de_pe_reprova(tmp_path):
+    """O espelho da regra 3. Checador fora do build E do disco, linha do AGENTS.md
+    ainda de pe: a regra 3 nao dispara (nao esta no build) e, sem auditoria, a
+    regra 2 tambem nao — tudo verde, e o AGENTS.md mentindo."""
+    raiz = montar(tmp_path, makefile="invariants:\n")
+    (raiz / "tests/invariants/check_a.py").unlink()
+    (falha,) = verificar(raiz)
+    assert falha.startswith("AGENTS.md:") and "check_a.py" in falha and "nao existe" in falha
+
+
+def test_caminho_de_script_inexistente_no_agents_reprova(tmp_path):
+    agents = AGENTS + "A porta unica e `scripts/porta_que_sumiu.py`.\n"
+    assert any("porta_que_sumiu" in f for f in verificar(montar(tmp_path, agents=agents)))
+
+
+def test_crase_que_nao_tem_forma_de_arquivo_no_agents_nao_e_auditada(tmp_path):
+    """`make check`, `tenant_id`, `vzdr.core.domain` — nomes, nao arquivos."""
+    agents = AGENTS + "Rode `make check`; o campo `tenant_id` mora em `vzdr.core.domain`.\n"
+    assert verificar(montar(tmp_path, agents=agents)) == []
+
+
+def test_mensagem_nao_promete_secao_que_nao_confere(tmp_path):
+    """A primeira versao dizia "onde a regra que ele verifica e escrita", e o onde
+    nunca foi conferido: qualquer crase em qualquer lugar satisfazia."""
+    (falha,) = verificar(montar(tmp_path, agents="Nada.\n"))
+    assert "onde a regra" not in falha and "em crase" in falha

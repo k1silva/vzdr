@@ -16,7 +16,11 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
      apontando para ela reprova: o mecanismo tinha que ter sido nomeado.
 3. **A volta, que e a metade que se esquece: todo checador no build e
    reivindicado.** Por uma referencia num documento coberto, ou pelo nome do
-   arquivo, em crase, no AGENTS.md. Sem isto acumulam checadores orfaos, e o
+   arquivo, em crase, no AGENTS.md — em QUALQUER lugar dele. O checador nao confere
+   se a mencao esta na secao que descreve a regra: nao ha forma estrutural para
+   isso, e prometer o que nao se confere e o docstring que afirma o que o codigo
+   nao faz. E o AGENTS.md, alem de reivindicar, e AUDITADO: todo arquivo que ele
+   nomeia tem que existir. Sem isto acumulam checadores orfaos, e o
    primeiro que der trabalho sera apagado sem que se saiba o que se apagou.
 
 ESCOPO POR DOCUMENTO, NUNCA PELO CRITERIO. Enfraquecer o criterio para terminar
@@ -51,14 +55,25 @@ RAIZ = Path(__file__).resolve().parents[2]
 COBERTOS_PLANO = ("specs/dr-001-dominio-ciclo/plan.md",)
 COBERTOS_ADR = ("docs/adr/0015-efeito-como-valor.md",)
 
-#: O que ainda nao e coberto — impresso em toda execucao, para que a falta seja
-#: visivel e nao presumida. Cada item sai daqui quando passa a ser coberto.
-AINDA_NAO_COBERTOS = (
-    "specs/core-001-tenancy/plan.md",
-    "specs/core-002-connections/plan.md",
-    "docs/adr/0005 a 0014 (os ADRs que o plano da dr-001 cita, e os demais)",
-    "specs/*/spec.md (afirmacoes em prosa; sem forma estrutural ainda)",
-)
+#: O universo de documentos com afirmacao cruzada. O que NAO e coberto e derivado
+#: dele por subtracao, e nunca escrito a mao: a primeira versao tinha uma tupla
+#: literal, e uma spec ou um ADR novo nasceria invisivel — o relatorio continuaria
+#: parecendo completo, e a limitacao deixaria de ser visivel sem deixar de estar
+#: escrita. Quarta vez do padrao "lista a mao contra o catalogo real", e desta vez
+#: dentro do checador que existe para pegar isso.
+UNIVERSO = ("specs/*/plan.md", "specs/*/spec.md", "docs/adr/*.md")
+#: Fora do universo: moldes, que nao afirmam nada.
+MOLDES = ("specs/_template/", "docs/adr/template.md")
+
+
+def ainda_nao_cobertos(raiz: Path) -> list[str]:
+    """Todo documento do universo que nao esta coberto — fato, e nao memoria."""
+    cobertos = set(COBERTOS_PLANO) | set(COBERTOS_ADR)
+    todos = {
+        caminho.relative_to(raiz).as_posix() for padrao in UNIVERSO for caminho in raiz.glob(padrao)
+    }
+    return sorted(d for d in todos - cobertos if not any(d.startswith(m) or d == m for m in MOLDES))
+
 
 TAREFAS = {"specs/dr-001-dominio-ciclo/plan.md": "specs/dr-001-dominio-ciclo/tasks.md"}
 MEDICOES = "docs/adr/0012-resposta-a-perda-de-bitmap.md"
@@ -72,6 +87,8 @@ _TAREFA = re.compile(r"T\d+")
 #: solto nao diz de qual spec e a tarefa.
 _TAREFA_QUALIFICADA = re.compile(r"(?P<spec>[a-z]+-\d+)/(?P<tarefa>T\d+)")
 _CHECADOR_NO_MAKEFILE = re.compile(r"tests/invariants/(check_\w+\.py)")
+#: Checador nomeado so pelo arquivo, como o AGENTS.md costuma fazer.
+_CHECADOR_SOLTO = re.compile(r"check_\w+\.py")
 
 
 def referencias(texto: str) -> list[str]:
@@ -223,6 +240,23 @@ def verificar(raiz: Path) -> list[str]:
 
     agents = raiz / "AGENTS.md"
     if agents.exists():
+        # O AGENTS.md reivindica, e tambem AFIRMA. Colher reivindicacao sem auditar
+        # afirmacao deixava o espelho da regra 3 descoberto: apague um checador e a
+        # linha dele no Makefile, deixe a do AGENTS.md de pe — a regra 3 nao
+        # dispara, porque o checador saiu do build, e a regra 2 nao dispara, porque
+        # o AGENTS.md nao era auditado. Tudo verde, e o documento mentindo.
+        for _, linha in linhas_fora_de_blocos(agents.read_text(encoding="utf-8")):
+            for item in _CRASE.findall(linha):
+                item = item.strip()
+                if _TESTE.fullmatch(item) or _ARQUIVO.fullmatch(item):
+                    problema = _problema_da_referencia(raiz, item, {}, medicoes)
+                elif _CHECADOR_SOLTO.fullmatch(item):
+                    existe = (raiz / "tests" / "invariants" / item).exists()
+                    problema = None if existe else f"`{item}`: o checador nao existe"
+                else:
+                    continue
+                if problema:
+                    falhas.append(f"AGENTS.md: {problema}")
         # LINHA A LINHA, e fora de bloco de codigo. A primeira versao pareava as
         # crases no arquivo inteiro de uma vez, e cada cerca de tres crases
         # deslocava o pareamento de todas as seguintes: na primeira execucao,
@@ -240,15 +274,16 @@ def verificar(raiz: Path) -> list[str]:
     for checador in sorted(no_build - reivindicados):
         falhas.append(
             f"tests/invariants/{checador}: roda no build e nenhuma afirmacao o reivindica — "
-            "nomeie-o no AGENTS.md onde a regra que ele verifica e escrita"
+            "nomeie-o, em crase, no AGENTS.md ou num documento coberto"
         )
     return falhas
 
 
 def main() -> int:
     falhas = verificar(RAIZ)
-    print("ainda nao cobertos por este checador:")
-    for item in AINDA_NAO_COBERTOS:
+    faltam = ainda_nao_cobertos(RAIZ)
+    print(f"ainda nao cobertos por este checador ({len(faltam)}):")
+    for item in faltam:
         print(f"  - {item}")
     if falhas:
         print("\nafirmacao sem mecanismo, ou mecanismo sem afirmacao:")
