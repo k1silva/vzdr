@@ -227,7 +227,7 @@ reinício do `qemu-storage-daemon` são da `dr-006`, dona do ciclo de vida do ex
 divisão sai da tabela de [`specs/README.md`](../README.md), e a spec a registra.
 
 `reconciliar` é função separada porque a entrada é diferente: não é o resultado de um efeito
-pedido, é a fotografia do hypervisor. Fundi-la em `avancar` faria a assinatura aceitar dois
+pedido, é a fotografia da VM no nó declarado. Fundi-la em `avancar` faria a assinatura aceitar dois
 tipos de entrada e a função ramificar no começo.
 
 ## Riscos

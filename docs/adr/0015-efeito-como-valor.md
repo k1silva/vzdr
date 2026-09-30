@@ -218,6 +218,12 @@ Nova, e é conferido na resposta. "A VM não está neste nó" é desfecho própr
 O `vm_id` dos efeitos de leitura **não** é chave de exclusão: com chave, a consulta de
 evidência esperaria o lease preso pela cópia zumbi que ela existe para investigar.
 
+Isto substitui um trecho da propriedade 4 acima: "`query-block-jobs`, roteável por
+**qualquer** agente com acesso àquele hypervisor". O QMP é um socket local do nó, e com o nó
+conferido na resposta, o agente de outro nó não responde por este. O que o trecho acertava
+continua valendo — nunca perguntar à instância que detém o lease —; o "qualquer agente" era o
+caminho do inventário vazio.
+
 **Uma segunda receptora é valor novo de `Alvo`, e não `no` afrouxado.** O critério que pôs
 o nó no efeito de agente — falham separado, logo são alvos diferentes — vale igual para
 duas receptoras. Hoje há uma, e não morde. Mas o conserto óbvio de amanhã, permitir `no`
