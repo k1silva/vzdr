@@ -81,11 +81,18 @@ roda. O control plane roda onde escolhemos: 3.11.
 
 | Onde | Alvo | Quem verifica |
 | --- | --- | --- |
-| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote, e nos testes do fecho pelo `per-file-target-version` da raiz; `make test-py39` executa esses testes sob 3.9 real |
+| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote, para sintaxe; `make test-py39` executa os testes do fecho sob 3.9 real, e pega chamada 3.10+ no que eles executam |
 | Todo o resto | 3.11 | `ruff` na raiz |
 
 Nos pacotes restritos, nada de sintaxe 3.10+ (`match`, `X | Y` em anotação sem
 `from __future__ import annotations`).
+
+**Ferramenta que reescreve código obedece a um alvo, e alvo errado faz dela fonte de
+defeito.** O `datetime.UTC` que quebrava `test_saude.py` sob 3.9 não foi descuido de
+ninguém: o ruff, mirando 3.11, exigia o alias (`UP017`), e o `make fmt` obedeceu. Chegou por
+um comando que se roda sem ler o diff, e por isso ninguém o viu. O conserto não é desligar a
+regra, é dar à ferramenta o alvo certo para cada arquivo — o `per-file-target-version` da
+raiz, derivado e conferido pelo `make test-py39`.
 
 Um pacote restrito **não pode importar** pacote sem a restrição: quebraria no hypervisor
 em tempo de import, não na CI. `tests/invariants/check_alvo_py39.py` verifica o fecho.
