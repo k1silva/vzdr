@@ -23,6 +23,19 @@ GARANTIAS, por construcao e nao por lembranca:
 - **Ancora errada e erro, nunca pulo.** A versao a mao imprimia "ANCORA ERRADA" e
   seguia — uma mutacao que nao roda, contada como se tivesse rodado.
 
+DUAS UTILIDADES, e o veredito esperado e oposto nas duas:
+
+- **Portao.** O teste protege o controle? Muta-se o controle, e o esperado e
+  `REPROVA ok`. `SOBREVIVEU` e defeito do teste.
+- **Sonda.** Uma afirmacao sobre o codigo e verdadeira? Muta-se o que, se a
+  afirmacao for verdadeira, NAO deveria mudar o resultado — e o esperado e
+  `SOBREVIVEU`. Foi o uso no #36: a revisao atribuia a exclusao mutua dentro do
+  LIBERANDO so ao efeito de VM; tirar o efeito de VM e ver o teste continuar verde
+  mediu que os dois efeitos de disco do mesmo disco ja se excluem sozinhos.
+
+O codigo de saida e o do portao (nao-zero se algo sobreviveu). Numa sonda, leia a
+linha, e diga na mensagem do commit qual das duas utilidades cada mutacao era.
+
 Uso: `make mutacao M=caminho/para/mutacoes.json`, com
 `{"arquivo": ..., "testes": [...], "mutacoes": {"nome": ["velho", "novo"]}}`.
 """
