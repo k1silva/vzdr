@@ -13,7 +13,9 @@ fonte unica do checador (quem declara `target-version = "py39"`):
   pacotes restritos. Teste MISTO — que importa do fecho e de fora dele — nao pode
   rodar sob 3.9, e sai impresso no erro padrao com o motivo, em vez de sumir: um
   teste que deixa de rodar em silencio e verificacao que nao verifica. Lista vazia
-  e erro, pelo mesmo motivo.
+  e erro, pelo mesmo motivo. E o simetrico: pacote restrito que nenhum teste
+  selecionado importa tambem e impresso — instalado e compilado, sem nada
+  executar.
 
 E os testes selecionados sao conferidos contra o `per-file-target-version` do
 pyproject da raiz, nos dois sentidos. Teste do fecho fora dele seria lintado como
@@ -48,20 +50,28 @@ def _provedor(modulo: str, dono: dict[str, str]) -> str:
     return ""
 
 
-def testes_do_fecho(raiz: Path) -> tuple[list[Path], list[str]]:
-    """(testes que rodam sob 3.9, motivos dos mistos excluidos)."""
-    restritos = {p.name for p in pacotes_restritos(raiz)}
-    dono = {
+def _dono(raiz: Path) -> dict[str, str]:
+    """Modulo vzdr.* -> pacote que o fornece."""
+    return {
         mod: pasta.name
         for pasta in sorted((raiz / "packages").iterdir())
         if pasta.is_dir()
         for mod in modulos_do_pacote(pasta)
     }
+
+
+def _provedores(arquivo: Path, dono: dict[str, str]) -> set[str]:
+    """Os pacotes de que o arquivo importa `vzdr.*`."""
+    return {_provedor(alvo, dono) for _, alvo in imports_de(arquivo) if alvo.startswith("vzdr.")}
+
+
+def testes_do_fecho(raiz: Path) -> tuple[list[Path], list[str]]:
+    """(testes que rodam sob 3.9, motivos dos mistos excluidos)."""
+    restritos = {p.name for p in pacotes_restritos(raiz)}
+    dono = _dono(raiz)
     selecionados, excluidos = [], []
     for arquivo in sorted((raiz / "tests" / "unit").glob("test_*.py")):
-        provedores = {
-            _provedor(alvo, dono) for _, alvo in imports_de(arquivo) if alvo.startswith("vzdr.")
-        }
+        provedores = _provedores(arquivo, dono)
         if not provedores & restritos:
             continue
         de_fora = sorted(provedores - restritos)
@@ -74,6 +84,19 @@ def testes_do_fecho(raiz: Path) -> tuple[list[Path], list[str]]:
     return selecionados, excluidos
 
 
+def pacotes_sem_teste(raiz: Path, selecionados: list[Path]) -> list[str]:
+    """Pacotes restritos que nenhum teste selecionado importa diretamente.
+
+    Sao instalados e compilados sob 3.9, e nada deles executa. Sem esta linha,
+    "N aprovados sob 3.9" nao distingue "o fecho esta coberto" de "metade do fecho
+    nao tem teste nenhum". Informacao, e nao falha: o pacote pode estar vazio de
+    proposito. Mas tem que aparecer, como o teste misto aparece.
+    """
+    dono = _dono(raiz)
+    cobertos = set().union(*(_provedores(raiz / t, dono) for t in selecionados))
+    return sorted(p.name for p in pacotes_restritos(raiz) if p.name not in cobertos)
+
+
 def _modulo_local(raiz: Path, nome: str) -> Path | None:
     """O arquivo do repositorio que o nome pontilhado importa, se for local."""
     base = raiz / Path(*nome.split("."))
@@ -84,8 +107,13 @@ def _modulo_local(raiz: Path, nome: str) -> Path | None:
 
 
 def _imports_locais(raiz: Path, arquivo: Path) -> set[Path]:
-    """Os arquivos do repositorio que `arquivo` importa: absolutos (`tests.x`) e
-    relativos. Em `from a import b`, `b` pode ser submodulo, e entao conta tambem."""
+    """Os arquivos SOB `tests/` que `arquivo` importa: absolutos (`tests.x`) e
+    relativos. Em `from a import b`, `b` pode ser submodulo, e entao conta tambem.
+
+    So `tests/`. Um auxiliar em `scripts/` importado por um teste do fecho nao entra
+    — seria lintado como 3.11 e quebraria o 3.9 na coleta, ruidosamente. Hoje
+    nenhum teste do fecho importa de `scripts/` (test_mutacao e test_fecho_py39
+    importam, e nao sao do fecho)."""
     arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
     pacote = arquivo.parent.relative_to(raiz).parts
     nomes: list[str] = []
@@ -104,8 +132,8 @@ def importados_junto(raiz: Path, selecionados: list[Path]) -> list[Path]:
     """O que o pytest importa ao coletar os testes do fecho, alem deles mesmos.
 
     `conftest.py` e `__init__.py` de cada diretorio entre a raiz e o teste — o
-    pytest os importa de qualquer jeito —, e todo modulo local que algum deles
-    importe, transitivamente. Sob 3.9 sao importados como os testes; fora da lista
+    pytest os importa de qualquer jeito —, e todo modulo sob `tests/` que algum
+    deles importe, transitivamente (ver o limite em `_imports_locais`). Sob 3.9 sao importados como os testes; fora da lista
     do ruff seriam lintados como 3.11, e o `make fmt` escreveria `datetime.UTC`
     neles pela porta ao lado da que ja foi fechada.
     """
@@ -168,6 +196,12 @@ def main(argv: list[str]) -> int:
             print(d, file=sys.stderr)
         if divergencias:
             return 1
+        for pacote in pacotes_sem_teste(RAIZ, selecionados):
+            print(
+                f"sem teste sob 3.9: packages/{pacote} e instalado e compilado, e nenhum "
+                f"teste o importa",
+                file=sys.stderr,
+            )
         for t in selecionados:
             print(t)
         return 0

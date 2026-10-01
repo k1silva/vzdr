@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from scripts.fecho_py39 import divergencias_de_lint, importados_junto
+from scripts.fecho_py39 import divergencias_de_lint, importados_junto, pacotes_sem_teste
 from scripts.fecho_py39 import testes_do_fecho as derivar
 
 
@@ -135,3 +135,41 @@ def test_conftest_fora_do_lint_reprova(tmp_path):
     selecionados, _ = derivar(raiz)
     divergencias = divergencias_de_lint(raiz, selecionados + importados_junto(raiz, selecionados))
     assert any("tests/unit/conftest.py" in d for d in divergencias), divergencias
+
+
+def _segundo_restrito(raiz: Path) -> None:
+    """O `agent`: restrito como o core-domain, e sem teste nenhum."""
+    _escrever(raiz, "packages/agent/pyproject.toml", '[tool.ruff]\ntarget-version = "py39"\n')
+    _escrever(raiz, "packages/agent/src/vzdr/agent/__init__.py")
+
+
+def test_pacote_restrito_sem_teste_aparece(tmp_path):
+    """ "N aprovados sob 3.9" nao pode esconder que metade do fecho nao executa nada."""
+    raiz = montar(tmp_path, {"test_a.py": DO_FECHO}, lintados=["test_a.py"])
+    _segundo_restrito(raiz)
+    selecionados, _ = derivar(raiz)
+    assert pacotes_sem_teste(raiz, selecionados) == ["agent"]
+
+
+def test_pacote_restrito_com_teste_nao_aparece(tmp_path):
+    raiz = montar(
+        tmp_path,
+        {"test_a.py": DO_FECHO, "test_b.py": ["from vzdr.agent import z"]},
+        lintados=["test_a.py", "test_b.py"],
+    )
+    _segundo_restrito(raiz)
+    selecionados, _ = derivar(raiz)
+    assert pacotes_sem_teste(raiz, selecionados) == []
+
+
+def test_import_so_de_teste_misto_nao_cobre(tmp_path):
+    """O misto nao roda sob 3.9, entao o que ele importa continua sem teste."""
+    raiz = montar(
+        tmp_path,
+        {"test_b.py": ["from vzdr.agent import z", "from vzdr.core.tenancy import y"]},
+        lintados=[],
+    )
+    _segundo_restrito(raiz)
+    _escrever(raiz, "tests/unit/test_a.py", "from vzdr.core.domain import x\n")
+    selecionados, _ = derivar(raiz)
+    assert pacotes_sem_teste(raiz, selecionados) == ["agent"]

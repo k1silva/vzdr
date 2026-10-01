@@ -99,7 +99,10 @@ pede `strict=` —, e o `make fmt` o escrevia sozinho. Foi assim que `datetime.U
 
 Pacotes e testes saem de `scripts/fecho_py39.py`, derivados da mesma fonte única —
 quem declara `py39`. Teste misto (que importa do fecho e de fora) não roda sob 3.9 e é
-impresso com o motivo; a lista `per-file-target-version` do ruff é conferida contra a
+impresso com o motivo. Pacote restrito que nenhum teste selecionado importa também é
+impresso: instalado e compilado, sem nada executar. Hoje é o `packages/agent` — o pacote que
+dá nome ao fecho —, e é por isso que "N aprovados sob 3.9" precisa vir com essa linha ao
+lado. A lista `per-file-target-version` do ruff é conferida contra a
 derivada, nos dois sentidos — e a derivada inclui o que o pytest importa junto com os
 testes: `conftest.py`, `__init__.py` e auxiliares de `tests/`.
 
