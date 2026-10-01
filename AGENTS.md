@@ -20,6 +20,7 @@ make lint         # ruff check + ruff format --check
 make fmt          # ruff format + fix
 make typecheck    # mypy
 make test         # pytest tests/unit — rápido, sem infraestrutura
+make test-py39    # testes do fecho de 3.9 sob Python 3.9 real — exige python3.9 (PY39=...)
 make test-db      # pytest tests/db — exige PostgreSQL local (make db-up)
 make test-int     # pytest tests/integration — exige libvirt + qemu reais
 make invariants   # checadores de invariante (pureza, tenant_id, fronteiras)
@@ -54,7 +55,8 @@ de ferramenta aparece em vez de sumir.
 
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
-também — a CI roda os dois.
+também — a CI roda os dois. Quem mexe no `core-domain` ou no `agent` roda `make
+test-py39`, que precisa de um interpretador 3.9 e por isso também fica fora do `check`.
 
 **A CI chama alvos do Makefile e nunca repete os comandos deles.** Um lugar só define
 como se roda o projeto. Ferramenta nova, alvo novo ou dependência nova entram no
@@ -69,7 +71,7 @@ roda. O control plane roda onde escolhemos: 3.11.
 
 | Onde | Alvo | Quem verifica |
 | --- | --- | --- |
-| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote |
+| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote, e nos testes do fecho pelo `per-file-target-version` da raiz; `make test-py39` executa esses testes sob 3.9 real |
 | Todo o resto | 3.11 | `ruff` na raiz |
 
 Nos pacotes restritos, nada de sintaxe 3.10+ (`match`, `X | Y` em anotação sem

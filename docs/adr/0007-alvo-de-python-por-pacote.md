@@ -1,7 +1,7 @@
 # ADR-0007: O alvo 3.9 é por pacote, não do projeto
 
 **Data:** 2026-09-22
-**Status:** aceito
+**Status:** aceito — a camada do interpretador emendada em 2026-10-01 (ver a emenda no fim)
 
 ## Contexto
 
@@ -33,7 +33,7 @@ fecho de dependências dele — hoje `packages/core-domain`.
 - `tests/invariants/check_alvo_py39.py` falha o build se um pacote restrito importar um
   pacote sem a restrição, e também se um pacote que roda no hypervisor perder o `py39`.
 - Um job de CI instala **Python 3.9 de verdade** e roda `python -m compileall` sobre os
-  pacotes restritos.
+  pacotes restritos. *(Emendado em 2026-10-01: compilar não basta — ver a emenda.)*
 
 Essa última linha é a que importa, e vale ser explícito sobre a divisão de trabalho:
 
@@ -73,3 +73,39 @@ E há uma fronteira nova para respeitar: **o que roda no hypervisor só importa 
 Se um dia o agente precisar de algo do núcleo que não seja `core-domain`, a escolha é
 explícita — ou o pacote entra no fecho e aceita a restrição, ou a conversa passa a ser pela
 API, que é o que P7 e a fronteira "o agente não fala com o banco" já mandam.
+
+## Emenda de 2026-10-01: compilar não é executar
+
+O texto acima é o original. Esta emenda corrige uma afirmação dele, e não a decisão.
+
+**O que estava errado.** A tabela chamava o `compileall` em 3.9 de "a garantia de fato", e
+o parágrafo seguinte dava como exemplo `X | Y` numa anotação avaliada em runtime. O
+`compileall` não pega esse exemplo: o arquivo **compila** em 3.9, e quebra ao ser
+**importado**. Nem `zip(..., strict=True)`, nem `datetime.UTC` — sintaxe válida, chamada
+3.10+. O mecanismo verificava menos do que o documento dizia que verificava.
+
+**E havia uma camada que empurrava no sentido contrário.** Os testes do fecho eram lintados
+como 3.11. O ruff então **exigia** código 3.11 neles — `UP017` pede `datetime.UTC`, `B905`
+pede `strict=` —, e o `make fmt` o escrevia sozinho. Foi assim que `datetime.UTC` chegou a
+`tests/unit/test_saude.py` no `main`, num teste que nunca rodou sob 3.9.
+
+**O que passa a valer.**
+
+| Camada | O que garante |
+| --- | --- |
+| `ruff` com `py39` | Primeira linha: sintaxe 3.10+ no editor e no lint — nos pacotes restritos **e** nos testes que os exercitam |
+| Checador do fecho | Impede que um pacote restrito importe um irrestrito |
+| `make test-py39`, no job `alvo-py39` | **A garantia de fato**: instala os pacotes restritos sob 3.9 real, compila, e **executa** os testes deles. É o import e a execução, e não só a gramática |
+
+Pacotes e testes saem de `scripts/fecho_py39.py`, derivados da mesma fonte única —
+quem declara `py39`. Teste misto (que importa do fecho e de fora) não roda sob 3.9 e é
+impresso com o motivo; a lista `per-file-target-version` do ruff é conferida contra a
+derivada, nos dois sentidos.
+
+**O limite que continua.** Executar só alcança o que os testes executam. Código 3.10+ num
+caminho sem teste, ou numa expressão avaliada só quando o teste falha — a mensagem de um
+`assert` —, passa. O `zip(..., strict=True)` da `dr-001` estava exatamente aí: sob 3.9, o
+diagnóstico de um teste reprovando teria virado `TypeError`. Para isso a camada é o ruff
+com `py39`, que agora alcança os testes também.
+
+Procedência: revisão do #36.
