@@ -1,4 +1,4 @@
-.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean declaracao-revisao
+.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean declaracao-revisao mutacao
 
 VENV := .venv
 PIP := $(VENV)/bin/pip
@@ -66,6 +66,12 @@ invariants:
 # sucesso, e ausencia de check e indistinguivel de aprovacao.
 declaracao-revisao:
 	$(BIN)/python tests/invariants/check_declaracao_de_revisao.py
+
+# Confirma que um teste REPROVA quando o controle e desligado. Uso:
+#   make mutacao M=caminho/para/mutacoes.json
+# Processo novo por rodada, sem bytecode, e verde exigido depois de cada restauro.
+mutacao:
+	$(BIN)/python -m scripts.mutacao $(M)
 
 check: lint typecheck test invariants
 	@echo "tudo verde"

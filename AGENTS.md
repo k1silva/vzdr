@@ -139,15 +139,22 @@ from vzdr.tools.dr import ...
   Quando escrever um teste de controle de segurança, mute o controle e confirme que o
   teste reprova.
 
-  **E ao mutar, rode sem bytecode e apague o `__pycache__` ao restaurar.** O Python
-  valida o `.pyc` pela data de modificação, em segundos, e pelo tamanho do fonte. Uma
-  mutação do mesmo tamanho — `todos` trocado por `set()` — desfeita no mesmo segundo
-  deixa o bytecode **da versão mutada** valendo sobre o fonte restaurado. Aconteceu: um
-  teste passou a reprovar sobre código correto, e `inspect.getsource` mostrava o código
-  limpo, porque lê o `.py`. Restaurar o fonte não restaura o comportamento. Pior que a
-  reprovação espúria é o sentido contrário: a rodada da mutação seguinte executando o
-  bytecode da anterior, e o resultado dela sendo sobre outra coisa.
-  `PYTHONDONTWRITEBYTECODE=1`, e o cache apagado antes e depois de cada rodada.
+  **E mute com `make mutacao`, e não à mão** — `scripts/mutacao.py`. Restaurar o fonte não
+  restaura o comportamento: uma mutação do mesmo tamanho desfeita no mesmo segundo deixou o
+  bytecode da versão mutada valendo sobre o fonte restaurado, e um teste reprovou sobre
+  código correto. O perigoso é o sentido contrário — a rodada seguinte executando o
+  bytecode da anterior, e produzindo verde sobre a mutação errada. O script roda cada
+  mutação num processo novo, sem bytecode, e **exige verde depois de cada restauro antes de
+  seguir**: isso pega a classe inteira — bytecode velho, módulo em memória, escrita
+  malfeita —, sem precisar saber a causa. E âncora que não bate é erro, e não pulo: a
+  versão à mão imprimia um aviso e seguia, contando como rodada uma mutação que não rodou.
+
+  **E a mensagem de commit cola as linhas que o arnês imprimiu — não as reescreve.** Uma
+  mensagem já afirmou "a conferência reprova" sobre uma mutação que nem tinha rodado: a
+  verificação falhou, o `;` deixou o commit seguir, e a frase estava escrita à mão. Com a
+  linha colada, a frase não existe sem a verificação: se o arnês não rodou, não há linha;
+  se a mutação sobreviveu, a linha diz `SOBREVIVEU` e a mensagem se contradiz sozinha. O
+  `&&` protege quem lembra dele; a linha colada protege quem não lembrou.
 - **Fato é o que ele diz, não o que ele parece sugerir.** A capability `dirty-bitmaps`
   do QEMU aparecia com `state: false`, e foi lida como "o bitmap não sobrevive à
   migração" — virou chamado com o fornecedor e medição bloqueada. Queria dizer "este
