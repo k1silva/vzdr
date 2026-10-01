@@ -190,21 +190,34 @@ def test_preempcao_repetida_e_o_mesmo_valor():
 # ── Alvo, por modo de falha ─────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ("classe", "alvo"),
-    [
-        (FecharJanela, Alvo.AGENTE_DE_ORIGEM),
-        (IniciarCopia, Alvo.AGENTE_DE_ORIGEM),
-        (DescartarBitmap, Alvo.AGENTE_DE_ORIGEM),
-        (InventariarVm, Alvo.AGENTE_DE_ORIGEM),
-        (PublicarExport, Alvo.RECEPTORA),
-        (ConfirmarNoDestino, Alvo.RECEPTORA),
-        (CercarDestino, Alvo.RECEPTORA),
-        (ConsultarNoDaVm, Alvo.API_DA_NUVEM_DE_ORIGEM),
-    ],
-)
-def test_cada_efeito_no_seu_alvo(classe, alvo):
-    assert um(classe).alvo is alvo
+#: O alvo de cada efeito, escrito a mao DE PROPOSITO — e o que o teste confere
+#: contra o codigo. Mas a lista nao pode ficar para tras do catalogo: o teste
+#: logo abaixo exige que ela cubra todo efeito que existe.
+ALVO_ESPERADO = {
+    "fechar_janela": Alvo.AGENTE_DE_ORIGEM,
+    "iniciar_copia": Alvo.AGENTE_DE_ORIGEM,
+    "descartar_bitmap": Alvo.AGENTE_DE_ORIGEM,
+    "inventariar_vm": Alvo.AGENTE_DE_ORIGEM,
+    "remover_checkpoints_anteriores": Alvo.AGENTE_DE_ORIGEM,
+    "publicar_export": Alvo.RECEPTORA,
+    "confirmar_no_destino": Alvo.RECEPTORA,
+    "retirar_export": Alvo.RECEPTORA,
+    "cercar_destino": Alvo.RECEPTORA,
+    "consultar_no_da_vm": Alvo.API_DA_NUVEM_DE_ORIGEM,
+    "registrar_ponto_de_recuperacao": Alvo.API_DA_NUVEM_DE_DESTINO,
+}
+
+
+def test_a_tabela_de_alvos_cobre_o_catalogo():
+    """A lista a mao ficou para tras uma vez: tres efeitos entraram e ela nao os
+    tinha. Agora reprova no dia em que um efeito novo nasce sem alvo conferido."""
+    assert set(ALVO_ESPERADO) == {c.TIPO for c in TODOS_OS_EFEITOS}
+
+
+@pytest.mark.parametrize("tipo", sorted(ALVO_ESPERADO))
+def test_cada_efeito_no_seu_alvo(tipo):
+    classe = _por_tipo(Efeito)[tipo]
+    assert um(classe).alvo is ALVO_ESPERADO[tipo]
 
 
 def test_a_consulta_ao_nova_nao_e_do_agente():
@@ -247,8 +260,11 @@ def test_alvo_desconhecido_recusa():
     """Precedente no `ler_nome`, em identidade.py: la a especie desconhecida
     vira um terceiro estado em vez de virar "nao e nosso". Mesma regra, dois
     modulos — cair num padrao aqui e rotear errado."""
+    # O exemplo de valor desconhecido era "api_da_nuvem_de_destino" — ate ele
+    # passar a existir. O mesmo JSON virou contradicao entre tipo e alvo: a
+    # evolucao aditiva fazendo o que devia. O exemplo agora e um alvo que nao existe.
     dados = um(IniciarCopia).para_json()
-    dados["alvo"] = "api_da_nuvem_de_destino"
+    dados["alvo"] = "receptora_secundaria"
     with pytest.raises(ValorDesconhecidoError, match="alvo"):
         efeito_de_json(dados)
 
