@@ -105,8 +105,9 @@ seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe 
   cercamento é control plane → relé → receptora. O túnel do relé pode cair com a conexão de
   dados intacta, e aí não há evidência nem cercamento. Revogar a regra de security group que
   libera a 10809 para o `/32` da origem mata o caminho de dados sem tocar no estado da
-  receptora e sem depender do relé. Exige um quarto alvo de execução,
-  `API_DA_NUVEM_DE_DESTINO`, que **não** entra na v1 por não ter efeito que o produza.
+  receptora e sem depender do relé. Usa o quarto alvo de execução,
+  `API_DA_NUVEM_DE_DESTINO` — que já entrou na v1, pelo ponto de recuperação; o que esta
+  candidata acrescenta é o efeito de revogar a regra, e não o alvo.
 - **Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
   e foi o que tornou a ausência de `py.typed` invisível. Registrada como TI2 em
   `specs/core-001-tenancy/tasks.md`.

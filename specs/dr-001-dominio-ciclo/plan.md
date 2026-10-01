@@ -78,9 +78,25 @@ primeiro deploy, remover tipo exige caminho de descontinuação, e isso é da `c
 o gatilho na lista de [antes de cada deploy](../../deploy/README.md), que é o único lugar
 consultado no dia em que o preço aparece.
 
-Um quarto alvo — `API_DA_NUVEM_DE_DESTINO` — é previsível e **não** entra agora: nenhum
-efeito da v1 o usa, e o cercamento por security group que o exigiria está registrado como
-candidata. Valor de enumeração sem efeito que o produza é código morto que parece desenho.
+O quarto alvo, `API_DA_NUVEM_DE_DESTINO`, **entrou** — e a frase que dizia "não entra
+agora: nenhum efeito da v1 o usa" era falsa desde o começo. O snapshot Cinder que é o ponto
+de recuperação é chamada à API da nuvem de destino, e sem ele o ciclo não termina. A regra
+continua valendo — valor de enumeração sem efeito que o produza é código morto que parece
+desenho —, e foi ela que errou de fato: havia efeito, só que ele faltava na enumeração.
+Valor novo de `Alvo` é aditivo: chega numa versão antiga como `ValorDesconhecidoError`, que
+pede reenvio.
+
+**A pergunta que a varredura não fez: o conjunto de efeitos executa o ciclo inteiro?** Ela
+perguntou coisas sobre cada efeito, e faltavam três no conjunto — `RegistrarPontoDeRecuperacao`,
+`RetirarExport` e `RemoverCheckpointsAnteriores`. A resposta agora é mecânica: a tabela
+`EFEITOS_DA_FASE` de `ciclo.py`, conferida nos dois sentidos — toda fase emite um efeito,
+todo efeito é emitido por uma fase.
+
+`RemoverCheckpointsAnteriores` **não** tem segundo id de ciclo. Ele significa "mantenha só o
+checkpoint deste ciclo": com um efeito por checkpoint, as janelas consolidadas dariam vários
+efeitos do mesmo ciclo, tipo e chaves, e a resposta de um responderia ao outro. E apagar o
+checkpoint do ciclo corrente fica impossível de expressar, porque não há campo onde
+escrevê-lo.
 
 ### Serialização é parte do tipo, não um detalhe
 
@@ -141,20 +157,33 @@ conversa com libvirt é da `dr-002` e da `dr-003`.
 Sem banco. Os tipos:
 
 ```python
-class Fase(Enum):          # onde o ciclo está
-    OCIOSO, RECONCILIANDO, CONGELANDO, COPIANDO,
-    VERIFICANDO_NO_DESTINO, CONCLUIDO, FALHOU, PRECISA_RESYNC
+class Fase(Enum):          # em ciclo.py, com EFEITOS_DA_FASE
+    LOCALIZANDO, VALIDANDO,                  # leituras: abandono sem residuo
+    FECHANDO_JANELA, PUBLICANDO, COPIANDO, CONFIRMANDO,
+    REGISTRANDO_PONTO, LIBERANDO,
+    CERCANDO                                 # da reconciliacao, transicoes na T7
+# os desfechos terminais sao da T5, reconciliados com Desfecho de saude.py
 
 @dataclass(frozen=True)
 class EstadoDoCiclo:
     ciclo_id: UUID
     vm_id: UUID
     fase: Fase
+    ja_deixou_residuo: bool    # so vira verdadeiro; o desfecho do prazo sai daqui (T6)
     janelas_pendentes: int
     no_de_origem: str          # ADR-0012: parte do estado, comparado a cada ciclo
     volumes: tuple[VolumeDoCiclo, ...]
     telemetria: Telemetria
 ```
+
+`ja_deixou_residuo` está aqui porque "o abandono deixa resíduo?" é pergunta sobre o
+**caminho** do ciclo, e `abandono_deixa_residuo` responde sobre a **fase**. Os dois só
+coincidem enquanto nenhuma transição voltar a uma leitura depois de escrever — e a T7 vai
+querer voltar: VM que migra no meio do ciclo precisa ser localizada de novo. Com o fato no
+estado, ela pode. A alternativa era a máquina proibir essa volta, conferida sobre a tabela de
+transições; seria estrutural, mas uma promessa sobre a tabela que a T7 estende, e quem
+estende não lê a promessa. O campo é atualizado ao entrar em cada fase, com
+`ja_deixou_residuo or abandono_deixa_residuo(fase)`, e nenhuma transição o devolve a falso.
 
 `no_de_origem` está aqui porque o ADR-0012 o tornou parte do estado do ciclo, não porque o
 ciclo precise dele para avançar. Comparar o nó atual com o gravado é a primeira coisa que a
@@ -244,6 +273,9 @@ mecanismo.
 | A propriedade 4 travar o próprio cercamento | Preempção é categoria nomeada no tipo, com as quatro obrigações. O teste da T7 não passa sem ela **Mecanismo:** `tests/unit/test_efeitos.py::test_so_preempcao_toma_chave_tomada`; a liberação da chave, `T7`. |
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
 | Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
+| O conjunto de efeitos não executar o ciclo inteiro | **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_todo_efeito_e_emitido_por_ao_menos_uma_fase`, `tests/unit/test_ciclo_fases.py::test_toda_fase_emite_ao_menos_um_efeito`. Faltaram três efeitos, e só apareceram quando alguém enumerou as fases à mão. |
+| Prazo estourado num ciclo que já deixou resíduo virar "nunca iniciou" | O desfecho sai de `ja_deixou_residuo`, fato do caminho que nunca volta a falso, e não da fase corrente — porque uma volta a LOCALIZANDO depois de escrever estaria numa fase sem resíduo com um checkpoint já criado. Trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. **Mecanismo:** Mecanismo ainda não existe: `T5` (o campo, e nenhuma transição que o desfaça) e `T6` (o desfecho do prazo). |
+| A resposta por fase divergir dos efeitos que a fase emite | Ela é derivada da tabela, e não enumerada. Isso garante a resposta **por fase**, e só isso: não diz nada sobre o ciclo. **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_residuo_e_derivado_dos_efeitos_e_nao_enumerado`. |
 | O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura`. |
 | Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três **Mecanismo:** Mecanismo ainda não existe: `T7`. |
 | Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante **Mecanismo:** `tests/unit/test_saude.py::test_nenhuma_funcao_do_modulo_le_o_relogio`. |

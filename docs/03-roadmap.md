@@ -212,6 +212,10 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
       ela, toda estimativa de tempo de resync é chute, inclusive as dos próprios documentos
 - [ ] **Custo da mescla de bitmap em função do número de checkpoints retidos** — cronometrar
       a mescla com 1, 2, 4, 8, 16 e 32 checkpoints retidos na mesma VM, e registrar a curva.
+      Entra nela um caso que a `dr-001` cria: com um ciclo por vez por VM, um ciclo travado
+      acumula a janela — cinco horas presas em `LOCALIZANDO` com RPO de uma hora fazem o
+      ciclo seguinte copiar cinco horas de mudança. Os 2,8 MiB em 24 minutos do laboratório
+      não dizem nada sobre essa janela nos 40 TB do cliente.
       É ela que define o limiar de compactação da
       [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md), e precisa existir antes da `dr-003`.
       Sem a curva, qualquer limiar é chute com cara de número

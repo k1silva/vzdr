@@ -81,6 +81,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - `avancar(estado, entrada) -> Transicao`. Função, não objeto: o estado entra e sai.
   - Testes: cada transição válida; transição inválida é recusada; a comparação do nó
     (ADR-0012) é a primeira coisa; toda saída pede efeito com `ciclo_id` correto
+  - `ja_deixou_residuo` no estado: ao entrar numa fase, vira
+    `ja_deixou_residuo or abandono_deixa_residuo(fase)`. Teste parametrizado sobre as
+    transições: nenhuma o devolve a falso. É o que deixa a T7 reentrar em LOCALIZANDO sem
+    estragar o desfecho do prazo (ver o plano, "Modelo").
+  - LIBERANDO é ordenada: os efeitos dela se excluem entre si
+    (`test_liberando_e_a_unica_fase_cujos_efeitos_se_excluem_entre_si`), então a transição
+    não é "emite os três e espera os três". A ordem se decide aqui.
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_ciclo.py`
 
 - [ ] **T6** — A máquina: falha, e a invariante que mais importa
@@ -113,6 +120,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     serve aquele nó, nunca pela instância que detém o lease, e conferido pelo nó que
     respondeu — e a VM não estar mais no nó gravado, que é o Nova respondendo o que o
     libvirt não pode.
+  - **Liberação com resíduo é recolhida, e não só registrada.** A fase `LIBERANDO` é a única
+    em que falhar não falha o ciclo: o ponto de recuperação já existe, e reportar `FALHOU`
+    esconderia um ponto que existe, inflaria a taxa de falha e convidaria a repetir trabalho
+    caro por causa de limpeza. O desfecho é concluído com resíduo — e o resíduo cresce: cada
+    checkpoint não removido retém um bitmap, a 2 MiB por TiB. Nos 40 TB do cliente-alvo, uma
+    geração vazada é da ordem de 80 MiB de bitmap no parque; dez gerações, 800 MiB. A
+    reconciliação recolhe.
   - Quando nenhuma chega, a máquina pede `CercarDestino` — e **o sucesso dele é a terceira
     forma de evidência**: derrubado o export, o escritor perdeu o alvo. Sem isso cercaríamos
     e continuaríamos esperando.

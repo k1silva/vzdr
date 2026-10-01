@@ -45,13 +45,16 @@ __all__ = [
     "IniciarCopia",
     "InventariarVm",
     "PublicarExport",
+    "RegistrarPontoDeRecuperacao",
     "RegistroMalformadoError",
     "Resultado",
+    "RemoverCheckpointsAnteriores",
     "ResultadoDeCopia",
     "ResultadoDeInventario",
     "ResultadoDeLocalizacao",
     "ResultadoSimples",
     "ResultadoVmAusente",
+    "RetirarExport",
     "ValorDesconhecidoError",
     "efeito_de_json",
     "pode_tomar_chave_tomada",
@@ -133,6 +136,14 @@ class Alvo(enum.Enum):
     AGENTE_DE_ORIGEM = "agente_de_origem"
     RECEPTORA = "receptora"
     API_DA_NUVEM_DE_ORIGEM = "api_da_nuvem_de_origem"
+    #: Entrou quando o primeiro efeito passou a usa-lo: o snapshot Cinder que E o
+    #: ponto de recuperacao e chamada a API da nuvem de destino. Antes, o plano dizia
+    #: que nenhum efeito da v1 o usava — e o ciclo nao tinha como terminar.
+    #:
+    #: Valor novo de enumeracao e ADITIVO: chega numa versao antiga como
+    #: `ValorDesconhecidoError`, que pede reenvio — o caminho desenhado. Nao e
+    #: afrouxar campo existente, que o ADR-0015 proibe.
+    API_DA_NUVEM_DE_DESTINO = "api_da_nuvem_de_destino"
 
 
 #: A preempcao COEXISTE com a chave: quem a tinha **mantem** o lease.
@@ -493,6 +504,75 @@ class ConfirmarNoDestino(EfeitoDeDisco):
 
     ALVO = Alvo.RECEPTORA
     TIPO = "confirmar_no_destino"
+
+
+@dataclass(frozen=True)
+class RegistrarPontoDeRecuperacao(EfeitoDeVm):
+    """O snapshot Cinder dos espelhos — o ponto de recuperacao.
+
+    Faltava. O ciclo da arquitetura termina em "snapshot Cinder", e nenhum efeito o
+    executava: a maquina podia copiar e confirmar, e nunca produzir um ponto.
+
+    De VM, e nao de disco, pelo P5: o ponto e da VM inteira, com todos os volumes do
+    mesmo ciclo. E segura as chaves de todos os discos: snapshot do espelho enquanto
+    uma copia zumbi escreve nele produziria um ponto inconsistente, sem erro em
+    lugar nenhum. A maquina so o pede depois de confirmados todos os discos.
+    """
+
+    ALVO = Alvo.API_DA_NUVEM_DE_DESTINO
+    TIPO = "registrar_ponto_de_recuperacao"
+
+
+@dataclass(frozen=True)
+class RetirarExport(EfeitoDeDisco):
+    """Retira o export do ciclo, no fim do caminho normal.
+
+    Faltava, e a falta desmentia uma frase nossa: "export fechado entre ciclos deixa
+    o espelho gravavel pela rede so durante a janela de copia". Sem efeito que o
+    retirasse, o export ficava aberto depois do ciclo.
+
+    NAO e o `CercarDestino`. Cercar e preempcao: toma chave ja tomada e usa
+    `mode: hard` contra um escritor que pode estar vivo. Retirar e a saida normal,
+    com chave normal, depois da copia confirmada. Reusar um para o outro misturaria
+    as obrigacoes da categoria.
+
+    **Idempotente, e pelo motivo proprio, nao por ser parecido com o cercamento.**
+    O estado desejado e AUSENCIA do export. Retirada repetida de export ja retirado
+    encontra o estado desejado, e isso e sucesso. A idempotencia nao vem da
+    categoria preempcao: e obrigacao de todo efeito de limpeza.
+    """
+
+    ALVO = Alvo.RECEPTORA
+    TIPO = "retirar_export"
+
+
+@dataclass(frozen=True)
+class RemoverCheckpointsAnteriores(EfeitoDeVm):
+    """Mantem so o checkpoint deste ciclo, e remove os nossos anteriores.
+
+    Faltava: o ciclo termina em "apaga checkpoint anterior", e nada o apagava. Sem
+    isso cada ciclo deixaria um checkpoint, e cada checkpoint retem um bitmap.
+
+    A forma e "mantenha so o do ciclo corrente", e nao "remova o do ciclo X", e o
+    motivo e correlacao. As janelas pendentes se consolidam: depois de ciclos que
+    falharam, um ciclo bem-sucedido libera VARIOS checkpoints. Com um efeito por
+    checkpoint, todos teriam o mesmo ciclo, o mesmo tipo e as mesmas chaves, e a
+    resposta de um responderia ao outro. Com "mantenha so o corrente", e um por
+    ciclo, e o nome a manter sai do `ciclo_id` do envelope.
+
+    E isso torna IMPOSSIVEL DE EXPRESSAR o erro mais grave da classe P2: apagar o
+    checkpoint do ciclo corrente, que e a janela que o `FecharJanela` acabou de
+    abrir. Nao ha campo onde escrever esse ciclo.
+
+    Remove so o que `ler_nome` le como `NomeDeCiclo` de checkpoint. Nome nosso
+    ilegivel — de uma versao mais nova — nunca e tocado.
+
+    Idempotente: o estado desejado e a ausencia dos anteriores. A maquina so o pede
+    depois de confirmados os discos e registrado o ponto — e ai que o P2 vive.
+    """
+
+    ALVO = Alvo.AGENTE_DE_ORIGEM
+    TIPO = "remover_checkpoints_anteriores"
 
 
 @dataclass(frozen=True)
