@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import pytest
 
-from vzdr.core.domain.ciclo import EFEITOS_DA_FASE, Fase, abandono_deixa_residuo
+from vzdr.core.domain.ciclo import EFEITOS_DA_FASE, ETAPAS_DA_FASE, Fase, abandono_deixa_residuo
 from vzdr.core.domain.efeitos import (
     Alvo,
     ConsultarNoDaVm,
@@ -112,3 +112,13 @@ def test_liberando_e_a_unica_fase_cujos_efeitos_se_excluem_entre_si():
     vez de descobri-la escrevendo `avancar`."""
     ordenadas = {f for f in Fase if _efeitos_se_excluem_entre_si(f)}
     assert ordenadas == {Fase.LIBERANDO}, sorted(f.value for f in ordenadas)
+
+
+@pytest.mark.parametrize("fase", list(Fase), ids=lambda f: f.value)
+def test_dentro_de_uma_etapa_nada_se_exclui(fase):
+    """E o que torna seguro pedir uma etapa inteira de uma vez. O que se exclui vai
+    em etapas diferentes, e a ordem entre elas e a da tabela."""
+    for etapa in ETAPAS_DA_FASE[fase]:
+        ocorrencias = [o for classe in etapa for o in _instancias(classe)]
+        juntos = [(a.TIPO, b.TIPO) for a, b in combinations(ocorrencias, 2) if se_excluem(a, b)]
+        assert juntos == [], juntos

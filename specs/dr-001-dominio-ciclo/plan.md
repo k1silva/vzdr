@@ -19,7 +19,9 @@ O módulo se divide em três, pela razão de mudar:
 ### A forma da máquina
 
 ```python
-def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado]) -> Transicao
+def iniciar(tenant_id, ciclo_id, vm_id, discos, no_de_origem, agora: datetime) -> Transicao
+def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime) -> Transicao
+def abandonar(estado: EstadoDoCiclo, agora: datetime) -> Transicao
 ```
 
 `Optional`, e não `Resultado | None`: `core-domain` é alvo 3.9 pelo
@@ -29,6 +31,45 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado]) -> Transicao
 `Transicao` traz o estado novo e os efeitos a pedir. **Função, não objeto com métodos**: o
 estado entra e sai, nada é guardado. É o que torna um teste uma linha e um cenário de falha
 uma lista de resultados.
+
+**Um tipo de retorno para toda entrada, e "terminou" é campo.** A entrada `None` é o
+agendador deixando o tempo correr. "Nada aconteceu" — `None`, resultado de outro ciclo,
+resultado repetido, ciclo já terminado — é uma `Transicao` com o mesmo estado e zero
+efeitos. "Terminou" é `estado.desfecho`, e **nunca** se deduz de zero efeitos: um ciclo que
+espera também não pede nada, e um que termina pode pedir limpeza (T6). O chamador não
+distingue dois tipos de retorno e não confunde os dois casos. Decidido ao escrever a
+assinatura, e não no décimo caso.
+
+**O desfecho é `saude.Desfecho`, e não há outro.** `ciclo.py` não define enum de desfecho:
+um tipo próprio seria o mesmo conceito nascendo duas vezes — o erro da `degradada` entre a
+`dr-006` e esta spec —, e uma tabela de tradução precisaria de teste para não divergir. Sem
+tipo próprio, não há onde escrever desfecho sem par. Nos dois sentidos, por estrutura: o
+campo é tipado `Desfecho` e o módulo não define enum além de `Fase`
+(`tests/unit/test_ciclo.py::test_o_desfecho_do_ciclo_e_o_de_saude`), e todo valor de
+`Desfecho` é produzido por algum caminho (`tests/unit/test_ciclo.py::test_todo_desfecho_e_alcancavel`).
+
+**O desfecho de quem para no meio sai dos fatos, e não da fase.** `abandonar` é o único
+lugar que o decide: ponto já registrado → `CONCLUIDO` (o resíduo vai para a T7); resíduo sem
+ponto → `FALHOU`; nem um nem outro → `NUNCA_INICIOU`. Todo resultado que não é sucesso
+passa por ele — e a T6 acrescenta ali os efeitos de limpeza e o prazo.
+
+**Três relógios, e o estado carrega dois.** `iniciado_em` (duração do ciclo, telemetria) e
+`fase_desde` (base do prazo da fase, T6). `fase_desde` só muda ao **entrar** numa fase: o
+tempo passar não começa fase nenhuma. O terceiro, o ponto mais recente, é da **VM** e não do
+ciclo: atravessa ciclos, e um ciclo que nunca iniciou tem que deixá-lo envelhecer. Mora com
+quem calcula a idade (`saude.idade_do_ponto`). O ciclo só diz quando registrou o **seu**
+ponto (`ponto_registrado_em`).
+
+**Três leituras que a T5 decidiu, e que T6/T7 podem refinar:**
+
+- **Migração detectada** (nó do Nova ≠ nó gravado): o ciclo termina sem pedir nada, com
+  `NUNCA_INICIOU` — nada foi escrito — e `migracao_detectada` verdadeiro, para quem cria o
+  resync (ADR-0012, decisão 1). Fica fora da taxa de falha porque não é falha de cópia; a
+  idade do ponto continua crescendo, e `degradada` é o sinal.
+- **Inventário com job em curso**: o ciclo não começa por cima de um job. Abandona na
+  leitura, `NUNCA_INICIOU`; o que fazer com o job é da reconciliação.
+- **`ResultadoDeCopia` com `concluido` falso**: resultado é resposta final, e não relatório
+  de progresso. Cópia que respondeu sem concluir não concluiu.
 
 O [ADR-0015](../../docs/adr/0015-efeito-como-valor.md) decide a forma do efeito; este plano
 só a executa.
@@ -157,23 +198,30 @@ conversa com libvirt é da `dr-002` e da `dr-003`.
 Sem banco. Os tipos:
 
 ```python
-class Fase(Enum):          # em ciclo.py, com EFEITOS_DA_FASE
+class Fase(Enum):          # em ciclo.py, com ETAPAS_DA_FASE
     LOCALIZANDO, VALIDANDO,                  # leituras: abandono sem residuo
     FECHANDO_JANELA, PUBLICANDO, COPIANDO, CONFIRMANDO,
-    REGISTRANDO_PONTO, LIBERANDO,
+    REGISTRANDO_PONTO, LIBERANDO,            # LIBERANDO em tres etapas ordenadas
     CERCANDO                                 # da reconciliacao, transicoes na T7
-# os desfechos terminais sao da T5, reconciliados com Desfecho de saude.py
+# desfecho terminal: saude.Desfecho — nao ha enum de desfecho em ciclo.py
 
 @dataclass(frozen=True)
 class EstadoDoCiclo:
+    tenant_id: UUID
     ciclo_id: UUID
     vm_id: UUID
-    fase: Fase
-    ja_deixou_residuo: bool    # so vira verdadeiro; o desfecho do prazo sai daqui (T6)
-    janelas_pendentes: int
+    discos: tuple[str, ...]
     no_de_origem: str          # ADR-0012: parte do estado, comparado a cada ciclo
-    volumes: tuple[VolumeDoCiclo, ...]
-    telemetria: Telemetria
+    iniciado_em: datetime
+    fase: Fase
+    fase_desde: datetime       # so muda ao entrar numa fase
+    etapa: int
+    pendentes: tuple[Efeito, ...]
+    ja_deixou_residuo: bool    # so vira verdadeiro; o desfecho do abandono sai daqui
+    no_encontrado: Optional[str]
+    ponto_registrado_em: Optional[datetime]
+    desfecho: Optional[Desfecho]
+# janelas pendentes e telemetria entram com quem as usa: T6 e T8
 ```
 
 `ja_deixou_residuo` está aqui porque "o abandono deixa resíduo?" é pergunta sobre o
@@ -200,12 +248,15 @@ class Alvo(Enum):
     AGENTE_DE_ORIGEM = "agente_de_origem"
     RECEPTORA = "receptora"
     API_DA_NUVEM_DE_ORIGEM = "api_da_nuvem_de_origem"
+    API_DA_NUVEM_DE_DESTINO = "api_da_nuvem_de_destino"   # o ponto de recuperacao
 
 @dataclass(frozen=True)
 class Efeito:
+    ALVO: ClassVar[Alvo]       # da especie, nao da ocorrencia: nao e campo
     tenant_id: UUID            # P9; a fila nao abre o efeito para isolar
     ciclo_id: UUID             # ADR-0015, propriedade 3
-    alvo: Alvo
+    vm_id: UUID                # o sujeito
+    no: Optional[str]          # so nos de agente, e obrigatorio neles
     def para_json(self) -> dict[str, Any]: ...
 
 class EfeitoDeDisco(Efeito):
@@ -242,7 +293,7 @@ class Resultado:
     def de_json(cls, dados: Mapping[str, Any]) -> "Resultado": ...
 
 # ciclo.py — a máquina
-def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado]) -> Transicao
+def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime) -> Transicao
 def reconciliar(estado: EstadoDoCiclo, inventario: Inventario) -> Transicao
 ```
 
@@ -274,11 +325,11 @@ mecanismo.
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
 | Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
 | O conjunto de efeitos não executar o ciclo inteiro | **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_todo_efeito_e_emitido_por_ao_menos_uma_fase`, `tests/unit/test_ciclo_fases.py::test_toda_fase_emite_ao_menos_um_efeito`. Faltaram três efeitos, e só apareceram quando alguém enumerou as fases à mão. |
-| Prazo estourado num ciclo que já deixou resíduo virar "nunca iniciou" | O desfecho sai de `ja_deixou_residuo`, fato do caminho que nunca volta a falso, e não da fase corrente — porque uma volta a LOCALIZANDO depois de escrever estaria numa fase sem resíduo com um checkpoint já criado. Trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. **Mecanismo:** Mecanismo ainda não existe: `T5` (o campo, e nenhuma transição que o desfaça) e `T6` (o desfecho do prazo). |
+| Prazo estourado num ciclo que já deixou resíduo virar "nunca iniciou" | O desfecho sai de `ja_deixou_residuo`, fato do caminho que nunca volta a falso, e não da fase corrente — porque uma volta a LOCALIZANDO depois de escrever estaria numa fase sem resíduo com um checkpoint já criado. Trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. **Mecanismo:** `tests/unit/test_ciclo.py::test_nenhuma_transicao_devolve_o_residuo_a_falso` e `tests/unit/test_ciclo.py::test_o_desfecho_sai_do_residuo_e_nao_da_fase`; o prazo em si, `T6`. |
 | A resposta por fase divergir dos efeitos que a fase emite | Ela é derivada da tabela, e não enumerada. Isso garante a resposta **por fase**, e só isso: não diz nada sobre o ciclo. **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_residuo_e_derivado_dos_efeitos_e_nao_enumerado`. |
 | O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura`. |
 | Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três **Mecanismo:** Mecanismo ainda não existe: `T7`. |
-| Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante **Mecanismo:** `tests/unit/test_saude.py::test_nenhuma_funcao_do_modulo_le_o_relogio`. |
+| Relógio lido por dentro do domínio | Nenhum módulo de `vzdr.core.domain` chama `now()` — `saude.py` e a máquina do `ciclo.py` recebem `agora` por parâmetro, e o teste fixa o instante. A lista de módulos é derivada da pasta **Mecanismo:** `tests/unit/test_saude.py::test_nenhum_modulo_do_dominio_le_o_relogio`. |
 | `degradada` virar coluna sob pressão de desempenho | O plano já diz que a resposta é *view* ou expressão computada, antes de a pressão existir **Mecanismo:** `tests/unit/test_saude.py::test_degradada_nao_e_coluna_em_migracao_nenhuma` — que não existia: esta linha dizia só "o plano já diz", e o meta-checador a pegou. |
 | Resultado atrasado aceito como do ciclo corrente | O id do ciclo está no tipo, não na convenção, e há teste do descarte. `Resultado` sem `ciclo_id` não compila **Mecanismo:** `tests/unit/test_efeitos.py::test_ciclo_id_viaja`, `tests/unit/test_efeitos.py::test_resultado_sem_ciclo_id_nao_existe`; o descarte, `T6`. |
 | `degradada` virar campo "por conveniência" ao integrar com o `core-003` | Ela é função e não existe como campo; guardá-la exigiria criar o campo, o que aparece na revisão **Mecanismo:** `tests/unit/test_saude.py::test_degradada_nao_e_campo_em_lugar_nenhum_do_dominio`. |
