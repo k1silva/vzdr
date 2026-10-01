@@ -78,6 +78,11 @@ EFEITOS_DA_FASE: dict[Fase, tuple[type[Efeito], ...]] = {
     Fase.COPIANDO: (IniciarCopia,),
     Fase.CONFIRMANDO: (ConfirmarNoDestino,),
     Fase.REGISTRANDO_PONTO: (RegistrarPontoDeRecuperacao,),
+    # A unica fase cujos efeitos se excluem ENTRE SI: o de VM segura todas as
+    # chaves, e os dois de disco seguram a mesma quando sao do mesmo disco. Nao ha
+    # deadlock — a concessao e tudo-ou-nada —, mas a transicao nao pode ser "emite
+    # os tres e espera os tres": e ordenada por construcao, e a ordem e da T5. A
+    # tupla aqui NAO e essa ordem.
     Fase.LIBERANDO: (RetirarExport, DescartarBitmap, RemoverCheckpointsAnteriores),
     Fase.CERCANDO: (CercarDestino,),
 }
@@ -90,9 +95,25 @@ def abandono_deixa_residuo(fase: Fase) -> bool:
     dela segura chave — isto e, toca disco. Leitura nao segura chave, entao
     abandona-la so custa tempo.
 
-    E a linha que a T6 usa para decidir o desfecho de um prazo estourado: so fase
-    SEM residuo pode terminar em "nunca iniciou". Onde ha residuo — o checkpoint
-    criado, o export publicado —, trabalho foi tentado, e tirar isso da taxa de
-    falha a deixaria otimista, que e a direcao perigosa.
+    Importa para o desfecho de um prazo estourado: onde ha residuo — o checkpoint
+    criado, o export publicado —, trabalho foi tentado, e chamar isso de "nunca
+    iniciou" o tiraria da taxa de falha, deixando-a otimista, que e a direcao
+    perigosa.
+
+    LIMITE: responde sobre a FASE, e nao sobre o CICLO. A T6 precisa saber se o
+    ciclo ja deixou residuo, e isso e propriedade do caminho: um ciclo que volta a
+    LOCALIZANDO depois de FECHANDO_JANELA — a VM migrou no meio, e a T7 vai querer
+    localiza-la de novo — esta numa fase sem residuo com um checkpoint ja criado.
+    Um prazo ali, decidido por esta funcao, daria "nunca iniciou". Por isso o
+    desfecho do prazo NAO sai daqui: sai de um fato do estado que so vira
+    verdadeiro e nunca volta (T5). Esta funcao e o que alimenta esse fato a cada
+    fase em que o ciclo entra, e nao a resposta.
+
+    O mesmo limite aparece no CERCANDO, onde a resposta e certa pelo motivo
+    errado. A preempcao segura chave para DESTRUIR, e nao deixa residuo novo; a
+    resposta certa ali vem de o ciclo ja ter escrito antes de chegar — que e o
+    argumento do caminho. A derivacao fica como esta de proposito: mudada, faria o
+    CERCANDO responder "sem residuo", e um prazo la poderia dar "nunca iniciou",
+    que seria pior.
     """
     return any(issubclass(e, (EfeitoDeDisco, EfeitoDeVm)) for e in EFEITOS_DA_FASE[fase])

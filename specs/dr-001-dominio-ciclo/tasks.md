@@ -81,6 +81,13 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - `avancar(estado, entrada) -> Transicao`. Função, não objeto: o estado entra e sai.
   - Testes: cada transição válida; transição inválida é recusada; a comparação do nó
     (ADR-0012) é a primeira coisa; toda saída pede efeito com `ciclo_id` correto
+  - `ja_deixou_residuo` no estado: ao entrar numa fase, vira
+    `ja_deixou_residuo or abandono_deixa_residuo(fase)`. Teste parametrizado sobre as
+    transições: nenhuma o devolve a falso. É o que deixa a T7 reentrar em LOCALIZANDO sem
+    estragar o desfecho do prazo (ver o plano, "Modelo").
+  - LIBERANDO é ordenada: os efeitos dela se excluem entre si
+    (`test_liberando_e_a_unica_fase_cujos_efeitos_se_excluem_entre_si`), então a transição
+    não é "emite os três e espera os três". A ordem se decide aqui.
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_ciclo.py`
 
 - [ ] **T6** — A máquina: falha, e a invariante que mais importa

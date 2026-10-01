@@ -10,19 +10,26 @@ E a terceira aplicacao do mesmo padrao no repositorio: check_eventos.py nos dois
 sentidos, a regra 3 do meta-checador, e esta.
 """
 
+from itertools import combinations
+from uuid import uuid4
+
 import pytest
 
 from vzdr.core.domain.ciclo import EFEITOS_DA_FASE, Fase, abandono_deixa_residuo
 from vzdr.core.domain.efeitos import (
+    Alvo,
     ConsultarNoDaVm,
     Efeito,
     EfeitoDeDisco,
     EfeitoDeVm,
     InventariarVm,
     _por_tipo,
+    se_excluem,
 )
 
 CATALOGO = set(_por_tipo(Efeito).values())
+VM = uuid4()
+DISCOS = ("vda", "vdb")
 
 
 @pytest.mark.parametrize("fase", list(Fase), ids=lambda f: f.value)
@@ -60,7 +67,8 @@ def test_as_fases_de_leitura_sao_as_primeiras():
 @pytest.mark.parametrize("fase", [Fase.LOCALIZANDO, Fase.VALIDANDO], ids=lambda f: f.value)
 def test_leitura_nao_deixa_residuo(fase):
     """Abandonar uma leitura so custa tempo — nenhum bitmap, checkpoint, export
-    ou lease. E o que permite um prazo estourado ali virar "nunca iniciou"."""
+    ou lease. Sobre a FASE: se um prazo ali vira "nunca iniciou" depende do
+    caminho do ciclo, que e `ja_deixou_residuo` (T5), e nao desta resposta."""
     assert not abandono_deixa_residuo(fase)
 
 
@@ -76,3 +84,33 @@ def test_as_duas_leituras_esperam_partes_diferentes():
     """LOCALIZANDO espera o Nova; VALIDANDO espera o agente. Falham separado, e o
     operador precisa saber qual das duas parou — por isso sao duas fases."""
     assert ConsultarNoDaVm.ALVO is not InventariarVm.ALVO
+
+
+def _instancias(classe):
+    """Uma ocorrencia por disco de uma VM de dois discos, como a fase as emitiria."""
+    base = {
+        "tenant_id": uuid4(),
+        "ciclo_id": uuid4(),
+        "vm_id": VM,
+        "no": "no-1" if classe.ALVO is Alvo.AGENTE_DE_ORIGEM else None,
+    }
+    if issubclass(classe, EfeitoDeVm):
+        return [classe(**base, discos=DISCOS)]
+    if issubclass(classe, EfeitoDeDisco):
+        return [classe(**base, disco=d) for d in DISCOS]
+    return [classe(**base)]
+
+
+def _efeitos_se_excluem_entre_si(fase):
+    ocorrencias = [o for classe in EFEITOS_DA_FASE[fase] for o in _instancias(classe)]
+    return any(se_excluem(a, b) for a, b in combinations(ocorrencias, 2))
+
+
+def test_liberando_e_a_unica_fase_cujos_efeitos_se_excluem_entre_si():
+    """Onde os efeitos de uma fase se excluem, a transicao dela nao pode ser
+    "emite todos e espera todos": e ordenada, e alguem tem que escolher a ordem.
+    Derivado de `se_excluem` sobre ocorrencias reais, e nao de uma lista — uma fase
+    nova nessa condicao reprova aqui, e quem a criou decide a ordem na hora, em
+    vez de descobri-la escrevendo `avancar`."""
+    ordenadas = {f for f in Fase if _efeitos_se_excluem_entre_si(f)}
+    assert ordenadas == {Fase.LIBERANDO}, sorted(f.value for f in ordenadas)

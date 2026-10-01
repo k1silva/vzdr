@@ -169,11 +169,21 @@ class EstadoDoCiclo:
     ciclo_id: UUID
     vm_id: UUID
     fase: Fase
+    ja_deixou_residuo: bool    # so vira verdadeiro; o desfecho do prazo sai daqui (T6)
     janelas_pendentes: int
     no_de_origem: str          # ADR-0012: parte do estado, comparado a cada ciclo
     volumes: tuple[VolumeDoCiclo, ...]
     telemetria: Telemetria
 ```
+
+`ja_deixou_residuo` está aqui porque "o abandono deixa resíduo?" é pergunta sobre o
+**caminho** do ciclo, e `abandono_deixa_residuo` responde sobre a **fase**. Os dois só
+coincidem enquanto nenhuma transição voltar a uma leitura depois de escrever — e a T7 vai
+querer voltar: VM que migra no meio do ciclo precisa ser localizada de novo. Com o fato no
+estado, ela pode. A alternativa era a máquina proibir essa volta, conferida sobre a tabela de
+transições; seria estrutural, mas uma promessa sobre a tabela que a T7 estende, e quem
+estende não lê a promessa. O campo é atualizado ao entrar em cada fase, com
+`ja_deixou_residuo or abandono_deixa_residuo(fase)`, e nenhuma transição o devolve a falso.
 
 `no_de_origem` está aqui porque o ADR-0012 o tornou parte do estado do ciclo, não porque o
 ciclo precise dele para avançar. Comparar o nó atual com o gravado é a primeira coisa que a
@@ -264,7 +274,8 @@ mecanismo.
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
 | Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
 | O conjunto de efeitos não executar o ciclo inteiro | **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_todo_efeito_e_emitido_por_ao_menos_uma_fase`, `tests/unit/test_ciclo_fases.py::test_toda_fase_emite_ao_menos_um_efeito`. Faltaram três efeitos, e só apareceram quando alguém enumerou as fases à mão. |
-| Prazo estourado em fase com resíduo virar "nunca iniciou" | **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_residuo_e_derivado_dos_efeitos_e_nao_enumerado`; o prazo em si, `T6`. Fora das leituras, trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. |
+| Prazo estourado num ciclo que já deixou resíduo virar "nunca iniciou" | O desfecho sai de `ja_deixou_residuo`, fato do caminho que nunca volta a falso, e não da fase corrente — porque uma volta a LOCALIZANDO depois de escrever estaria numa fase sem resíduo com um checkpoint já criado. Trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. **Mecanismo:** Mecanismo ainda não existe: `T5` (o campo, e nenhuma transição que o desfaça) e `T6` (o desfecho do prazo). |
+| A resposta por fase divergir dos efeitos que a fase emite | Ela é derivada da tabela, e não enumerada. Isso garante a resposta **por fase**, e só isso: não diz nada sobre o ciclo. **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_residuo_e_derivado_dos_efeitos_e_nao_enumerado`. |
 | O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura`. |
 | Nó morto bloquear um disco para sempre | Duas formas de evidência, e cercamento quando nenhuma chega. Teste para as três **Mecanismo:** Mecanismo ainda não existe: `T7`. |
 | Relógio lido por dentro de `saude.py` | Nenhuma função do módulo chama `now()`; a data entra por parâmetro, e o teste fixa o instante **Mecanismo:** `tests/unit/test_saude.py::test_nenhuma_funcao_do_modulo_le_o_relogio`. |
