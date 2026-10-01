@@ -77,8 +77,8 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     função do módulo lê o relógio — verificado, não combinado
   - Arquivos: `.../domain/saude.py`, `tests/unit/test_saude.py`
 
-- [ ] **T5** — A máquina: caminho normal
-  - `avancar(estado, entrada) -> Transicao`. Função, não objeto: o estado entra e sai.
+- [x] **T5** — A máquina: caminho normal
+  - `avancar(estado, entrada, agora) -> Transicao`. Função, não objeto: o estado entra e sai.
   - Testes: cada transição válida; transição inválida é recusada; a comparação do nó
     (ADR-0012) é a primeira coisa; toda saída pede efeito com `ciclo_id` correto
   - `ja_deixou_residuo` no estado: ao entrar numa fase, vira

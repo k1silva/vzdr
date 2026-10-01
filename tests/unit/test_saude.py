@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 import vzdr.core.domain as dominio
-from vzdr.core.domain import saude
 from vzdr.core.domain.saude import (
     FATOR_PADRAO,
     Desfecho,
@@ -193,8 +192,17 @@ def _leituras_de_relogio(arvore: ast.AST) -> list[str]:
     return achadas
 
 
-def test_nenhuma_funcao_do_modulo_le_o_relogio():
-    """A regra do topo de saude.py, conferida lendo o codigo.
+MODULOS_DO_DOMINIO = sorted(Path(dominio.__file__).parent.glob("*.py"))
+
+
+@pytest.mark.parametrize("modulo", MODULOS_DO_DOMINIO, ids=lambda p: p.name)
+def test_nenhum_modulo_do_dominio_le_o_relogio(modulo):
+    """A regra do topo de saude.py, conferida lendo o codigo — e de TODO o dominio.
+
+    Comecou so sobre saude.py. A maquina do ciclo (T5) e a segunda a receber o
+    relogio por parametro, e um segundo verificador igual para ela seria o mesmo
+    trabalho em dois lugares. A lista de modulos e derivada da pasta: modulo novo
+    entra sozinho.
 
     Combinar ("ninguem chama now() aqui") e o que falha em silencio: passa hoje e
     reprova em outro segundo, em outro fuso, na virada do horario de verao. Pega
@@ -204,8 +212,7 @@ def test_nenhuma_funcao_do_modulo_le_o_relogio():
     O que isto NAO pega: `getattr(datetime, "now")`. E ofuscacao deliberada, e
     nao e o erro que se comete sem perceber.
     """
-    fonte = Path(saude.__file__).read_text(encoding="utf-8")
-    assert _leituras_de_relogio(ast.parse(fonte)) == []
+    assert _leituras_de_relogio(ast.parse(modulo.read_text(encoding="utf-8"))) == []
 
 
 @pytest.mark.parametrize(
