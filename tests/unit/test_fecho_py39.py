@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from scripts.fecho_py39 import divergencias_de_lint
+from scripts.fecho_py39 import divergencias_de_lint, importados_junto
 from scripts.fecho_py39 import testes_do_fecho as derivar
 
 
@@ -74,3 +74,64 @@ def test_listas_iguais_nao_divergem(tmp_path):
     raiz = montar(tmp_path, {"test_a.py": DO_FECHO}, lintados=["test_a.py"])
     selecionados, _ = derivar(raiz)
     assert divergencias_de_lint(raiz, selecionados) == []
+
+
+def _escrever(raiz: Path, caminho: str, texto: str = "") -> None:
+    arquivo = raiz / caminho
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(texto)
+
+
+def test_o_que_o_pytest_importa_junto_vai_junto(tmp_path):
+    """conftest.py e __init__.py do caminho ate o teste: o 3.9 os importa de
+    qualquer jeito. O conftest de outro diretorio, nao."""
+    raiz = montar(tmp_path, {"test_a.py": DO_FECHO}, lintados=["test_a.py"])
+    for caminho in [
+        "conftest.py",
+        "tests/__init__.py",
+        "tests/conftest.py",
+        "tests/unit/conftest.py",
+        "tests/db/conftest.py",
+    ]:
+        _escrever(raiz, caminho)
+    selecionados, _ = derivar(raiz)
+    assert set(importados_junto(raiz, selecionados)) == {
+        Path("conftest.py"),
+        Path("tests/__init__.py"),
+        Path("tests/conftest.py"),
+        Path("tests/unit/conftest.py"),
+    }
+
+
+def test_auxiliar_importado_vai_junto_transitivamente(tmp_path):
+    """Pelo teste e pelo conftest, absoluto e relativo, e o que o auxiliar importa."""
+    raiz = montar(
+        tmp_path,
+        {"test_a.py": [*DO_FECHO, "from tests.unit.auxiliar import fabrica"]},
+        lintados=["test_a.py"],
+    )
+    _escrever(raiz, "tests/__init__.py")
+    _escrever(raiz, "tests/unit/__init__.py")
+    _escrever(raiz, "tests/unit/auxiliar.py", "from .profundo import x\n")
+    _escrever(raiz, "tests/unit/profundo.py")
+    _escrever(raiz, "tests/unit/conftest.py", "from tests import apoio\n")
+    _escrever(raiz, "tests/apoio.py")
+    _escrever(raiz, "tests/unit/alheio.py")
+    selecionados, _ = derivar(raiz)
+    junto = set(importados_junto(raiz, selecionados))
+    assert {
+        Path("tests/unit/auxiliar.py"),
+        Path("tests/unit/profundo.py"),
+        Path("tests/apoio.py"),
+    } <= junto
+    assert Path("tests/unit/alheio.py") not in junto
+
+
+def test_conftest_fora_do_lint_reprova(tmp_path):
+    """A porta ao lado: o conftest e lintado como 3.11 e o `make fmt` escreve
+    `datetime.UTC` nele."""
+    raiz = montar(tmp_path, {"test_a.py": DO_FECHO}, lintados=["test_a.py"])
+    _escrever(raiz, "tests/unit/conftest.py")
+    selecionados, _ = derivar(raiz)
+    divergencias = divergencias_de_lint(raiz, selecionados + importados_junto(raiz, selecionados))
+    assert any("tests/unit/conftest.py" in d for d in divergencias), divergencias

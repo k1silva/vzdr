@@ -17,7 +17,7 @@ src = ["packages", "tests", "scripts"]
 # o escreve sozinho, quebrando o teste no 3.9. Esta lista e conferida contra a
 # derivada por scripts/fecho_py39.py, nos dois sentidos: editar aqui sem o teste
 # existir, ou criar teste do fecho sem entrar aqui, reprova o `make test-py39`.
-per-file-target-version = { "tests/unit/test_efeitos.py" = "py39", "tests/unit/test_identidade.py" = "py39", "tests/unit/test_pode.py" = "py39", "tests/unit/test_saude.py" = "py39" }
+per-file-target-version = { "tests/__init__.py" = "py39", "tests/unit/__init__.py" = "py39", "tests/unit/test_ciclo_fases.py" = "py39", "tests/unit/test_efeitos.py" = "py39", "tests/unit/test_identidade.py" = "py39", "tests/unit/test_pode.py" = "py39", "tests/unit/test_saude.py" = "py39" }
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG", "PTH"]

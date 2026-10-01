@@ -21,6 +21,7 @@ pyproject da raiz, nos dois sentidos. Teste do fecho fora dele seria lintado com
 como o primeiro caso chegou ao `main`. Entrada sem teste e lista mentindo.
 """
 
+import ast
 import sys
 import tomllib
 from pathlib import Path
@@ -73,22 +74,78 @@ def testes_do_fecho(raiz: Path) -> tuple[list[Path], list[str]]:
     return selecionados, excluidos
 
 
+def _modulo_local(raiz: Path, nome: str) -> Path | None:
+    """O arquivo do repositorio que o nome pontilhado importa, se for local."""
+    base = raiz / Path(*nome.split("."))
+    for candidato in (base.with_suffix(".py"), base / "__init__.py"):
+        if candidato.is_file():
+            return candidato
+    return None
+
+
+def _imports_locais(raiz: Path, arquivo: Path) -> set[Path]:
+    """Os arquivos do repositorio que `arquivo` importa: absolutos (`tests.x`) e
+    relativos. Em `from a import b`, `b` pode ser submodulo, e entao conta tambem."""
+    arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
+    pacote = arquivo.parent.relative_to(raiz).parts
+    nomes: list[str] = []
+    for no in ast.walk(arvore):
+        if isinstance(no, ast.Import):
+            nomes += [a.name for a in no.names]
+        elif isinstance(no, ast.ImportFrom):
+            prefixo = list(pacote[: len(pacote) - no.level + 1]) if no.level else []
+            modulo = ".".join(prefixo + ([no.module] if no.module else []))
+            nomes += [modulo] + [f"{modulo}.{a.name}" if modulo else a.name for a in no.names]
+    achados = {_modulo_local(raiz, n) for n in nomes if n and not n.startswith("vzdr.")}
+    return {a for a in achados if a is not None and a.is_relative_to(raiz / "tests")}
+
+
+def importados_junto(raiz: Path, selecionados: list[Path]) -> list[Path]:
+    """O que o pytest importa ao coletar os testes do fecho, alem deles mesmos.
+
+    `conftest.py` e `__init__.py` de cada diretorio entre a raiz e o teste — o
+    pytest os importa de qualquer jeito —, e todo modulo local que algum deles
+    importe, transitivamente. Sob 3.9 sao importados como os testes; fora da lista
+    do ruff seriam lintados como 3.11, e o `make fmt` escreveria `datetime.UTC`
+    neles pela porta ao lado da que ja foi fechada.
+    """
+    pendentes: list[Path] = []
+    for teste in selecionados:
+        pasta = (raiz / teste).parent
+        while pasta.is_relative_to(raiz):
+            pendentes += [pasta / n for n in ("conftest.py", "__init__.py")]
+            if pasta == raiz:
+                break
+            pasta = pasta.parent
+        pendentes.append(raiz / teste)
+    vistos: set[Path] = set()
+    while pendentes:
+        arquivo = pendentes.pop()
+        if arquivo in vistos or not arquivo.is_file():
+            continue
+        vistos.add(arquivo)
+        pendentes += _imports_locais(raiz, arquivo)
+    testes = {raiz / t for t in selecionados}
+    return sorted(a.relative_to(raiz) for a in vistos - testes)
+
+
 def testes_lintados_como_py39(raiz: Path) -> set[Path]:
     dados = tomllib.loads((raiz / "pyproject.toml").read_text(encoding="utf-8"))
     por_arquivo = dados.get("tool", {}).get("ruff", {}).get("per-file-target-version", {})
     return {Path(caminho) for caminho, alvo in por_arquivo.items() if alvo == "py39"}
 
 
-def divergencias_de_lint(raiz: Path, selecionados: list[Path]) -> list[str]:
-    """O que separa a lista do ruff da derivada, nos dois sentidos."""
+def divergencias_de_lint(raiz: Path, sob_3_9: list[Path]) -> list[str]:
+    """O que separa a lista do ruff da derivada, nos dois sentidos. `sob_3_9` e
+    tudo o que o 3.9 importa: os testes e o que vem junto com eles."""
     lintados = testes_lintados_como_py39(raiz)
     return [
-        f"{t}: roda sob 3.9 e o ruff o linta como 3.11 — acrescente ao "
+        f"{t}: e importado sob 3.9 e o ruff o linta como 3.11 — acrescente ao "
         f"per-file-target-version do pyproject.toml"
-        for t in sorted(set(selecionados) - lintados)
+        for t in sorted(set(sob_3_9) - lintados)
     ] + [
-        f"{t}: esta no per-file-target-version e nao e teste do fecho — retire"
-        for t in sorted(lintados - set(selecionados))
+        f"{t}: esta no per-file-target-version e o 3.9 nao o importa — retire"
+        for t in sorted(lintados - set(sob_3_9))
     ]
 
 
@@ -105,7 +162,8 @@ def main(argv: list[str]) -> int:
         if not selecionados:
             print("nenhum teste exercita o fecho de 3.9", file=sys.stderr)
             return 1
-        divergencias = divergencias_de_lint(RAIZ, selecionados)
+        junto = importados_junto(RAIZ, selecionados)
+        divergencias = divergencias_de_lint(RAIZ, selecionados + junto)
         for d in divergencias:
             print(d, file=sys.stderr)
         if divergencias:
