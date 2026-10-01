@@ -235,7 +235,9 @@ escondida dentro do `IniciarCopia`, **a máquina não conheceria o nome do expor
 e sem esse nome não há reconciliação de export órfão nem cercamento por instância.
 
 Ganho de lado, que não foi o motivo mas vale registrar: export fechado entre ciclos deixa o
-espelho gravável pela rede **só durante a janela de cópia**, em vez de sempre. Menor
+espelho gravável pela rede **só durante a janela de cópia**, em vez de sempre. Esta frase foi
+falsa por um tempo: nenhum efeito retirava o export no fim do ciclo normal. Quem a torna
+verdadeira é o `RetirarExport`, na fase de liberação. Menor
 privilégio no tempo, sem custo.
 
 #### O ponto cego do cercamento
