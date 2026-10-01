@@ -1,6 +1,9 @@
-.PHONY: setup lint fmt typecheck test test-db test-int invariants check eventos db-up db-papeis db-down clean declaracao-revisao mutacao
+.PHONY: setup lint fmt typecheck test test-py39 test-db test-int invariants check eventos db-up db-papeis db-down clean declaracao-revisao mutacao
 
 VENV := .venv
+VENV39 := .venv39
+# O interpretador 3.9. Na CI vem do setup-python; localmente, de onde houver.
+PY39 ?= python3.9
 PIP := $(VENV)/bin/pip
 BIN := $(VENV)/bin
 
@@ -40,6 +43,22 @@ typecheck:
 
 test:
 	$(BIN)/pytest tests/unit
+
+# O que roda no hypervisor, EXECUTADO sob 3.9 — e nao so lido por procuracao. O
+# ruff e o check_alvo_py39 leem a intencao; `zip(..., strict=True)` compila em 3.9
+# e quebra ao rodar, e so um interpretador 3.9 de verdade o pega — no que os testes
+# executam, e so ali (ADR-0007, o limite). Pacotes e testes sao derivados do
+# fecho (scripts/fecho_py39.py), e nao listados aqui.
+test-py39:
+	rm -rf $(VENV39)
+	$(PY39) -m venv $(VENV39)
+	$(VENV39)/bin/python -c 'import sys; v = sys.version_info[:2]; assert v == (3, 9), v'
+	$(VENV39)/bin/pip install -q pytest
+	$(BIN)/python scripts/fecho_py39.py pacotes > $(VENV39)/pacotes
+	$(BIN)/python scripts/fecho_py39.py testes > $(VENV39)/testes
+	for p in $$(cat $(VENV39)/pacotes); do $(VENV39)/bin/pip install -q -e "$$p" || exit 1; done
+	$(VENV39)/bin/python -m compileall -q $$(cat $(VENV39)/pacotes)
+	PYTHONDONTWRITEBYTECODE=1 $(VENV39)/bin/pytest -p no:cacheprovider $$(cat $(VENV39)/testes)
 
 # Garante o papel da aplicacao antes de testar: sem ele, o teste de isolamento
 # rodaria como dono das tabelas e nao provaria nada (ADR-0006).
@@ -90,5 +109,5 @@ db-down:
 	docker compose down
 
 clean:
-	rm -rf $(VENV) .pytest_cache .mypy_cache .ruff_cache
+	rm -rf $(VENV) $(VENV39) .pytest_cache .mypy_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +

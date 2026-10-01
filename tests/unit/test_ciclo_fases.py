@@ -59,9 +59,7 @@ def test_as_fases_de_leitura_sao_as_primeiras():
     de cercamento, que e da reconciliacao e nao do caminho normal."""
     normal = [f for f in Fase if f is not Fase.CERCANDO]
     residuos = [abandono_deixa_residuo(f) for f in normal]
-    assert residuos == sorted(residuos), [
-        (f.value, r) for f, r in zip(normal, residuos, strict=True)
-    ]
+    assert residuos == sorted(residuos), [(f.value, r) for f, r in zip(normal, residuos)]
 
 
 @pytest.mark.parametrize("fase", [Fase.LOCALIZANDO, Fase.VALIDANDO], ids=lambda f: f.value)

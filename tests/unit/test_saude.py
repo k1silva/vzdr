@@ -2,7 +2,7 @@
 
 import ast
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -20,7 +20,7 @@ from vzdr.core.domain.saude import (
 HORA = timedelta(hours=1)
 DIA = timedelta(hours=24)
 UM_SEGUNDO = timedelta(seconds=1)
-T0 = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+T0 = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
 
 
 # ── degradada: por tempo, em multiplos do RPO ───────────────────────────────

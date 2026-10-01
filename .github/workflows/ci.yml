@@ -65,15 +65,24 @@ jobs:
         run: make test-db
 
   # O ruff e o checador dizem que a INTENCAO e 3.9. Este job verifica o FATO:
-  # instala 3.9 de verdade e compila o que roda no hypervisor. Ver ADR-0007.
+  # instala 3.9 de verdade e EXECUTA, sob ele, os testes do que roda no
+  # hypervisor. So compilar deixava passar chamada 3.10+ de sintaxe valida, e
+  # repetia o comando aqui em vez de chamar o Makefile. Ver ADR-0007.
   alvo-py39:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # As duas: o 3.11 monta o .venv que deriva o fecho; o 3.9 e o que executa.
+      # A ultima da lista e o `python3` padrao, e o `make setup` precisa do 3.11.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: |
+            3.9
+            3.11
 
-      - name: Compilar com Python 3.9 real
-        run: python -m compileall -q packages/agent packages/core-domain
+      - name: Ambiente
+        run: make setup
+
+      - name: Testes do fecho sob Python 3.9 real
+        run: make test-py39 PY39=python3.9

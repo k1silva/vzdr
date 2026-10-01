@@ -20,6 +20,7 @@ make lint         # ruff check + ruff format --check
 make fmt          # ruff format + fix
 make typecheck    # mypy
 make test         # pytest tests/unit — rápido, sem infraestrutura
+make test-py39    # testes do fecho de 3.9 sob Python 3.9 real — exige python3.9 (PY39=...)
 make test-db      # pytest tests/db — exige PostgreSQL local (make db-up)
 make test-int     # pytest tests/integration — exige libvirt + qemu reais
 make invariants   # checadores de invariante (pureza, tenant_id, fronteiras)
@@ -52,9 +53,20 @@ que parecia **paciência, não erro**. Sintoma indistinguível do estado normal 
 "ausência de check parece aprovação". Laço de verificação tem **limite de voltas**, e erro
 de ferramenta aparece em vez de sumir.
 
+**Nem ramifique pelo código de saída de um comando que você não sabe o que é.** No shell
+do agente, `grep` pode ser uma **função** que chama outro programa — aqui, o ugrep —, e
+com `-qv` ela devolve o código ao contrário do GNU grep. Aconteceu no #36: um laço de espera
+da CI saiu na terceira volta, dando por concluídos dois jobs ainda rodando. Mesmo sintoma do
+`gh pr checks --json`, por outro instrumento: o laço parecia certo, e o que enganou foi a
+**ausência de erro**. Em condição de laço ou de verificação, use `command grep` ou caminho
+absoluto, ou decida com comparação explícita (`jq`, `test`) sobre um valor que você imprimiu.
+E condição de "nada pendente" exige que **exista** algo: lista vazia também tem zero
+pendentes.
+
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
-também — a CI roda os dois.
+também — a CI roda os dois. Quem mexe no `core-domain` ou no `agent` roda `make
+test-py39`, que precisa de um interpretador 3.9 e por isso também fica fora do `check`.
 
 **A CI chama alvos do Makefile e nunca repete os comandos deles.** Um lugar só define
 como se roda o projeto. Ferramenta nova, alvo novo ou dependência nova entram no
@@ -69,11 +81,18 @@ roda. O control plane roda onde escolhemos: 3.11.
 
 | Onde | Alvo | Quem verifica |
 | --- | --- | --- |
-| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote |
+| `packages/agent` e o fecho de dependências dele (hoje `packages/core-domain`) | 3.9 | `ruff` com `target-version = "py39"` no pyproject do próprio pacote, para sintaxe; `make test-py39` executa os testes do fecho sob 3.9 real, e pega chamada 3.10+ no que eles executam |
 | Todo o resto | 3.11 | `ruff` na raiz |
 
 Nos pacotes restritos, nada de sintaxe 3.10+ (`match`, `X | Y` em anotação sem
 `from __future__ import annotations`).
+
+**Ferramenta que reescreve código obedece a um alvo, e alvo errado faz dela fonte de
+defeito.** O `datetime.UTC` que quebrava `test_saude.py` sob 3.9 não foi descuido de
+ninguém: o ruff, mirando 3.11, exigia o alias (`UP017`), e o `make fmt` obedeceu. Chegou por
+um comando que se roda sem ler o diff, e por isso ninguém o viu. O conserto não é desligar a
+regra, é dar à ferramenta o alvo certo para cada arquivo — o `per-file-target-version` da
+raiz, derivado e conferido pelo `make test-py39`.
 
 Um pacote restrito **não pode importar** pacote sem a restrição: quebraria no hypervisor
 em tempo de import, não na CI. `tests/invariants/check_alvo_py39.py` verifica o fecho.
