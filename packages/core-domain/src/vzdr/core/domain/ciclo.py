@@ -77,12 +77,14 @@ __all__ = [
     "RESULTADO_ESPERADO",
     "EstadoDoCiclo",
     "Fase",
+    "MigracaoSemResyncError",
     "Transicao",
     "TransicaoInvalidaError",
     "abandonar",
     "abandono_deixa_residuo",
     "avancar",
     "iniciar",
+    "no_do_proximo_ciclo",
 ]
 
 
@@ -198,6 +200,22 @@ RESULTADO_ESPERADO: dict[type[Efeito], type[Resultado]] = {
 }
 
 
+class MigracaoSemResyncError(RuntimeError):
+    """O proximo ciclo nao tem no de origem certo, e por isso nao comeca.
+
+    Depois de uma migracao detectada, os dois nos candidatos estao errados. O
+    gravado (A) faz o proximo ciclo detectar a migracao de novo, e de novo: a VM
+    para de ser protegida com 0% de falha no painel, porque `NUNCA_INICIOU` fica
+    fora da taxa. O encontrado (B) e pior: o proximo ciclo nao detecta nada e
+    copia com o bitmap que atravessou o evento de host — o espelho errado em
+    silencio que a decisao 1 do ADR-0012 existe para impedir.
+
+    O no certo so existe depois de o bitmap ser descartado e a VM ressincronizada,
+    e esse caminho nao esta construido (ADR-0012, M4). Ate la, o agendador que
+    pede o no recebe isto, e nao um laco silencioso.
+    """
+
+
 class TransicaoInvalidaError(ValueError):
     """Um resultado responde a um efeito pendente, e nao e o tipo que o responde.
 
@@ -243,8 +261,17 @@ class EstadoDoCiclo:
     #: que reentra numa leitura depois de escrever continua com residuo. E dele, e
     #: nao da fase corrente, que sai o desfecho de um abandono.
     ja_deixou_residuo: bool
-    #: Onde o Nova disse que a VM esta, quando ja disse.
+    #: Onde o Nova disse que a VM esta, quando ja disse. E a PROCEDENCIA do no
+    #: dos efeitos de agente (ADR-0015, emenda de 2026-09-30), e nao o gravado:
+    #: sem migracao os dois sao iguais quando o efeito sai, mas sao duas expressoes
+    #: do mesmo fato, e o envelope diz qual e a dele.
     no_encontrado: Optional[str]
+    #: Os nomes que o inventario achou, crus, quando ja respondeu. A T5 so decide
+    #: por `job_em_curso`; classificar os nomes (`ler_nome`, tres estados) e
+    #: achar orfaos e da T7. Guardados aqui porque o ciclo que os viu e o lugar
+    #: mais barato de registra-los — descartados, a evidencia morreria em
+    #: `avancar` e a T7 teria que perguntar de novo.
+    nomes_no_inventario: Optional[tuple[str, ...]]
     #: Quando o ponto de recuperacao deste ciclo foi registrado, se foi.
     ponto_registrado_em: Optional[datetime]
     #: `None` enquanto o ciclo corre. Terminado, e o `Desfecho` de saude.py — nao
@@ -284,6 +311,14 @@ class Transicao:
         return self.estado.desfecho is not None
 
 
+def _no_do_agente(estado: EstadoDoCiclo) -> str:
+    """O no de um efeito de agente: o que o Nova disse. Antes de ele dizer, nao ha
+    efeito de agente — a comparacao do no e a primeira coisa (ADR-0012)."""
+    if estado.no_encontrado is None:
+        raise TransicaoInvalidaError("efeito de agente pedido antes de o Nova dizer onde a VM esta")
+    return estado.no_encontrado
+
+
 def _pedir(estado: EstadoDoCiclo, fase: Fase, etapa: int) -> tuple[Efeito, ...]:
     """Os efeitos de uma etapa, construidos da tabela — a unica lista que existe."""
     pedidos: list[Efeito] = []
@@ -292,7 +327,7 @@ def _pedir(estado: EstadoDoCiclo, fase: Fase, etapa: int) -> tuple[Efeito, ...]:
             "tenant_id": estado.tenant_id,
             "ciclo_id": estado.ciclo_id,
             "vm_id": estado.vm_id,
-            "no": estado.no_de_origem if classe.ALVO is Alvo.AGENTE_DE_ORIGEM else None,
+            "no": _no_do_agente(estado) if classe.ALVO is Alvo.AGENTE_DE_ORIGEM else None,
         }
         if issubclass(classe, EfeitoDeVm):
             pedidos.append(classe(**base, discos=estado.discos))
@@ -339,6 +374,7 @@ def iniciar(
         pendentes=(),
         ja_deixou_residuo=False,
         no_encontrado=None,
+        nomes_no_inventario=None,
         ponto_registrado_em=None,
         desfecho=None,
     )
@@ -359,6 +395,10 @@ def abandonar(estado: EstadoDoCiclo, agora: datetime) -> Transicao:
 
     `agora` ainda nao e usado, e esta na assinatura porque a T6 o usa: e aqui que
     entram os efeitos de limpeza do abandono, e a telemetria (T8) registra o fim.
+
+    O ciclo seguinte comeca com `no_do_proximo_ciclo(estado)`, e nunca com o
+    `no_de_origem` carregado adiante: depois de migracao, isso prende a VM num
+    laco silencioso de `NUNCA_INICIOU` (ver `MigracaoSemResyncError`).
     """
     _exigir_fuso("agora", agora)
     if estado.desfecho is not None:
@@ -372,6 +412,28 @@ def abandonar(estado: EstadoDoCiclo, agora: datetime) -> Transicao:
     return Transicao(replace(estado, pendentes=(), desfecho=desfecho), ())
 
 
+def no_do_proximo_ciclo(estado: EstadoDoCiclo) -> str:
+    """O no que o proximo ciclo desta VM grava como `no_de_origem`.
+
+    E o uso correto da maquina escrito como funcao, porque o uso obvio — carregar
+    o `no_de_origem` adiante — e silencioso e otimista depois de uma migracao.
+
+    - sem migracao: o no onde o ciclo encontrou a VM, ou o gravado, se o Nova nao
+      chegou a responder;
+    - com migracao: `MigracaoSemResyncError`. Nenhum dos dois nos e certo antes do
+      resync, e o resync nao existe ainda (M4).
+    """
+    if estado.desfecho is None:
+        raise ValueError("o ciclo ainda corre; o no do proximo sai de um ciclo terminado")
+    if estado.migracao_detectada:
+        raise MigracaoSemResyncError(
+            f"VM {estado.vm_id} migrou de {estado.no_de_origem} para "
+            f"{estado.no_encontrado}: o bitmap tem que ser descartado e a VM "
+            f"ressincronizada antes do proximo ciclo (ADR-0012)"
+        )
+    return estado.no_encontrado or estado.no_de_origem
+
+
 def _deu_certo(resultado: Resultado) -> bool:
     if isinstance(resultado, ResultadoSimples):
         return resultado.sucesso
@@ -381,7 +443,9 @@ def _deu_certo(resultado: Resultado) -> bool:
         return resultado.concluido
     if isinstance(resultado, ResultadoDeInventario):
         # Job em curso de outro ciclo: este nao comeca por cima dele. Decidir o
-        # que fazer com o job e da reconciliacao (T7).
+        # que fazer com o job e da reconciliacao (T7) — e, ate ela existir, uma
+        # copia que falhou deixando o job no ar faz todo ciclo seguinte terminar
+        # aqui, fora da taxa de falha. Esta na tabela de Riscos do plano.
         return not resultado.job_em_curso
     return True
 
@@ -398,6 +462,10 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime
     # nao reabre nada.
     if estado.desfecho is not None or entrada is None:
         return nada
+    if estado.fase not in _CAMINHO_NORMAL:
+        raise TransicaoInvalidaError(
+            f"{estado.fase.value}: as transicoes desta fase sao da reconciliacao (T7)"
+        )
     respondido = next((e for e in estado.pendentes if responde_a(entrada, e)), None)
     if respondido is None:
         # De outro ciclo, de outra VM, de outro no, ou repetido: descartado.
@@ -413,15 +481,23 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime
     if isinstance(entrada, ResultadoDeLocalizacao):
         estado = replace(estado, no_encontrado=entrada.no_atual)
         # A comparacao do no, antes de qualquer outra coisa (ADR-0012): bitmap que
-        # atravessou evento de host nao e usado. O resync e de outro dono; o ciclo
-        # so nao executa.
+        # atravessou evento de host nao e usado. O ciclo nao executa; o que vem
+        # depois — descartar o bitmap e ressincronizar — nao esta construido (M4),
+        # e `no_do_proximo_ciclo` recusa em vez de deixar o proximo ciclo errar.
         if estado.migracao_detectada:
             return abandonar(estado, agora)
+    if isinstance(entrada, ResultadoDeInventario):
+        estado = replace(estado, nomes_no_inventario=entrada.nomes_encontrados)
     if not _deu_certo(entrada):
         return abandonar(estado, agora)
     if isinstance(respondido, RegistrarPontoDeRecuperacao):
         estado = replace(estado, ponto_registrado_em=agora)
-    pendentes = tuple(e for e in estado.pendentes if e is not respondido)
+    # Por VALOR, e nao por identidade: o efeito e dataclass congelada com
+    # igualdade por valor, e `_pedir` nunca gera dois iguais. Identidade so
+    # funciona enquanto ninguem reconstruir a tupla — e no dia em que alguem a
+    # canonizar, o respondido nunca sairia, e o ciclo esperaria para sempre uma
+    # resposta que ja chegou.
+    pendentes = tuple(e for e in estado.pendentes if e != respondido)
     estado = replace(estado, pendentes=pendentes)
     if pendentes:
         return Transicao(estado, ())

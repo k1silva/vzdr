@@ -63,11 +63,19 @@ ponto (`ponto_registrado_em`).
 **Três leituras que a T5 decidiu, e que T6/T7 podem refinar:**
 
 - **Migração detectada** (nó do Nova ≠ nó gravado): o ciclo termina sem pedir nada, com
-  `NUNCA_INICIOU` — nada foi escrito — e `migracao_detectada` verdadeiro, para quem cria o
-  resync (ADR-0012, decisão 1). Fica fora da taxa de falha porque não é falha de cópia; a
-  idade do ponto continua crescendo, e `degradada` é o sinal.
+  `NUNCA_INICIOU` — nada foi escrito — e `migracao_detectada` verdadeiro. **O caminho de
+  volta não existe**: descartar o bitmap e ressincronizar (ADR-0012, decisão 1) está
+  bloqueado na M4, e nenhum consumidor lê `migracao_detectada` hoje. O que a T5 garante é
+  que o próximo ciclo não erra em silêncio: `no_do_proximo_ciclo` recusa, porque os dois nós
+  candidatos estão errados — o gravado faz o laço de `NUNCA_INICIOU`, o encontrado copia
+  com bitmap que atravessou evento de host. O risco que sobra está na tabela de Riscos.
 - **Inventário com job em curso**: o ciclo não começa por cima de um job. Abandona na
-  leitura, `NUNCA_INICIOU`; o que fazer com o job é da reconciliação.
+  leitura, `NUNCA_INICIOU`; o que fazer com o job é da reconciliação, e o laço que isso
+  forma até a T7 está na tabela de Riscos.
+- **A T5 usa metade do inventário.** Decide só por `job_em_curso`. Os nomes ficam no estado,
+  crus (`nomes_no_inventario`): classificá-los pelos três estados do `ler_nome` e achar
+  órfãos é da T7. Guardá-los é barato, e descartá-los mataria a evidência dentro de
+  `avancar`.
 - **`ResultadoDeCopia` com `concluido` falso**: resultado é resposta final, e não relatório
   de progresso. Cópia que respondeu sem concluir não concluiu.
 
@@ -325,6 +333,8 @@ mecanismo.
 | Fila rotear `CercarDestino` para o agente da origem | `alvo` é campo do efeito, não dedução do despachante **Mecanismo:** `tests/unit/test_efeitos.py::test_cada_efeito_no_seu_alvo`, `tests/unit/test_efeitos.py::test_alvo_nao_e_campo_de_instancia`. |
 | Efeito da API da nuvem cair no mesmo alvo do agente | O critério do `Alvo` é modo de falha, e está escrito na enumeração. Teste que os separa **Mecanismo:** `tests/unit/test_efeitos.py::test_a_consulta_ao_nova_nao_e_do_agente`. |
 | O conjunto de efeitos não executar o ciclo inteiro | **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_todo_efeito_e_emitido_por_ao_menos_uma_fase`, `tests/unit/test_ciclo_fases.py::test_toda_fase_emite_ao_menos_um_efeito`. Faltaram três efeitos, e só apareceram quando alguém enumerou as fases à mão. |
+| Migração parar a proteção da VM sem ninguém ver | Depois de migração, o ciclo termina `NUNCA_INICIOU`, fora da taxa de falha, e o próximo ciclo precisa de um nó de origem que não existe antes do resync. Um agendador que carregue o nó gravado entra num laço silencioso de `NUNCA_INICIOU` com 0% de falha; um que carregue o encontrado copia com bitmap inválido. A recusa transforma os dois em erro visível — mas a proteção continua parada até o resync, e o único sinal no painel é `degradada`, a 2× o RPO. **Mecanismo:** a recusa, `tests/unit/test_ciclo.py::test_no_do_proximo_ciclo_recusa_depois_de_migracao`; o caminho de volta, Mecanismo ainda não existe: `M4` e o gatilho do resync que depende dela. |
+| Cópia que falha deixar o job no ar e parar a proteção em silêncio | `IniciarCopia` falha: `FALHOU`, contado uma vez. O job fica, e o lease com ele. Todo ciclo seguinte vê `job_em_curso` e termina `NUNCA_INICIOU`, fora da taxa — o painel mostra uma falha e depois nada. **Mecanismo:** Mecanismo ainda não existe: `T7`, que libera o job por evidência. |
 | Prazo estourado num ciclo que já deixou resíduo virar "nunca iniciou" | O desfecho sai de `ja_deixou_residuo`, fato do caminho que nunca volta a falso, e não da fase corrente — porque uma volta a LOCALIZANDO depois de escrever estaria numa fase sem resíduo com um checkpoint já criado. Trabalho foi tentado, e tirá-lo da taxa de falha a deixaria otimista. **Mecanismo:** `tests/unit/test_ciclo.py::test_nenhuma_transicao_devolve_o_residuo_a_falso` e `tests/unit/test_ciclo.py::test_o_desfecho_sai_do_residuo_e_nao_da_fase`; o prazo em si, `T6`. |
 | A resposta por fase divergir dos efeitos que a fase emite | Ela é derivada da tabela, e não enumerada. Isso garante a resposta **por fase**, e só isso: não diz nada sobre o ciclo. **Mecanismo:** `tests/unit/test_ciclo_fases.py::test_residuo_e_derivado_dos_efeitos_e_nao_enumerado`. |
 | O envelope crescer de emenda em emenda | A varredura acima, feita uma vez. Campo novo depois exige dizer por que não estava na tabela **Mecanismo:** `tests/unit/test_efeitos.py::test_o_envelope_tem_exatamente_os_campos_da_varredura`. |

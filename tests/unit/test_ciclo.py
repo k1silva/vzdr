@@ -20,16 +20,19 @@ from vzdr.core.domain.ciclo import (
     RESULTADO_ESPERADO,
     EstadoDoCiclo,
     Fase,
+    MigracaoSemResyncError,
     Transicao,
     TransicaoInvalidaError,
     abandonar,
     avancar,
     iniciar,
+    no_do_proximo_ciclo,
 )
 from vzdr.core.domain.efeitos import (
     Alvo,
     ConsultarNoDaVm,
     Efeito,
+    FecharJanela,
     IniciarCopia,
     RegistrarPontoDeRecuperacao,
     Resultado,
@@ -56,10 +59,11 @@ CAMINHO_NORMAL = [f for f in Fase if f is not Fase.CERCANDO]
 # ── Como se responde ────────────────────────────────────────────────────────
 
 
-def _base(efeito: Efeito, ciclo_id=CICLO) -> dict:
+def _base(efeito: Efeito, ciclo_id=None) -> dict:
+    """Responde ao proprio efeito — ou, com `ciclo_id`, finge vir de outro ciclo."""
     return {
         "tenant_id": efeito.tenant_id,
-        "ciclo_id": ciclo_id,
+        "ciclo_id": ciclo_id or efeito.ciclo_id,
         "tipo_do_efeito": efeito.TIPO,
         "chaves": chaves_de(efeito),
         "vm_id": efeito.vm_id,
@@ -67,7 +71,7 @@ def _base(efeito: Efeito, ciclo_id=CICLO) -> dict:
     }
 
 
-def sucesso(efeito: Efeito, ciclo_id=CICLO) -> Resultado:
+def sucesso(efeito: Efeito, ciclo_id=None) -> Resultado:
     classe = RESULTADO_ESPERADO[type(efeito)]
     corpo = {
         ResultadoSimples: {"sucesso": True},
@@ -256,8 +260,9 @@ def test_a_primeira_coisa_e_perguntar_ao_nova_onde_a_vm_esta():
 
 def test_migracao_detectada_o_ciclo_nao_executa():
     """No atual diferente do gravado: o bitmap atravessou evento de host e nao e
-    usado. O ciclo termina sem pedir nada — o resync e de outro dono — e diz por
-    que, para quem o cria."""
+    usado. O ciclo termina sem pedir nada e diz por que. Quem criaria o resync nao
+    existe ainda (M4); o que impede o proximo ciclo de errar e
+    `no_do_proximo_ciclo`, testado abaixo."""
     t = comecar()
     t = avancar(t.estado, fracasso(t.estado.pendentes[0]), T0 + UM_MINUTO)
     assert t.estado.migracao_detectada
@@ -387,3 +392,107 @@ def test_copia_que_responde_sem_concluir_nao_concluiu():
     copia = estado.pendentes[0]
     assert isinstance(copia, IniciarCopia)
     assert avancar(estado, fracasso(copia), T0).estado.desfecho is Desfecho.FALHOU
+
+
+# ── O no do proximo ciclo ───────────────────────────────────────────────────
+
+
+def _migrado() -> EstadoDoCiclo:
+    t = comecar()
+    return avancar(t.estado, fracasso(t.estado.pendentes[0]), T0 + UM_MINUTO).estado
+
+
+def test_depois_de_migracao_os_dois_nos_candidatos_estao_errados():
+    """Por que `no_do_proximo_ciclo` recusa, em vez de escolher um.
+
+    Com o no gravado, o proximo ciclo detecta a migracao de novo — laco silencioso
+    de NUNCA_INICIOU, fora da taxa de falha. Com o encontrado, nao detecta nada e
+    segue para escrever com o bitmap que atravessou o evento de host."""
+    migrado = _migrado()
+    gravado = iniciar(TENANT, uuid4(), VM, DISCOS, migrado.no_de_origem, T0)
+    gravado = avancar(gravado.estado, fracasso(gravado.estado.pendentes[0]), T0)
+    assert gravado.estado.migracao_detectada, "com o no gravado: detecta de novo"
+
+    encontrado = iniciar(TENANT, uuid4(), VM, DISCOS, migrado.no_encontrado, T0)
+    consulta = encontrado.estado.pendentes[0]
+    resposta = ResultadoDeLocalizacao(**_base(consulta), no_atual="no-2")
+    encontrado = avancar(encontrado.estado, resposta, T0)
+    assert not encontrado.estado.migracao_detectada, "com o encontrado: nao detecta nada"
+    assert encontrado.estado.fase is Fase.VALIDANDO
+
+
+def test_no_do_proximo_ciclo_recusa_depois_de_migracao():
+    with pytest.raises(MigracaoSemResyncError, match="ressincronizada"):
+        no_do_proximo_ciclo(_migrado())
+
+
+def test_no_do_proximo_ciclo_sem_migracao():
+    assert no_do_proximo_ciclo(ate_o_fim()[-1].estado) == NO
+    # O Nova nao chegou a responder: fica o gravado.
+    sem_resposta = abandonar(comecar().estado, T0).estado
+    assert sem_resposta.no_encontrado is None
+    assert no_do_proximo_ciclo(sem_resposta) == NO
+
+
+def test_no_do_proximo_ciclo_de_ciclo_que_ainda_corre_e_erro():
+    with pytest.raises(ValueError, match="ainda corre"):
+        no_do_proximo_ciclo(ate(Fase.COPIANDO).estado)
+
+
+# ── O que a maquina guarda, e de onde ───────────────────────────────────────
+
+
+@pytest.mark.parametrize("job_em_curso", [False, True])
+def test_os_nomes_do_inventario_ficam_no_estado(job_em_curso):
+    """Com job ou sem, a evidencia nao morre dentro de `avancar`."""
+    estado = ate(Fase.VALIDANDO).estado
+    (inventario,) = estado.pendentes
+    nomes = ("vzdr-ckpt-a", "alheio")
+    resposta = ResultadoDeInventario(
+        **_base(inventario), job_em_curso=job_em_curso, nomes_encontrados=nomes
+    )
+    assert avancar(estado, resposta, T0).estado.nomes_no_inventario == nomes
+
+
+def test_efeito_de_agente_leva_o_no_que_o_nova_disse_e_nao_o_gravado():
+    """Procedencia (ADR-0015): o no do efeito e o da ultima consulta ao Nova. Os
+    dois so diferem aqui porque o estado e montado a mao — e e para isso."""
+    estado = replace(ate(Fase.VALIDANDO).estado, no_encontrado="no-9")
+    (inventario,) = estado.pendentes
+    t = avancar(estado, sucesso(inventario), T0)
+    (fechar,) = t.efeitos
+    assert isinstance(fechar, FecharJanela)
+    assert fechar.no == "no-9"
+
+
+def test_efeito_respondido_sai_mesmo_que_o_estado_canonize_os_pendentes(monkeypatch):
+    """Por valor, e nao por identidade — no caminho em que identidade quebra.
+
+    O respondido e achado em `estado.pendentes`, e filtrado de um estado que ja
+    passou por `replace` (no inventario, para guardar os nomes). Hoje o
+    `__post_init__` nao toca os pendentes, e a tupla atravessa por referencia: a
+    identidade sobrevive. No dia em que alguem os canonizar ali — e este
+    repositorio canoniza tudo —, ela quebra, o respondido nunca sai, e o ciclo
+    espera para sempre. O monkeypatch e esse dia. Uma versao anterior deste teste
+    reconstruia a tupla ANTES da busca, e o arnes mostrou que ela nao forcava nada.
+    """
+    original = EstadoDoCiclo.__post_init__
+
+    def canonizando(self):
+        original(self)
+        object.__setattr__(self, "pendentes", tuple(replace(e) for e in self.pendentes))
+
+    estado = ate(Fase.VALIDANDO).estado
+    (inventario,) = estado.pendentes
+    monkeypatch.setattr(EstadoDoCiclo, "__post_init__", canonizando)
+    t = avancar(estado, sucesso(inventario), T0)
+    assert t.estado.fase is Fase.FECHANDO_JANELA, t.estado.pendentes
+
+
+def test_fase_fora_do_caminho_normal_e_recusada_com_o_erro_do_contrato():
+    """CERCANDO e da T7. Ate la, chegar nela e contrato quebrado, e o diagnostico
+    e o do contrato — nao um traceback de `list.index`."""
+    estado = ate(Fase.COPIANDO).estado
+    cercando = replace(estado, fase=Fase.CERCANDO)
+    with pytest.raises(TransicaoInvalidaError, match="T7"):
+        avancar(cercando, sucesso(estado.pendentes[0]), T0)
