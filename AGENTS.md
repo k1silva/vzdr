@@ -53,6 +53,16 @@ que parecia **paciência, não erro**. Sintoma indistinguível do estado normal 
 "ausência de check parece aprovação". Laço de verificação tem **limite de voltas**, e erro
 de ferramenta aparece em vez de sumir.
 
+**Nem ramifique pelo código de saída de um comando que você não sabe o que é.** No shell
+do agente, `grep` pode ser uma **função** que chama outro programa — aqui, o ugrep —, e
+com `-qv` ela devolve o código ao contrário do GNU grep. Aconteceu no #36: um laço de espera
+da CI saiu na terceira volta, dando por concluídos dois jobs ainda rodando. Mesmo sintoma do
+`gh pr checks --json`, por outro instrumento: o laço parecia certo, e o que enganou foi a
+**ausência de erro**. Em condição de laço ou de verificação, use `command grep` ou caminho
+absoluto, ou decida com comparação explícita (`jq`, `test`) sobre um valor que você imprimiu.
+E condição de "nada pendente" exige que **exista** algo: lista vazia também tem zero
+pendentes.
+
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
 também — a CI roda os dois. Quem mexe no `core-domain` ou no `agent` roda `make
