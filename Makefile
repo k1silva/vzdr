@@ -46,8 +46,9 @@ test:
 
 # O que roda no hypervisor, EXECUTADO sob 3.9 — e nao so lido por procuracao. O
 # ruff e o check_alvo_py39 leem a intencao; `zip(..., strict=True)` compila em 3.9
-# e quebra ao rodar, e so um interpretador 3.9 de verdade o pega. Pacotes e testes
-# sao derivados do fecho (scripts/fecho_py39.py), e nao listados aqui.
+# e quebra ao rodar, e so um interpretador 3.9 de verdade o pega — no que os testes
+# executam, e so ali (ADR-0007, o limite). Pacotes e testes sao derivados do
+# fecho (scripts/fecho_py39.py), e nao listados aqui.
 test-py39:
 	rm -rf $(VENV39)
 	$(PY39) -m venv $(VENV39)

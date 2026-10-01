@@ -93,19 +93,25 @@ pede `strict=` —, e o `make fmt` o escrevia sozinho. Foi assim que `datetime.U
 
 | Camada | O que garante |
 | --- | --- |
-| `ruff` com `py39` | Primeira linha: sintaxe 3.10+ no editor e no lint — nos pacotes restritos **e** nos testes que os exercitam |
+| `ruff` com `py39` | Duas coisas, e só elas. Acusa **sintaxe** 3.10+ (`match`, por exemplo) — não chamada: `zip(..., strict=True)` passa. E, nos testes do fecho, **deixa de exigir** idioma 3.11 (`UP017`, `B905`): impede a **ferramenta** de introduzir chamada 3.10+, não a pessoa |
 | Checador do fecho | Impede que um pacote restrito importe um irrestrito |
 | `make test-py39`, no job `alvo-py39` | **A garantia de fato**: instala os pacotes restritos sob 3.9 real, compila, e **executa** os testes deles. É o import e a execução, e não só a gramática |
 
 Pacotes e testes saem de `scripts/fecho_py39.py`, derivados da mesma fonte única —
 quem declara `py39`. Teste misto (que importa do fecho e de fora) não roda sob 3.9 e é
 impresso com o motivo; a lista `per-file-target-version` do ruff é conferida contra a
-derivada, nos dois sentidos.
+derivada, nos dois sentidos — e a derivada inclui o que o pytest importa junto com os
+testes: `conftest.py`, `__init__.py` e auxiliares de `tests/`.
 
 **O limite que continua.** Executar só alcança o que os testes executam. Código 3.10+ num
 caminho sem teste, ou numa expressão avaliada só quando o teste falha — a mensagem de um
 `assert` —, passa. O `zip(..., strict=True)` da `dr-001` estava exatamente aí: sob 3.9, o
-diagnóstico de um teste reprovando teria virado `TypeError`. Para isso a camada é o ruff
-com `py39`, que agora alcança os testes também.
+diagnóstico de um teste reprovando teria virado `TypeError`.
+
+**Para esse caso não há mecanismo.** O ruff com `py39` não o detecta: não existe regra para
+chamada 3.10+, e nem poderia existir com confiança, porque o ruff não sabe que aquele `zip`
+é o embutido. O que ele passou a fazer é parar de **exigi-la** — fecha o caminho pelo qual
+a ferramenta a escrevia, e foi por esse caminho que os dois casos conhecidos chegaram. Chamada
+3.10+ escrita à mão, num caminho que nenhum teste executa, passa por todas as camadas.
 
 Procedência: revisão do #36.
