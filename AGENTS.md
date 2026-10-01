@@ -178,6 +178,15 @@ from vzdr.tools.dr import ...
   como estados — a regra, recém-escrita, aplicada pela metade por quem a escreveu.
   Pergunta respondível sem olhar os dois lados é pergunta de impressão. Dois números lado
   a lado tornam "não olhei o outro" visível: zero de um lado com dez do outro não passa.
+
+  **E conte a ideia, não a string — decompondo antes.** Reconciliação por nome não alcança
+  reformulação em prosa: ao remover `inventariar_hypervisor`, a contagem pelo nome achou
+  zero resíduos, e cinco trechos ainda diziam que a consulta era "sobre o hypervisor,
+  roteável por qualquer agente" — a ideia que o PR refutava, sem usar o nome do tipo. E
+  frase composta não se conta: se decompõe primeiro. Aquela frase empacotava uma afirmação
+  certa — nunca perguntar a quem detém o lease — e uma errada — "qualquer agente". Contada
+  inteira, ou fica ou sai; decomposta, a parte certa fica e a errada sai. Foi por não
+  decompor que a linha sobreviveu a três PRs.
 - **Antes de definir um conceito numa spec, pergunte se ele já é definido em outra.** A
   `dr-006` tinha `degradada` como estado de máquina, com limiar de "último ciclo falhou";
   a `dr-001` a tinha como conta derivada, com limiar de 2× o RPO. As duas foram lidas por

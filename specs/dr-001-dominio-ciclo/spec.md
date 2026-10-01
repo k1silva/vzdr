@@ -157,15 +157,23 @@ fila a entregaria a um agente daquele hypervisor — justamente quem não respon
 em que a evidência do Nova existe para servir. Duas linhas da tabela acima estão do mesmo
 "lado" e **não** podem compartilhar alvo.
 
-#### A evidência é sobre o hypervisor, não sobre quem pediu
+#### A evidência é sobre o nó, e não sobre quem detém o lease
 
-A consulta tem que ser **roteável por qualquer agente com acesso àquele hypervisor**.
-`query-block-jobs` responde sobre o hypervisor, não sobre quem perguntou.
+A consulta vai para o **nó declarado** — o nó onde o job foi iniciado, que o efeito carrega
+no envelope — e é respondida por quem serve aquele nó agora, **não pela instância que detém
+o lease**. `query-block-jobs` responde sobre o QEMU daquele nó, e o resultado diz qual nó
+respondeu; resposta de outro nó não responde.
 
 Está escrito aqui porque a implementação natural é a errada: buscar a evidência no detentor
 do lease trava exatamente no cenário que a motivou — o agente está inalcançável, logo não
 responde, logo não há evidência, logo a chave nunca libera, e a única saída vira mexer no
 banco à mão.
+
+Esta seção já disse "roteável por **qualquer** agente com acesso àquele hypervisor", e
+estava errado: o QMP é um socket local do nó, e só quem serve o nó alcança o QEMU dele. Com
+"qualquer agente", um agente de outro nó respondia com inventário vazio e a reconciliação
+lia "não há órfão". Quando o agente do nó não responde, o caminho é o das duas seções
+seguintes — o Nova, e o cercamento —, e não outro agente.
 
 #### "A VM não está mais neste nó" também é evidência
 

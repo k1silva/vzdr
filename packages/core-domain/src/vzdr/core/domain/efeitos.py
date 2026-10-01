@@ -22,6 +22,7 @@ Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 """
 
 import enum
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar, Optional, TypeVar
@@ -42,7 +43,7 @@ __all__ = [
     "EfeitoDeVm",
     "FecharJanela",
     "IniciarCopia",
-    "InventariarHypervisor",
+    "InventariarVm",
     "PublicarExport",
     "RegistroMalformadoError",
     "Resultado",
@@ -50,6 +51,7 @@ __all__ = [
     "ResultadoDeInventario",
     "ResultadoDeLocalizacao",
     "ResultadoSimples",
+    "ResultadoVmAusente",
     "ValorDesconhecidoError",
     "efeito_de_json",
     "pode_tomar_chave_tomada",
@@ -200,6 +202,38 @@ class Efeito:
     #: existencia.
     tenant_id: UUID
     ciclo_id: UUID
+    #: O SUJEITO: sobre qual VM o efeito e. Todo efeito tem um, e dize-lo nao pode
+    #: depender de quem executa. A varredura perguntou o que o despachante precisa
+    #: ler e nunca perguntou se o efeito tem sujeito — e dois efeitos de leitura
+    #: nasceram sem: um inventario que nao dizia de onde e uma consulta que nao
+    #: dizia de quem. Um ciclo e de uma VM so, entao isto e a VM do ciclo.
+    #:
+    #: Nao e referencia de onde derivar tenant no sentido da regra acima: e o
+    #: recurso sobre o qual se age. O risco de oraculo que a regra protege fica
+    #: com quem guardar efeitos: chave estrangeira COMPOSTA (tenant_id, vm_id), o
+    #: padrao da core-001, e nunca so vm_id.
+    vm_id: UUID
+    #: Em qual no o efeito roda — so para efeito de agente, e obrigatorio nele.
+    #:
+    #: O `Alvo` diz que dois efeitos tem o mesmo alvo quando falham juntos, e os
+    #: agentes de dois nos falham separado: "agente de origem" sem o no nao e um
+    #: alvo, sao varios. Deixar o despachante resolver o no a partir do vm_id
+    #: seria ler fora do envelope — e, na reconciliacao, resolver e exatamente o
+    #: que esta em duvida depois de uma migracao. Entao o no vem DECLARADO, com
+    #: procedencia (a ultima localizacao que o Nova informou), e e CONFERIDO na
+    #: resposta: resultado de no diferente nao responde.
+    no: Optional[str]
+
+    def __post_init__(self) -> None:
+        exige_no = self.ALVO is Alvo.AGENTE_DE_ORIGEM
+        if exige_no and not _no_valido(self.no):
+            raise RegistroMalformadoError(
+                f"{type(self).__name__} roda num agente e precisa dizer em qual no: {self.no!r}"
+            )
+        if not exige_no and self.no is not None:
+            raise RegistroMalformadoError(
+                f"{type(self).__name__} nao roda num agente, e nao leva no: {self.no!r}"
+            )
 
     @property
     def alvo(self) -> Alvo:
@@ -210,6 +244,8 @@ class Efeito:
             "tipo": self.TIPO,
             "tenant_id": str(self.tenant_id),
             "ciclo_id": str(self.ciclo_id),
+            "vm_id": str(self.vm_id),
+            "no": self.no,
             "alvo": self.ALVO.value,
         }
         dados.update(self._corpo_json())
@@ -223,7 +259,6 @@ class Efeito:
 class EfeitoDeDisco(Efeito):
     """Efeito que toca UM disco, e por isso segura uma chave de exclusao."""
 
-    vm_id: UUID
     disco: str
 
     def chaves_de_exclusao(self) -> tuple[ChaveDeExclusao, ...]:
@@ -254,10 +289,12 @@ class EfeitoDeVm(Efeito):
     segurando metades e esperando um pelo outro.
     """
 
-    vm_id: UUID
     discos: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        # Chama a base: sobrescrever __post_init__ sem isso apaga a conferencia do
+        # no em silencio — o risco que o teste sobre o catalogo inteiro vigia.
+        super().__post_init__()
         if not self.discos:
             raise RegistroMalformadoError(f"{type(self).__name__} sem disco nenhum nao age em nada")
         if len(set(self.discos)) != len(self.discos):
@@ -317,6 +354,14 @@ def chaves_de(efeito: Efeito) -> tuple[ChaveDeExclusao, ...]:
     if isinstance(efeito, (EfeitoDeDisco, EfeitoDeVm)):
         return efeito.chaves_de_exclusao()
     return ()
+
+
+#: Nome de no como o VHI o mostra: letras, digitos, ponto, hifen e sublinhado.
+_NO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _no_valido(no: Optional[str]) -> bool:
+    return isinstance(no, str) and _NO.fullmatch(no) is not None
 
 
 def _ordem_da_chave(chave: ChaveDeExclusao) -> tuple[str, str]:
@@ -381,16 +426,30 @@ class DescartarBitmap(EfeitoDeDisco):
 
 
 @dataclass(frozen=True)
-class InventariarHypervisor(Efeito):
-    """A fotografia do hypervisor, que alimenta a reconciliacao.
+class InventariarVm(Efeito):
+    """A fotografia do que existe DA VM no no indicado: nomes nossos, job em curso.
 
-    Roteavel por **qualquer** agente com acesso aquele hypervisor, e nunca pedida
-    ao detentor do lease: ele e justamente quem nao responde no cenario que a
-    reconciliacao existe para cobrir.
+    Da VM, e nao "do hypervisor". A versao anterior se chamava
+    InventariarHypervisor e nao dizia qual; pedir "o hypervisor onde a VM esta"
+    pressupoe saber onde ela esta, que e justamente o que esta em duvida depois de
+    uma migracao. O no vem declarado no envelope, com a procedencia da ultima
+    consulta ao Nova, e a resposta de outro no nao responde.
+
+    Nunca pedida ao detentor do lease: ele e justamente quem nao responde no
+    cenario que a reconciliacao existe para cobrir.
+
+    **O vm_id aqui NAO e chave de exclusao, e isto e deliberado.** Com chave, o
+    inventario so rodaria com o lease livre — e o lease esta preso pela copia
+    zumbi que e a razao de o inventario existir. Deadlock. Nao se resolve com
+    preempcao: preempcao retira capacidade de escrever, e uma leitura nao retira
+    nada de ninguem; ela simplesmente nao precisa de exclusividade.
+
+    Se a VM nao estiver no no, a resposta e `ResultadoVmAusente` — nunca um
+    inventario vazio, que seria verdade sobre o no e mentira sobre a VM.
     """
 
     ALVO = Alvo.AGENTE_DE_ORIGEM
-    TIPO = "inventariar_hypervisor"
+    TIPO = "inventariar_vm"
 
 
 @dataclass(frozen=True)
@@ -404,6 +463,10 @@ class ConsultarNoDaVm(Efeito):
 
     Por isso o alvo e a API da nuvem, e nao o agente: sao modos de falha
     diferentes, e este efeito existe para o caso em que o outro nao chega.
+
+    A VM consultada e o `vm_id` do envelope — a versao anterior nao dizia de qual
+    VM era. E, como no inventario, ele NAO e chave de exclusao: esta consulta
+    existe para o caso em que o disco esta preso por um zumbi.
     """
 
     ALVO = Alvo.API_DA_NUVEM_DE_ORIGEM
@@ -466,21 +529,20 @@ class Resultado:
       chave ja tomada e coexiste com quem a tinha. Dois `CercarDestino` do mesmo
       ciclo e disco podem ficar pendentes juntos, e o caminho esta descrito em
       PREEMPCAO_DESPEJA_DETENTOR: reentrega por retry;
-    - **sem chave** — `InventariarHypervisor` e `ConsultarNoDaVm` nao tem chave
-      nenhuma, e nada impede dois pendentes.
+    - **sem chave** — `InventariarVm` e `ConsultarNoDaVm` nao tem chave nenhuma,
+      e nada impede dois pendentes.
 
     Na preempcao, a correlacao e inofensiva **porque a absorcao e idempotente**, e
     isso e obrigacao e nao coincidencia. No dia em que existir uma preempcao que
     nao seja idempotente, esta e a linha que reprova a ideia.
 
-    **Na classe sem chave, a correlacao NAO esta garantida hoje.** Idempotencia
-    cobre a repeticao; nao cobre a resposta ERRADA. `InventariarHypervisor` nao diz
-    qual hypervisor, `ConsultarNoDaVm` nao diz qual VM, e os resultados nao dizem
-    quem respondeu. Um inventario respondido pelo agente de outro hypervisor volta
-    com `nomes_encontrados` vazio, a reconciliacao le "nao ha orfao", e o orfao
-    fica — silencioso, com a forma toda certa. A versao anterior deste texto dizia
-    que a classe era segura; nao era. Quem decide o conserto e a T7, e nenhum
-    codigo deve correlacionar resultado desses dois efeitos antes disso.
+    Na classe sem chave, idempotencia cobre a repeticao e NAO cobre a resposta
+    errada — e o que a garante e o SUJEITO e o NO. Houve uma versao em que o
+    inventario nao dizia de onde, a consulta nao dizia de quem, e os resultados
+    nao diziam quem respondeu: um inventario respondido pelo agente de outro no
+    voltava vazio, a reconciliacao lia "nao ha orfao", e o orfao ficava. Uma versao
+    ainda anterior deste texto dizia que a classe era segura; nao era. Hoje
+    `responde_a` compara sujeito e no, e "a VM nao esta aqui" e `ResultadoVmAusente`.
 
     **Correlacao e IGUALDADE do conjunto de chaves; exclusao e INTERSECAO.** O
     mesmo campo tem duas relacoes, e confundi-las e o erro facil: `se_excluem`
@@ -505,22 +567,51 @@ class Resultado:
     #: padrao aqui, toda subclasse seria obrigada a ter padrao tambem — e ai
     #: `sucesso` e `concluido` ganhariam um, e silencio significaria sucesso.
     chaves: tuple[ChaveDeExclusao, ...]
+    #: O sujeito do efeito respondido. As chaves eram um PROXY da identidade do
+    #: efeito, e para a classe sem chave o proxy e vazio: dois ConsultarNoDaVm de
+    #: VMs diferentes correlacionariam um com o outro. O sujeito diz de quem e.
+    vm_id: UUID
+    #: Quem respondeu, quando foi um agente. `responde_a` confere com o no que o
+    #: efeito declarou: o agente de outro no nao responde por este.
+    no_que_respondeu: Optional[str]
 
     def __post_init__(self) -> None:
         # A mesma recusa que a leitura do JSON ja fazia: dois caminhos que fazem o
         # mesmo trabalho, e nenhum deles e o frouxo.
         if len(set(self.chaves)) != len(self.chaves):
             raise RegistroMalformadoError(f"resultado com chave repetida: {self.chaves}")
-        # ZERO OU UMA VM — e nao "exatamente uma", como no efeito de disco: resultado
-        # de efeito sem chave e legitimo. Sem esta conferencia, o leitor do efeito
-        # recusava chaves de duas VMs e o do resultado aceitava. Um resultado assim
-        # nunca responde a nada, porque `responde_a` compara conjuntos, e o efeito
-        # fica pendente para sempre esperando resposta que ja chegou e foi ignorada.
-        vms = {c.vm_id for c in self.chaves}
-        if len(vms) > 1:
+        # As chaves sao da VM do sujeito. Chave de outra VM — ou de duas — faria o
+        # resultado nunca responder a nada, e o efeito ficaria pendente para sempre
+        # esperando resposta que ja chegou e foi ignorada. Isto substitui o "zero ou
+        # uma VM" anterior, que o sujeito tornou mais forte.
+        alheias = {c.vm_id for c in self.chaves} - {self.vm_id}
+        if alheias:
             raise RegistroMalformadoError(
-                f"resultado com chaves de VMs diferentes: {sorted(map(str, vms))}"
+                f"resultado com chaves de VMs diferentes do sujeito {self.vm_id}: "
+                f"{sorted(map(str, alheias))}"
             )
+        if self.no_que_respondeu is not None and not _no_valido(self.no_que_respondeu):
+            raise RegistroMalformadoError(f"no_que_respondeu invalido: {self.no_que_respondeu!r}")
+        # O MESMO PAREAMENTO que o efeito confere, do lado do resultado. Sem isto,
+        # `ResultadoSimples(tipo_do_efeito="confirmar_no_destino", no_que_respondeu=
+        # "no-01")` seria construtivel e nunca responderia a nada — o efeito de
+        # receptora tem `no` None. E o efeito pendurado seria um ConfirmarNoDestino:
+        # pela P2 a janela nao e liberada, o ciclo trava e o checkpoint nao sai.
+        #
+        # So quando o tipo e CONHECIDO. Tipo desconhecido e contrato mais novo, e
+        # recusar como malformado descartaria o que deveria ser reenviado.
+        classe = _por_tipo(Efeito).get(self.tipo_do_efeito)
+        if classe is not None:
+            de_agente = classe.ALVO is Alvo.AGENTE_DE_ORIGEM
+            if de_agente and self.no_que_respondeu is None:
+                raise RegistroMalformadoError(
+                    f"resposta a {self.tipo_do_efeito!r}, que roda num agente, sem dizer qual no"
+                )
+            if not de_agente and self.no_que_respondeu is not None:
+                raise RegistroMalformadoError(
+                    f"resposta a {self.tipo_do_efeito!r}, que nao roda num agente, "
+                    f"dizendo no {self.no_que_respondeu!r}"
+                )
         # Ordem canonica, pelo mesmo motivo do EfeitoDeVm: a correlacao e por
         # IGUALDADE, e igualdade de tupla depende de ordem.
         object.__setattr__(self, "chaves", tuple(sorted(self.chaves, key=_ordem_da_chave)))
@@ -531,6 +622,8 @@ class Resultado:
             "tenant_id": str(self.tenant_id),
             "ciclo_id": str(self.ciclo_id),
             "tipo_do_efeito": self.tipo_do_efeito,
+            "vm_id": str(self.vm_id),
+            "no_que_respondeu": self.no_que_respondeu,
         }
         dados["chaves"] = [c.para_json() for c in self.chaves]
         dados.update(self._corpo_json())
@@ -628,6 +721,24 @@ class ResultadoDeLocalizacao(Resultado):
         return {"no_atual": _exigir_texto(dados, "no_atual")}
 
 
+@dataclass(frozen=True)
+class ResultadoVmAusente(Resultado):
+    """ "A VM nao esta neste no" — desfecho proprio, e nao inventario vazio.
+
+    Pedimos o inventario da VM X no no N, indicado pelo Nova. Entre a indicacao e
+    a execucao ela migrou para M. O agente de N responde, N e o no indicado, a
+    conferencia de no passa — e um inventario vazio seria verdade sobre N e mentira
+    sobre a VM. A reconciliacao leria "nao ha orfao", e o orfao ficaria.
+
+    E a licao do `ler_nome` pela outra porta: la, "nosso mas ilegivel" nao podia
+    virar "nao e nosso"; aqui, "a VM nao esta aqui" nao pode virar "nao achei nome
+    nosso". Vale para todo efeito de agente, e nao so o inventario: qualquer um
+    deles pode chegar a um no de onde a VM ja saiu.
+    """
+
+    TIPO = "vm_ausente"
+
+
 def responde_a(resultado: Resultado, efeito: Efeito) -> bool:
     """Este resultado e deste efeito? Por IGUALDADE, nunca por intersecao.
 
@@ -635,13 +746,19 @@ def responde_a(resultado: Resultado, efeito: Efeito) -> bool:
     correlacionar encontraria `se_excluem` pronta — e um resultado de `FecharJanela`
     sobre `vda, vdb` passaria a responder a um `IniciarCopia` sobre `vdb`.
 
-    Tenant, ciclo, tipo e o conjunto inteiro de chaves. Tenant entra porque
-    correlacao que cruzasse tenant seria o oraculo que o ADR-0006 fecha.
+    Tenant, ciclo, tipo, SUJEITO, NO e o conjunto inteiro de chaves. Tenant entra
+    porque correlacao que cruzasse tenant seria o oraculo que o ADR-0006 fecha.
+    Sujeito, porque as chaves eram proxy da identidade e, sem chave, o proxy e
+    vazio. No, porque o agente de outro no nao responde por este — inclusive
+    quando o no que respondeu e o indicado, mas a VM ja tinha saido dele: isso e
+    `ResultadoVmAusente`, e ele responde, dizendo que ela nao esta la.
     """
     return (
         resultado.tenant_id == efeito.tenant_id
         and resultado.ciclo_id == efeito.ciclo_id
         and resultado.tipo_do_efeito == efeito.TIPO
+        and resultado.vm_id == efeito.vm_id
+        and resultado.no_que_respondeu == efeito.no
         and set(resultado.chaves) == set(chaves_de(efeito))
     )
 
@@ -818,15 +935,19 @@ def efeito_de_json(dados: Mapping[str, Any]) -> Efeito:
     argumentos: dict[str, Any] = {
         "tenant_id": _exigir_uuid(dados, "tenant_id"),
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
+        "vm_id": _exigir_uuid(dados, "vm_id"),
+        "no": _texto_ou_nada(dados, "no"),
     }
     if issubclass(classe, (EfeitoDeDisco, EfeitoDeVm)):
         chaves = _exigir_chaves(dados, "chaves_de_exclusao")
-        vms = {c.vm_id for c in chaves}
-        if len(vms) != 1:
+        # As chaves dizem a VM de novo, e as duas expressoes tem que concordar —
+        # senao a fila exclui por uma VM e o agente age sobre outra.
+        alheias = {c.vm_id for c in chaves} - {argumentos["vm_id"]}
+        if alheias:
             raise RegistroMalformadoError(
-                f"{classe.TIPO!r} com chaves de VMs diferentes: {sorted(map(str, vms))}"
+                f"{classe.TIPO!r} com chaves de VMs diferentes do sujeito: "
+                f"{sorted(map(str, alheias))}"
             )
-        argumentos["vm_id"] = chaves[0].vm_id
         if issubclass(classe, EfeitoDeDisco):
             if len(chaves) != 1:
                 raise RegistroMalformadoError(
@@ -852,6 +973,8 @@ def resultado_de_json(dados: Mapping[str, Any]) -> Resultado:
         "ciclo_id": _exigir_uuid(dados, "ciclo_id"),
         "tipo_do_efeito": _exigir_texto(dados, "tipo_do_efeito"),
         "chaves": _exigir_chaves(dados, "chaves"),
+        "vm_id": _exigir_uuid(dados, "vm_id"),
+        "no_que_respondeu": _texto_ou_nada(dados, "no_que_respondeu"),
     }
     argumentos.update(classe._corpo_de_json(dados))
     return classe(**argumentos)

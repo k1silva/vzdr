@@ -1,7 +1,7 @@
 # ADR-0015: A máquina de estados pede efeitos; não os executa
 
 **Data:** 2026-09-25
-**Status:** aceito — propriedade 4 emendada em 2026-09-29 (ver a emenda na própria propriedade)
+**Status:** aceito — propriedade 4 emendada em 2026-09-29; envelope emendado em 2026-09-30 (ver as emendas no fim)
 
 ## Contexto
 
@@ -200,3 +200,36 @@ Fica mais difícil em três pontos concretos:
 Uma consequência que vale nomear porque parece detalhe: **o id do ciclo no efeito é o que
 permite descartar sem ambiguidade**. Sem ele, "resultado atrasado" e "resultado do ciclo
 atual" são indistinguíveis, e não há conserto posterior que recupere a informação perdida.
+
+## Emenda de 2026-09-30: o efeito diz sobre o que ele é
+
+O texto acima é o original. Esta emenda acrescenta, e não reescreve.
+
+**Todo efeito tem sujeito** — o `vm_id` da VM do ciclo —, e **o efeito de agente diz em qual
+nó roda**. A varredura do envelope perguntou o que o despachante lê e nunca perguntou se o
+efeito tem sujeito, e dois efeitos de leitura nasceram sem: um inventário que não dizia de
+onde, e uma consulta que não dizia de quem. Um inventário respondido pelo agente de outro
+nó voltava vazio, e a reconciliação lia "não há órfão".
+
+O critério do `Alvo` — mesmo alvo quando falham juntos — alcança o nó: agentes de nós
+diferentes falham separado. O nó vem declarado, com a procedência da última consulta ao
+Nova, e é conferido na resposta. "A VM não está neste nó" é desfecho próprio.
+
+O `vm_id` dos efeitos de leitura **não** é chave de exclusão: com chave, a consulta de
+evidência esperaria o lease preso pela cópia zumbi que ela existe para investigar.
+
+Isto substitui um trecho da propriedade 4 acima: "`query-block-jobs`, roteável por
+**qualquer** agente com acesso àquele hypervisor". O QMP é um socket local do nó, e com o nó
+conferido na resposta, o agente de outro nó não responde por este. O que o trecho acertava
+continua valendo — nunca perguntar à instância que detém o lease —; o "qualquer agente" era o
+caminho do inventário vazio.
+
+**Uma segunda receptora é valor novo de `Alvo`, e não `no` afrouxado.** O critério que pôs
+o nó no efeito de agente — falham separado, logo são alvos diferentes — vale igual para
+duas receptoras. Hoje há uma, e não morde. Mas o conserto óbvio de amanhã, permitir `no`
+num efeito de receptora, mudaria o significado de um campo existente, de "proibido aqui"
+para "permitido aqui" — o que este ADR proíbe: um efeito assim chegando numa versão antiga
+cairia em `RegistroMalformadoError`, que descarta. Valor novo de `Alvo` é aditivo: a versão
+antiga o recusa com `ValorDesconhecidoError` e devolve à fila, que é o caminho desenhado.
+
+Procedência: revisão do #31, e o PR que implementa esta emenda.

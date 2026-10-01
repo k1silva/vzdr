@@ -109,9 +109,10 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     destino sobre o destino.
   - **Liberação das chaves de exclusão**: só por evidência de que o job acabou, nunca pelo
     relógio do lease. É aqui que a propriedade 4 do ADR-0015 fecha.
-  - Duas formas de evidência: `query-block-jobs` **sobre o hypervisor** — roteável por
-    qualquer agente com acesso a ele, nunca pedida ao detentor do lease — e a VM não estar
-    mais no nó gravado, que é o Nova respondendo o que o libvirt não pode.
+  - Duas formas de evidência: `query-block-jobs` **no nó declarado** — respondido por quem
+    serve aquele nó, nunca pela instância que detém o lease, e conferido pelo nó que
+    respondeu — e a VM não estar mais no nó gravado, que é o Nova respondendo o que o
+    libvirt não pode.
   - Quando nenhuma chega, a máquina pede `CercarDestino` — e **o sucesso dele é a terceira
     forma de evidência**: derrubado o export, o escritor perdeu o alvo. Sem isso cercaríamos
     e continuaríamos esperando.
