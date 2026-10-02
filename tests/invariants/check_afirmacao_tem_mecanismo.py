@@ -107,7 +107,10 @@ _CRASE = re.compile(r"`([^`]+)`")
 _TESTE = re.compile(r"(?P<arquivo>(?:tests|scripts|packages)/[\w/.-]+\.py)::(?P<funcao>test_\w+)")
 _ARQUIVO = re.compile(r"(?:tests|scripts|packages)/[\w/.-]+\.py")
 _MEDICAO = re.compile(r"M\d+")
-_REGISTRO = re.compile(r"docs/validacao/[\w.-]+\.md")
+_REGISTRO = re.compile(r"docs/validacao/(?:[\w.-]+/)*[\w.-]+\.md")
+#: O id no NOME do arquivo, pela convencao que os registros ja seguem
+#: (`2026-10-02-m5-leitura-do-bitmap.md`).
+_MEDICAO_NO_NOME = re.compile(r"(?:^|-)m(\d+)(?:-|$)")
 ESTADOS_DE_MEDICAO = ("aberta", "medida")
 _TAREFA = re.compile(r"T\d+")
 _CANDIDATA = re.compile(r"C-\d{3}")
@@ -263,6 +266,47 @@ def _medicao_do_titulo(arquivo: Path) -> str | None:
     return casou.group(1) if casou else None
 
 
+def marcos_escritos_como_medicao(raiz: Path) -> list[str]:
+    """Marco de entrega se escreve `Marco N`, e nunca `M<n>`.
+
+    `M<n>` sao as medicoes, e o checador as le em crase dentro do paragrafo do
+    mecanismo. Ate 2026-10-02 os marcos usavam o mesmo formato, e um `M2` querendo
+    dizer o marco 2 seria conferido contra a tabela, ACHARIA uma medicao com esse id,
+    e aprovaria — apontando para outra coisa. E o guarda mentindo.
+
+    Conferido onde marco e DECLARADO: os cabecalhos do roadmap, a linha
+    `**Marco:**` das specs e a coluna Marco do specs/README.md. Prosa que diga "o
+    M3" querendo dizer o marco nao e vista — LIMITE —, mas a regressao comeca pela
+    declaracao, e e ela que e cobrada."""
+    falhas = []
+    roadmap = raiz / "docs" / "03-roadmap.md"
+    if roadmap.exists():
+        for _, linha in linhas_fora_de_blocos(roadmap.read_text(encoding="utf-8")):
+            if re.match(r"#{1,6} M\d+\b", linha):
+                falhas.append(f"docs/03-roadmap.md: marco como medicao: {linha.strip()!r}")
+    for spec in sorted(raiz.glob("specs/*/spec.md")):
+        for _, linha in linhas_fora_de_blocos(spec.read_text(encoding="utf-8")):
+            if re.search(r"\*\*Marco:\*\* M\d", linha):
+                caminho = spec.relative_to(raiz).as_posix()
+                falhas.append(f"{caminho}: marco como medicao: {linha.strip()!r}")
+    indice = raiz / "specs" / "README.md"
+    if indice.exists():
+        cabecalho: list[str] = []
+        for _, linha in linhas_fora_de_blocos(indice.read_text(encoding="utf-8")):
+            if not linha.startswith("|"):
+                cabecalho = []
+                continue
+            celulas = _celulas(linha)
+            if "Marco" in celulas:
+                cabecalho = celulas
+                continue
+            if cabecalho and len(celulas) == len(cabecalho):
+                marco = celulas[cabecalho.index("Marco")]
+                if re.fullmatch(r"M\d+", marco):
+                    falhas.append(f"specs/README.md: marco como medicao: {celulas[0]} -> {marco}")
+    return falhas
+
+
 def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
     """O indice nao pode mentir — senao o conserto renasce um nivel acima.
 
@@ -312,13 +356,24 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
     # estado para `medida` deixaria a tabela dizendo `aberta`, e toda afirmacao
     # citando M<n> como se nada tivesse sido medido — o estado da decisao 5 do
     # ADR-0016. `aberta` com registro so pega quem preencheu a celula; isto pega quem
-    # esqueceu. LIMITE: so alcanca o arquivo cujo titulo comeca com o id; registro
-    # escrito sem o id no titulo E esquecido na tabela passa.
+    # esqueceu. Em toda a arvore de docs/validacao, e nao so no primeiro nivel: um
+    # registro numa subpasta cairia no buraco que a volta existe para fechar.
+    #
+    # E o NOME do arquivo cruza com o titulo: arquivo cujo nome diz `-m<n>-` e cujo
+    # titulo nao comeca com M<n> reprova. LIMITE que sobra: errar o nome E o titulo
+    # E a tabela, ao mesmo tempo.
     apontados = {r for e, r in _medicoes(raiz).values() if e == "medida" and r}
     pasta = raiz / "docs" / "validacao"
-    for arquivo in sorted(pasta.glob("*.md")) if pasta.exists() else []:
+    for arquivo in sorted(pasta.rglob("*.md")) if pasta.exists() else []:
         ident = _medicao_do_titulo(arquivo)
         caminho = arquivo.relative_to(raiz).as_posix()
+        no_nome = _MEDICAO_NO_NOME.search(arquivo.stem.lower())
+        if no_nome and ident != f"M{no_nome.group(1)}":
+            falhas.append(
+                f"{caminho}: o nome diz M{no_nome.group(1)}, e o titulo diz "
+                f"{ident or 'nenhuma medicao'} — o titulo do registro comeca com o id"
+            )
+            continue
         if ident and caminho not in apontados:
             falhas.append(
                 f"{caminho}: registro orfao — o titulo diz {ident}, e nenhuma medicao medida "
@@ -481,6 +536,7 @@ def verificar(raiz: Path) -> list[str]:
                     reivindicados.add(Path(ref.split("::")[0]).name)
 
     falhas.extend(problemas_da_tabela_de_medicoes(raiz))
+    falhas.extend(marcos_escritos_como_medicao(raiz))
 
     for item in candidatas_sem_id(raiz):
         falhas.append(

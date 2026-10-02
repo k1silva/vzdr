@@ -7,7 +7,7 @@ Virtuozzo Hybrid Infrastructure, com pontos de recuperação e failover.
 
 ## Estado
 
-Em construção. Marco atual: **M0 — Fundação**. Veja `docs/03-roadmap.md`.
+Em construção. Marco atual: **Marco 0 — Fundação**. Veja `docs/03-roadmap.md`.
 
 O mecanismo central de replicação já foi validado contra um cluster real: carga inicial
 de 8,7 GiB num volume de 80 GiB, seguida de um ciclo incremental de 16,7 MiB — 0,19%.

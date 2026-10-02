@@ -1,6 +1,6 @@
 # dr-012 — Preparar ambiente de DR
 
-**Status:** rascunho · **Marco:** M4
+**Status:** rascunho · **Marco:** 4
 **Depende de:** core-002 (conexões e conectores), core-003 (motor de trabalho),
 core-007 (API — o endpoint de bootstrap da receptora)
 
@@ -15,10 +15,10 @@ core-007 (API — o endpoint de bootstrap da receptora)
 > Por isso a `dr-006` deixa de mandar o onboarding inteiro para a `core-002`: o que é da
 > `core-002` é a **conexão** com cada cluster; o **par de sites** é desta spec.
 
-> **Marco M4, depois da `core-007`.** O passo 7 precisa do endpoint de bootstrap da
+> **Marco 4, depois da `core-007`.** O passo 7 precisa do endpoint de bootstrap da
 > receptora, que é da `core-007` (pendência registrada em `deploy/cloud-init/README.md`).
-> A `dr-006`, em M3, não depende desta spec: ela pressupõe um par de sites pronto, que em
-> M3 é preparado à mão, exatamente como o laboratório de 2026-09-23 fez. Esta spec
+> A `dr-006`, no Marco 3, não depende desta spec: ela pressupõe um par de sites pronto, que no
+> Marco 3 é preparado à mão, exatamente como o laboratório de 2026-09-23 fez. Esta spec
 > automatiza o que lá foi manual.
 
 **Decisões:** [ADR-0011](../../docs/adr/0011-imagem-e-bootstrap-do-receptor.md),

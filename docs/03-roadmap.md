@@ -2,7 +2,7 @@
 
 Seis marcos. Cada um termina com algo demonstrável e critério de saída objetivo.
 
-## M0 — Fundação (2 semanas)
+## Marco 0 — Fundação (2 semanas)
 
 Repo, `AGENTS.md`, constitution, CI com lint, testes e invariantes, esqueleto do núcleo,
 specs `core-001`, `core-002` e `dr-001` aprovadas.
@@ -33,7 +33,7 @@ integração, e continua valendo. O mecanismo foi validado contra libvirt e QEMU
 cluster de laboratório, em 18 e 23 de setembro — à mão. Não é mock; é o mesmo teste sem
 automação. Ver [validações](validacao/).
 
-## M1 — Núcleo testável (2 semanas)
+## Marco 1 — Núcleo testável (2 semanas)
 
 `core-001`, `core-003`, `dr-001`, `dr-002`. Máquina de estados, descoberta de discos,
 estado durável. Nada ainda copia byte.
@@ -137,7 +137,7 @@ lê.
       porque o padrão da busca tinha o mesmo defeito. **Varredura por faixa, não por texto**,
       que foi o que finalmente pegou
 
-## M2 — Ciclo real (3 a 4 semanas)
+## Marco 2 — Ciclo real (3 a 4 semanas)
 
 `dr-003`, `dr-004`, `dr-005`, `core-004`. O agente replica de verdade, multi-disco, com
 quiesce e reconciliação.
@@ -145,14 +145,14 @@ quiesce e reconciliação.
 **Sai quando:** uma VM de vários discos replica por 72 h seguidas no laboratório,
 sobrevivendo a uma queda de link provocada e a um reinício do agente, sem resync completo.
 
-## M3 — Destino completo (3 semanas)
+## Marco 3 — Destino completo (3 semanas)
 
 `dr-006`, `dr-007`, `dr-008`. Receptor provisionando, snapshots agrupados, TLS ponta a ponta.
 
 **Sai quando:** cinco VMs replicam do DC-1 para o DC-2 pela WAN, com pontos de recuperação
 visíveis no painel do VHI, e um deles é montado e verificado em máquina dedicada.
 
-## M4 — Plataforma (4 semanas)
+## Marco 4 — Plataforma (4 semanas)
 
 `core-005`, `core-006`, `core-007`, `dr-009`. Inventário, eventos, API, auditoria, plano de
 failover em dry-run. A interface começa aqui.
@@ -160,7 +160,7 @@ failover em dry-run. A interface começa aqui.
 **Sai quando:** o plano de failover sai sem pendências para o tier crítico, e tudo que a
 interface faz também acontece pela CLI.
 
-## M5 — Failover (4 semanas)
+## Marco 5 — Failover (4 semanas)
 
 `dr-010`, `dr-011`. Execução, test-failover isolado, failback.
 
@@ -170,7 +170,7 @@ transferindo só o delta.
 
 ## Em paralelo — Fase 0 de medição
 
-Roda junto com M0 e M1, precisa fechar antes do M3, porque dimensiona o storage do DC-2.
+Roda junto com os Marcos 0 e 1, precisa fechar antes do Marco 3, porque dimensiona o storage do DC-2.
 
 **Toda linha aqui carrega o método, não só o nome.** Medição registrada sem método é uma
 medida diferente cada vez que roda, e a série não serve para comparar nada — que é o único
@@ -254,10 +254,10 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
 
 ## Pré-requisitos de infraestrutura
 
-Bloqueiam o M3, não o início.
+Bloqueiam o Marco 3, não o início.
 
 - [ ] **VM de CI com libvirt 9.5 e QEMU 8.2**, para automatizar `tests/integration`.
-      Hoje esses testes rodam à mão contra o laboratório. Bloqueia o M2, cujo critério
+      Hoje esses testes rodam à mão contra o laboratório. Bloqueia o Marco 2, cujo critério
       de saída é uma VM replicando 72 h seguidas — fazer isso à mão não escala.
 
       *Por que aqui e não em [`pendencias.md`](pendencias.md):* o critério de entrada de

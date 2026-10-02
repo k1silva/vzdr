@@ -545,3 +545,69 @@ def test_medida_sem_registro_citada_nao_diz_none(tmp_path):
     falhas = verificar(raiz)
     assert any("M9" in f and "ainda nao tem registro" in f for f in falhas), falhas
     assert not any("None" in f for f in falhas), falhas
+
+
+def test_registro_orfao_em_subpasta_reprova(tmp_path):
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-11").mkdir(parents=True)
+    (raiz / "docs/validacao/2026-11/2026-11-01-m4.md").write_text("# M4 — x\n", encoding="utf-8")
+    assert any("2026-11/" in f and "registro orfao" in f for f in verificar(raiz))
+
+
+def test_registro_em_subpasta_citado_passa(tmp_path):
+    reg = "docs/validacao/2026-11/2026-11-01-m9.md"
+    medicoes = MEDICOES.replace(f"`{REGISTRO}`", f"`{reg}`")
+    raiz = montar(tmp_path, medicoes=medicoes, adr=_adr_com("X", f"`{reg}`"))
+    (raiz / REGISTRO).unlink()
+    (raiz / "docs/validacao/2026-11").mkdir(parents=True)
+    (raiz / reg).write_text("# M9 — o registro\n", encoding="utf-8")
+    assert verificar(raiz) == []
+
+
+def test_nome_com_id_e_titulo_sem_id_reprova(tmp_path):
+    """O limite encolhe de graca: o nome ja segue convencao, e o titulo esquecido
+    deixa de passar."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-11-01-m4-queda.md").write_text("# A queda\n", encoding="utf-8")
+    assert any("o nome diz M4" in f for f in verificar(raiz))
+
+
+def test_nome_sem_id_nao_e_cobrado(tmp_path):
+    """`m2` dentro de outra palavra nao e id: so `-m<n>-` delimitado."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-09-23-com2m-coisa.md").write_text("# Coisa\n", encoding="utf-8")
+    assert verificar(raiz) == []
+
+
+# ── Marco nao e medicao ─────────────────────────────────────────────────────
+
+
+def _escreve(raiz, caminho, texto):
+    (raiz / caminho).parent.mkdir(parents=True, exist_ok=True)
+    (raiz / caminho).write_text(texto, encoding="utf-8")
+
+
+def test_marco_declarado_como_medicao_reprova_nos_tres_lugares(tmp_path):
+    """`M2` querendo dizer o marco 2 seria conferido contra a tabela e aprovado."""
+    raiz = montar(tmp_path)
+    _escreve(raiz, "docs/03-roadmap.md", "# Roadmap\n\n## M2 — Ciclo real\n")
+    _escreve(raiz, "specs/dr-009-x/spec.md", "# dr-009\n\n**Marco:** M4\n")
+    _escreve(
+        raiz,
+        "specs/README.md",
+        "| # | Spec | Marco |\n| --- | --- | --- |\n| dr-009 | X | M4 |\n",
+    )
+    falhas = verificar(raiz)
+    assert any("03-roadmap.md" in f and "M2" in f for f in falhas), falhas
+    assert any("dr-009-x/spec.md" in f for f in falhas), falhas
+    assert any("specs/README.md" in f and "dr-009" in f for f in falhas), falhas
+
+
+def test_marco_escrito_como_marco_passa(tmp_path):
+    raiz = montar(tmp_path)
+    _escreve(raiz, "docs/03-roadmap.md", "# Roadmap\n\n## Marco 2 — Ciclo real\n")
+    _escreve(raiz, "specs/dr-009-x/spec.md", "# dr-009\n\n**Marco:** 4\n")
+    _escreve(
+        raiz, "specs/README.md", "| # | Spec | Marco |\n| --- | --- | --- |\n| dr-009 | X | 4 |\n"
+    )
+    assert verificar(raiz) == []

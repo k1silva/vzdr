@@ -136,6 +136,10 @@ from vzdr.tools.dr import ...
 - Tipagem obrigatória em assinaturas públicas. `mypy --strict` em `vzdr.core.domain`.
 - `ruff` para estilo e ordenação de imports. `make fmt` antes do commit.
 - Termos de negócio em português (`ciclo`, `janela`, `ponto_de_recuperacao`); o resto em inglês.
+- **Marco de entrega se escreve `Marco N`; `M<n>` é medição** (a tabela do ADR-0012). Os dois
+  já dividiram o formato, e o meta-checador, que lê `M<n>` como medição, aprovaria um marco
+  citado como se fosse uma — `check_afirmacao_tem_mecanismo.py` recusa a declaração no formato
+  velho.
 - Classe de exceção termina em `Error` (`TokenInvalidoError`, `BancoRecusadoError`).
   O termo de negócio continua em português; `Error` é marcador de tipo, não palavra
   de negócio. É a regra `N818` do ruff, e ela fica ligada: um `ignore` de regra de
