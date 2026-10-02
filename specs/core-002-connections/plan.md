@@ -141,5 +141,5 @@ gravação anônima é gravação que ninguém sabe se envelheceu.
   subir o laboratório), e a decisão afeta toda credencial que o produto vier a guardar.
   Merece registro.
 
-Não vira ADR, porque decorre da spec: health check sob demanda em M0, fronteira de teste
+Não vira ADR, porque decorre da spec: health check sob demanda no Marco 0, fronteira de teste
 entre tradução e integração, capacidade como fato e versão como proxy.

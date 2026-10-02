@@ -6,7 +6,7 @@
 
 Tudo em `vzdr.core.domain`, que é puro e está sob `mypy --strict`. Nenhuma linha aqui toca
 libvirt, QMP, banco ou rede — o checador de pureza já recusa, e é ele que mantém o critério
-de saída do M1 possível.
+de saída do Marco 1 possível.
 
 O módulo se divide em três, pela razão de mudar:
 

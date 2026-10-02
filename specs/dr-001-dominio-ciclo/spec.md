@@ -1,7 +1,7 @@
 # dr-001 — Domínio e máquina de estados do ciclo
 
 **Status:** rascunho
-**Marco:** M1
+**Marco:** 1
 **Depende de:** core-001
 
 ## Problema
@@ -26,7 +26,7 @@ recuperação, e decidindo as transições. Testável em milissegundos num lapto
 
 ## A máquina é pura; o agente são as mãos
 
-O critério de saída do M1 — *rodando sem hypervisor em menos de 2 segundos* — só é possível
+O critério de saída do Marco 1 — *rodando sem hypervisor em menos de 2 segundos* — só é possível
 se a máquina **não executar nada**. Cada interação com QMP é um **efeito que ela pede**,
 nunca algo que ela faz.
 

@@ -1,6 +1,6 @@
 # dr-006 — Provisionamento: proteger uma VM é um clique
 
-**Status:** rascunho · **Marco:** M3
+**Status:** rascunho · **Marco:** 3
 **Depende de:** dr-001 (domínio e ciclo), dr-002 (descoberta de discos e bitmaps),
 core-002 (conexões)
 **Decisões:** [ADR-0008](../../docs/adr/0008-modos-de-transporte.md),
@@ -33,8 +33,8 @@ sites** (modo de transporte, relé, CA, floating IP, receptora, orçamento de ba
 `dr-012`. Também fora: descoberta dos discos da origem (`dr-002`); failover,
 test-failover e failback.
 
-Em M3 o par de sites é preparado à mão, como o laboratório fez; a `dr-012` automatiza isso
-em M4. Esta spec pressupõe o par pronto, não importa como.
+No Marco 3 o par de sites é preparado à mão, como o laboratório fez; a `dr-012` automatiza isso
+no Marco 4. Esta spec pressupõe o par pronto, não importa como.
 
 ## Fronteira: o que a plataforma faz e o que continua humano
 

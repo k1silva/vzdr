@@ -8,25 +8,25 @@ Núcleo e feature intercalados: cada capacidade do núcleo nasce quando o DR pre
 
 | # | Spec | Entrega | Depende de | Marco |
 | --- | --- | --- | --- | --- |
-| core-001 | Tenancy e identidade | Usuários, tenant, papéis, verificação de permissão | — | M0 |
-| core-002 | Conexões e conectores | Registro de sistemas externos, conector tipado, cofre, health check | core-001 | M0 |
-| dr-001 | Domínio e máquina de estados | VM protegida, ciclo, janela, ponto de recuperação | core-001 | M1 |
-| dr-002 | Descoberta de discos e bitmaps | node-name, inventário de discos, leitura de bitmaps. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `node-name` é efêmero, `qemu-img info` falha em volume de VM ligada | dr-001 | M1 |
-| core-003 | Motor de trabalho | Fila durável, estado, retomada, agendamento | core-001 | M1 |
-| dr-003 | Ciclo de replicação multi-disco | Checkpoint atômico, merge, backup job, commit. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `bitmap-mode: on-success` com `sync: incremental`, `--quiesce` não existe neste fork, `raw` recusa checkpoint | dr-001, dr-002, core-003 | M2 |
-| dr-004 | Quiesce com watchdog | freeze/thaw garantido, nível de consistência registrado | dr-003 | M2 |
-| dr-005 | Reconciliação e resync | Detecção de divergência, decisão de resync | dr-003 | M2 |
-| core-004 | Frota de agentes | Registro, versão, saúde, comando | core-002 | M2 |
-| dr-006 | Provisionamento: proteger uma VM é um clique | Volume espelho, anexação, export, seed e entrada no ciclo — o fluxo inteiro, não só a mecânica do destino | dr-001, dr-002, core-002 | M3 |
-| dr-007 | Pontos de recuperação e retenção | Snapshot Cinder por VM, política, expurgo | dr-006 | M3 |
-| dr-008 | Transporte TLS | Credenciais, nó destino, throttle | dr-003, dr-006 | M3 |
-| core-005 | Inventário | VMs, volumes, redes, hosts; sincronização e drift | core-002 | M4 |
-| core-006 | Eventos e webhooks | Barramento de eventos, assinatura externa, entrega com retry | core-003 | M4 |
-| core-007 | API e auditoria | FastAPI, OpenAPI, autenticação, RBAC, log imutável | core-001, core-003 | M4 |
-| dr-009 | Plano de failover | Mapeamento DC1→DC2, preflight, dry-run | core-005 | M4 |
-| dr-012 | Preparar ambiente de DR | Wizard de par de sites: projeto, rede, floating IP, receptora, bootstrap, orçamento de banda | core-002, core-003, core-007 | M4 |
-| dr-010 | Failover e test-failover | Clone isolado, portas, VMs, ordem de boot | dr-007, dr-009 | M5 |
-| dr-011 | Failback | Reversão do fluxo, só o delta do período de desastre | dr-010 | M5 |
+| core-001 | Tenancy e identidade | Usuários, tenant, papéis, verificação de permissão | — | 0 |
+| core-002 | Conexões e conectores | Registro de sistemas externos, conector tipado, cofre, health check | core-001 | 0 |
+| dr-001 | Domínio e máquina de estados | VM protegida, ciclo, janela, ponto de recuperação | core-001 | 1 |
+| dr-002 | Descoberta de discos e bitmaps | node-name, inventário de discos, leitura de bitmaps. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `node-name` é efêmero, `qemu-img info` falha em volume de VM ligada | dr-001 | 1 |
+| core-003 | Motor de trabalho | Fila durável, estado, retomada, agendamento | core-001 | 1 |
+| dr-003 | Ciclo de replicação multi-disco | Checkpoint atômico, merge, backup job, commit. **Cite [as pegadinhas do laboratório](../docs/01-arquitetura-dr.md#pegadinhas-descobertas-na-validação) antes da primeira linha:** `bitmap-mode: on-success` com `sync: incremental`, `--quiesce` não existe neste fork, `raw` recusa checkpoint | dr-001, dr-002, core-003 | 2 |
+| dr-004 | Quiesce com watchdog | freeze/thaw garantido, nível de consistência registrado | dr-003 | 2 |
+| dr-005 | Reconciliação e resync | Detecção de divergência, decisão de resync | dr-003 | 2 |
+| core-004 | Frota de agentes | Registro, versão, saúde, comando | core-002 | 2 |
+| dr-006 | Provisionamento: proteger uma VM é um clique | Volume espelho, anexação, export, seed e entrada no ciclo — o fluxo inteiro, não só a mecânica do destino | dr-001, dr-002, core-002 | 3 |
+| dr-007 | Pontos de recuperação e retenção | Snapshot Cinder por VM, política, expurgo | dr-006 | 3 |
+| dr-008 | Transporte TLS | Credenciais, nó destino, throttle | dr-003, dr-006 | 3 |
+| core-005 | Inventário | VMs, volumes, redes, hosts; sincronização e drift | core-002 | 4 |
+| core-006 | Eventos e webhooks | Barramento de eventos, assinatura externa, entrega com retry | core-003 | 4 |
+| core-007 | API e auditoria | FastAPI, OpenAPI, autenticação, RBAC, log imutável | core-001, core-003 | 4 |
+| dr-009 | Plano de failover | Mapeamento DC1→DC2, preflight, dry-run | core-005 | 4 |
+| dr-012 | Preparar ambiente de DR | Wizard de par de sites: projeto, rede, floating IP, receptora, bootstrap, orçamento de banda | core-002, core-003, core-007 | 4 |
+| dr-010 | Failover e test-failover | Clone isolado, portas, VMs, ordem de boot | dr-007, dr-009 | 5 |
+| dr-011 | Failback | Reversão do fluxo, só o delta do período de desastre | dr-010 | 5 |
 
 A interface começa depois de `core-007`, consumindo a API. Pode correr em paralelo assim
 que o contrato OpenAPI estabilizar.

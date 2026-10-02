@@ -1,7 +1,7 @@
 # core-002 — Conexões e conectores
 
 **Status:** rascunho
-**Marco:** M0
+**Marco:** 0
 **Depende de:** core-001
 
 ## Problema
@@ -123,13 +123,13 @@ plataforma.
 Isso fica escrito, e não implícito, porque a diferença entre as duas coisas é o que alguém
 vai precisar saber ao responder a um cliente.
 
-## Health check: sob demanda em M0
+## Health check: sob demanda no Marco 0
 
-Verificação periódica precisa de agendador, e agendador é `core-003`, marco M1. Esta spec é
-M0. Sem separar, ou ela não fecha no marco, ou alguém escreve um agendador improvisado
+Verificação periódica precisa de agendador, e agendador é `core-003`, Marco 1. Esta spec é
+do Marco 0. Sem separar, ou ela não fecha no marco, ou alguém escreve um agendador improvisado
 dentro dela.
 
-Em M0 a verificação é **sob demanda**, e "sob demanda" não é "antes de cada chamada" — isso
+No Marco 0 a verificação é **sob demanda**, e "sob demanda" não é "antes de cada chamada" — isso
 dobraria o custo de toda operação. São três momentos:
 
 | Quando | Por quê |
@@ -243,7 +243,7 @@ isso é `core-005`, inventário.
 ## Perguntas em aberto
 
 As duas originais estão respondidas acima — a do cofre virou "envelope, com a KEK fora do
-banco", e a do health check virou "sob demanda em M0, periódico com a `core-003`". O que
+banco", e a do health check virou "sob demanda no Marco 0, periódico com a `core-003`". O que
 sobra:
 
 - [ ] Qual KMS ou Vault na v2. Não bloqueia: o envelope foi desenhado para trocar o guardião

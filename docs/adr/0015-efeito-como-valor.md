@@ -5,7 +5,7 @@
 
 ## Contexto
 
-A `dr-001` modela o ciclo de replicação, e o critério de saída do M1 é que ela rode **sem
+A `dr-001` modela o ciclo de replicação, e o critério de saída do Marco 1 é que ela rode **sem
 hypervisor, em menos de dois segundos**. Isso só é possível se ela não executar nada: cada
 interação com QMP precisa ser algo que ela **pede**, não algo que ela **faz**.
 

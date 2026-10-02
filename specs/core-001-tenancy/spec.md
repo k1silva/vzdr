@@ -1,7 +1,7 @@
 # core-001 — Tenancy e identidade
 
 **Status:** aprovada
-**Marco:** M0
+**Marco:** 0
 **Depende de:** —
 
 ## Problema
@@ -39,7 +39,7 @@ A API não valida token diretamente: chama `verificar_token(token) -> Principal`
 único implementador, o validador local. Um validador OIDC entra depois como outro
 implementador, sem tocar em quem consome o principal.
 
-Não depender de IdP externo mantém M0 e a CI de pé com `make db-up` e nada mais.
+Não depender de IdP externo mantém o Marco 0 e a CI de pé com `make db-up` e nada mais.
 
 **O token de sessão de tenant é `<tenant_id>.<segredo>`.** A spec dizia apenas "token
 próprio"; o prefixo apareceu ao implementar. `sessao` tem `tenant_id`, logo tem RLS, e ler

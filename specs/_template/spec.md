@@ -1,7 +1,7 @@
 # <id> — <nome da feature>
 
 **Status:** rascunho | em revisão | aprovada | implementada
-**Marco:** M<n>
+**Marco:** <n>
 **Depende de:** <ids>
 
 ## Problema
