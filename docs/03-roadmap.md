@@ -180,6 +180,10 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
 - [x] Censo de discos nos três nós (`scripts/censo-discos.sh`) — feito em 2026-09-23:
       11,83 TiB, 65 VMs, 115 discos.
       Ver [censo](validacao/2026-09-23-censo-do-parque.md)
+- [ ] **Profundidade de backing dos discos de dado, no parque.** A M5 leu
+      `backing_file_depth: 0` numa VM, o que torna triviais as condições 1 e 2 do ADR-0016
+      para ela. Não se generaliza: o censo confirma, VM a VM
+      ([M5](validacao/2026-10-02-m5-leitura-do-bitmap.md)).
 - [ ] **Taxa real de mudança** (M3 do ADR-0012) — `scripts/medir-taxa-mudanca.sh`, com
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
@@ -197,6 +201,17 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
         qcow2 marca como **inconsistente** o bitmap que não foi fechado limpo, e que o
         `query-block` expõe isso — ninguém verificou. Se existir, é o sinal que substitui a
         troca de nó: bitmap presente e consistente → confia; ausente ou marcado → resync.
+
+        **Previsão, registrada antes de rodar** (2026-10-02, depois da M5 e da implicação
+        do esquema QMP — inconsistente implica persistente, e nem `recording` nem `busy`):
+
+        | Depois de matar o QEMU e religar | Leitura |
+        | --- | --- |
+        | `inconsistent: true`, `recording: false`, `busy: false`, `persistent: true` | o fork segue o upstream; o ADR-0016 fica de pé |
+        | o bitmap ou o checkpoint desaparece | falha fechada por outro caminho, igualmente aceitável; muda o desenho, não a confiança |
+        | `recording: true`, sem `inconsistent`, `count` preservado | alarme: o fork não marca, e a confiança no flag cai |
+
+        Precisa de um nó que possa ser drenado.
 
       E uma conferência que a resposta tornou necessária: o mecanismo só vale para bitmap
       **persistente**, e o repositório não registra como o bitmap temporário do laboratório
