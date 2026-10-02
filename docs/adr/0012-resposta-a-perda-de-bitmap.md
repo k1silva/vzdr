@@ -179,12 +179,12 @@ parado, como critério de aceite.
 
 A decisão 3 fecha quando estes quatro números existirem. Nenhum depende de escrever código.
 
-| # | Medição | O que decide |
-|---|---|---|
-| M1 | **Vazão real de seed entre os datacenters.** O seed validado transferiu 5.535,6 MiB sem cronometragem. Repetir com `time`. | Converte tamanho em horas. Sem ela, toda estimativa de tempo de resync é chute — inclusive as deste documento. |
-| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. E, acrescentado em 2026-10-02: a profundidade de backing dos discos de dado, de que depende a forma de cadeia do inventário (ADR-0016). |
-| M3 | **Taxa real de mudança**, com bitmap em amostra de 5 a 8 VMs cobrindo os perfis, ao longo de 48h. | Diz quanto o diferencial transferiria de fato — ou seja, qual o ganho real sobre o seed completo. |
-| M4 | **Sobrevivência do bitmap à migração automática do VHI.** Exige dois nós e VM descartável. | Se o bitmap sobreviver, a frequência de resync despenca e a decisão 3 perde urgência. Se não sobreviver, ganha. Há chamado aberto com a Virtuozzo sobre a capability `dirty-bitmaps` desligada. |
+| # | Medição | O que decide | Estado | Registro |
+|---|---|---|---|---|
+| M1 | **Vazão real de seed entre os datacenters.** O seed validado transferiu 5.535,6 MiB sem cronometragem. Repetir com `time`. | Converte tamanho em horas. Sem ela, toda estimativa de tempo de resync é chute — inclusive as deste documento. | aberta | — |
+| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. E, acrescentado em 2026-10-02: a profundidade de backing dos discos de dado, de que depende a forma de cadeia do inventário (ADR-0016). | aberta | — |
+| M3 | **Taxa real de mudança**, com bitmap em amostra de 5 a 8 VMs cobrindo os perfis, ao longo de 48h. | Diz quanto o diferencial transferiria de fato — ou seja, qual o ganho real sobre o seed completo. | aberta | — |
+| M4 | **Sobrevivência do bitmap à migração automática do VHI.** Exige dois nós e VM descartável. | Se o bitmap sobreviver, a frequência de resync despenca e a decisão 3 perde urgência. Se não sobreviver, ganha. Há chamado aberto com a Virtuozzo sobre a capability `dirty-bitmaps` desligada. | aberta | — |
 
 Enquanto M1–M4 não existirem, os tempos citados neste documento (22 h para 3,75 TiB a
 50 MiB/s, ~2 h de diferencial) são **estimativas com vazão arbitrada**, não medições.
@@ -248,9 +248,14 @@ fork **não** marcar, é a coisa mais importante que podemos descobrir sobre est
 
 E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário ser desenhado:
 
-| # | Medição | O que decide |
-|---|---|---|
-| M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. |
+| # | Medição | O que decide | Estado | Registro |
+|---|---|---|---|---|
+| M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. | medida | `docs/validacao/2026-10-02-m5-leitura-do-bitmap.md` |
+
+**As tabelas de medição ganharam `Estado` e `Registro`** (2026-10-02): são o índice único das
+medições, e o meta-checador as lê. `medida` exige o registro na mesma linha; afirmação que
+cite uma medição feita cita o registro, e não o `M<n>`. A tensão de um ADR carregar estado
+que muda está na candidata `C-009`.
 
 **A M5 foi medida em 2026-10-02**: a leitura existe, por `virsh qemu-monitor-command`, e exige
 conexão de leitura e escrita com o libvirtd. O registro está em

@@ -142,6 +142,14 @@ penduradas só nela. Se esse número sobe, aparece.
   sistemas de backup nos mesmos bitmaps é o problema dos dois escritores um nível abaixo de
   onde se olhava. A resposta mora no ambiente do cliente, e chega com o mesmo acesso da
   [P-002](#p-002--distribuição-do-parque-do-cliente-alvo).
+- **C-009 — A tabela de medições mora num ADR, e tem estado que muda.** Desde 2026-10-02 a
+  tabela do ADR-0012 é o índice único das medições, com estado (`aberta`, `medida`) e
+  registro, e o meta-checador lê de lá. ADR é registro de uma decisão num ponto do tempo;
+  coluna mutável dentro dele é editar o ADR depois do fato. A tensão já existia e a coluna a
+  aumenta. **A saída já está combinada**: se a tabela começar a ser editada com frequência,
+  ela sai do ADR-0012 para `docs/validacao/README.md`, e o ADR-0012 passa a apontar para ela
+  — nunca um segundo índice paralelo. O gatilho é um evento: a frequência de edição, que o
+  histórico do arquivo mostra.
 
 ## Fechadas
 
