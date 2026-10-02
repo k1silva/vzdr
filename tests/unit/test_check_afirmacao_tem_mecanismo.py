@@ -47,7 +47,14 @@ Texto.
 """
 
 TASKS = "- [x] **T2** — feita\n- [ ] **T7** — aberta\n"
-MEDICOES = "| M1 | vazao |\n| M4 | bitmap |\n"
+REGISTRO = "docs/validacao/2026-10-02-m9.md"
+MEDICOES = (
+    "| # | Medição | O que decide | Estado | Registro |\n"
+    "|---|---|---|---|---|\n"
+    "| M1 | vazao | horas | aberta | — |\n"
+    "| M4 | bitmap | resync | aberta | — |\n"
+    f"| M9 | leitura | campo | medida | `{REGISTRO}` |\n"
+)
 TESTE = "def test_relogio():\n    pass\n"
 MAKEFILE = "invariants:\n\tpython tests/invariants/check_a.py\n"
 AGENTS = "O `check_a.py` verifica a regra A.\n"
@@ -77,6 +84,7 @@ def montar(
     makefile=MAKEFILE,
     tasks=TASKS,
     pendencias=PENDENCIAS,
+    medicoes=MEDICOES,
 ):
     arquivos = {
         "docs/pendencias.md": pendencias,
@@ -84,7 +92,8 @@ def montar(
         "specs/dr-001-dominio-ciclo/tasks.md": tasks,
         "docs/adr/0015-efeito-como-valor.md": adr,
         # O ADR-0012 e coberto e e onde as medicoes moram: as duas coisas.
-        "docs/adr/0012-resposta-a-perda-de-bitmap.md": ADR_OK + "\n" + MEDICOES,
+        "docs/adr/0012-resposta-a-perda-de-bitmap.md": ADR_OK + "\n" + medicoes,
+        REGISTRO: "# M9 — o registro\n",
         "docs/adr/0016-confianca-no-bitmap.md": ADR_OK,
         "tests/unit/test_x.py": TESTE,
         "tests/invariants/check_a.py": "",
@@ -144,7 +153,8 @@ def test_arquivo_de_teste_que_nao_existe_reprova(tmp_path):
 
 
 def test_medicao_que_nao_existe_reprova(tmp_path):
-    plano = PLANO_OK.replace("`M1`", "`M9`")
+    # M9 virou a medicao feita da fixture: o exemplo de "nao existe" e outro.
+    plano = PLANO_OK.replace("`M1`", "`M77`")
     assert any("medicao nao existe" in f for f in verificar(montar(tmp_path, plano=plano)))
 
 
@@ -387,3 +397,69 @@ def test_continuacao_de_item_nao_e_item(tmp_path):
     )
     raiz = montar(tmp_path, pendencias=pendencias)
     assert verificar(raiz) == []
+
+
+# ── Medicao em dois estados, e o registro como sexta forma ──────────────────
+
+
+def test_medicao_aberta_citada_passa(tmp_path):
+    assert verificar(montar(tmp_path, adr=_adr_com("X", "`M4`"))) == []
+
+
+def test_medicao_feita_citada_como_m_reprova(tmp_path):
+    """O bug que mordeu: a decisao dizia "ainda nao existe: M5" com a M5 medida."""
+    raiz = montar(tmp_path, adr=_adr_com("X", "`M9`"))
+    assert any("M9" in f and "cite" in f and REGISTRO in f for f in verificar(raiz))
+
+
+def test_registro_de_medicao_feita_citado_passa(tmp_path):
+    assert verificar(montar(tmp_path, adr=_adr_com("X", f"`{REGISTRO}`"))) == []
+
+
+def test_registro_que_nao_existe_reprova(tmp_path):
+    raiz = montar(tmp_path, adr=_adr_com("X", "`docs/validacao/nao-existe.md`"))
+    assert any("nao-existe.md" in f and "nao existe" in f for f in verificar(raiz))
+
+
+def test_arquivo_de_validacao_que_nao_e_registro_de_medicao_reprova(tmp_path):
+    """Existir nao basta: tem que ser o que a tabela da como registro de uma medicao
+    feita."""
+    raiz = montar(tmp_path, adr=_adr_com("X", "`docs/validacao/outro.md`"))
+    (raiz / "docs/validacao/outro.md").write_text("# M9 — outro\n", encoding="utf-8")
+    assert any("outro.md" in f and "nenhuma medicao" in f for f in verificar(raiz))
+
+
+def test_medida_sem_registro_na_mesma_linha_reprova(tmp_path):
+    """A condicao que impede o bug de renascer um nivel acima: o estado "medida"
+    sozinho seria um campo que diz "feito" e ninguem confere."""
+    medicoes = MEDICOES.replace(f"medida | `{REGISTRO}` |", "medida | — |")
+    raiz = montar(tmp_path, medicoes=medicoes)
+    assert any("M9" in f and "sem registro" in f for f in verificar(raiz))
+
+
+def test_aberta_com_registro_reprova(tmp_path):
+    medicoes = MEDICOES.replace(
+        "| M1 | vazao | horas | aberta | — |", f"| M1 | vazao | horas | aberta | `{REGISTRO}` |"
+    )
+    raiz = montar(tmp_path, medicoes=medicoes)
+    assert any("M1" in f and "aberta, e com registro" in f for f in verificar(raiz))
+
+
+def test_estado_desconhecido_reprova(tmp_path):
+    medicoes = MEDICOES.replace(
+        "| M4 | bitmap | resync | aberta |", "| M4 | bitmap | resync | quase |"
+    )
+    raiz = montar(tmp_path, medicoes=medicoes)
+    assert any("M4" in f and "quase" in f for f in verificar(raiz))
+
+
+def test_registro_que_nao_nomeia_a_medicao_reprova(tmp_path):
+    raiz = montar(tmp_path)
+    (raiz / REGISTRO).write_text("# um registro de outra coisa\n", encoding="utf-8")
+    assert any("nao diz que responde a M9" in f for f in verificar(raiz))
+
+
+def test_registro_que_nao_existe_na_tabela_reprova(tmp_path):
+    raiz = montar(tmp_path)
+    (raiz / REGISTRO).unlink()
+    assert any("M9" in f and "nao existe" in f for f in verificar(raiz))
