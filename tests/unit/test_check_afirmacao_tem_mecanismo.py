@@ -5,6 +5,7 @@ assunto do build, e a primeira execucao sobre ele foi registrada a parte, depois
 da previsao.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -152,10 +153,21 @@ def test_arquivo_de_teste_que_nao_existe_reprova(tmp_path):
     assert any("arquivo nao existe" in f for f in verificar(montar(tmp_path, plano=plano)))
 
 
+def _medicao_ausente(texto_da_tabela: str) -> str:
+    """Um id que a tabela NAO tem, derivado dela — nunca escrito a mao. Um id
+    escrito a mao ja virou medicao real da fixture uma vez (M9), e o teste passou a
+    medir outra coisa sem ninguem mexer nele."""
+    ids = [int(m) for m in re.findall(r"^\| M(\d+) \|", texto_da_tabela, re.MULTILINE)]
+    ausente = f"M{max(ids) + 1}"
+    assert f"| {ausente} |" not in texto_da_tabela
+    return ausente
+
+
 def test_medicao_que_nao_existe_reprova(tmp_path):
-    # M9 virou a medicao feita da fixture: o exemplo de "nao existe" e outro.
-    plano = PLANO_OK.replace("`M1`", "`M77`")
-    assert any("medicao nao existe" in f for f in verificar(montar(tmp_path, plano=plano)))
+    ausente = _medicao_ausente(MEDICOES)
+    plano = PLANO_OK.replace("`M1`", f"`{ausente}`")
+    falhas = verificar(montar(tmp_path, plano=plano))
+    assert any(ausente in f and "medicao nao existe" in f for f in falhas), falhas
 
 
 def test_tarefa_feita_ainda_citada_como_mecanismo_reprova(tmp_path):
@@ -463,3 +475,12 @@ def test_registro_que_nao_existe_na_tabela_reprova(tmp_path):
     raiz = montar(tmp_path)
     (raiz / REGISTRO).unlink()
     assert any("M9" in f and "nao existe" in f for f in verificar(raiz))
+
+
+def test_celula_com_dois_registros_reprova(tmp_path):
+    """Uma linha, um registro: a coluna nao vira lista."""
+    medicoes = MEDICOES.replace(
+        f"medida | `{REGISTRO}` |", f"medida | `{REGISTRO}`, `{REGISTRO}` |"
+    )
+    raiz = montar(tmp_path, medicoes=medicoes)
+    assert any("uma linha, um registro" in f for f in verificar(raiz))

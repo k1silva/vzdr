@@ -37,6 +37,11 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
    nomeia tem que existir. Sem isto acumulam checadores orfaos, e o
    primeiro que der trabalho sera apagado sem que se saiba o que se apagou.
 
+DENTRO DO PARAGRAFO DO MECANISMO, CRASE E REFERENCIA — aresta conhecida, e
+deliberada. Prosa sobre o passado ("esta linha ja disse ...") se escreve SEM
+crase. Nao ha marcador de "citacao historica", e nao deve haver: um escape assim
+e um jeito de fazer afirmacao falsa passar com cara de comentario.
+
 ESCOPO POR DOCUMENTO, NUNCA PELO CRITERIO. Enfraquecer o criterio para terminar
 rapido seria contorno disfarcado: a regra continuaria escrita e deixaria de
 morder. Limitar quais documentos ele cobre e honesto e visivel — a lista do que
@@ -225,9 +230,27 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
 
     `medida` sem registro na MESMA linha e exatamente o que a decisao 5 do
     ADR-0016 era: um campo que diz "feito" e ninguem confere. E o registro tem que
-    existir e nomear a medicao que responde; `aberta` com registro e contradicao.
+    existir e nomear a medicao que responde.
+
+    `aberta` COM registro tambem reprova, e e o caso simetrico do bug consertado:
+    medicao feita, registro escrito, estado esquecido em `aberta`. Um dia havera
+    evidencia parcial de uma medicao aberta, e a vontade sera afrouxar isto. A saida
+    ja combinada, e nunca afrouxar: ou a medicao se parte em duas, cada uma com
+    linha propria, ou a evidencia parcial vira item aberto DENTRO de um registro que
+    ja existe — como o registro da M5 faz com o `query-block-jobs`.
+
+    UMA LINHA, UM REGISTRO. Evidencia nova que toca uma medicao feita — a M4 vai
+    produzir uma, sobre o `checkpoint-delete` — nao entra como segundo arquivo na
+    celula: ou e item aberto no registro existente, ou medicao nova com linha
+    propria. Celula com mais de um registro reprova, senao a coluna vira lista e a
+    lista vira ambiguidade.
     """
     falhas = []
+    for ident, celulas in _linhas_de_medicao(raiz):
+        if len(celulas) >= 5 and len(_CRASE.findall(celulas[-1])) > 1:
+            falhas.append(
+                f"{MEDICOES}: {ident}: mais de um registro na celula — uma linha, um registro"
+            )
     for ident, (estado, registro) in _medicoes(raiz).items():
         onde = f"{MEDICOES}: {ident}"
         if estado not in ESTADOS_DE_MEDICAO:

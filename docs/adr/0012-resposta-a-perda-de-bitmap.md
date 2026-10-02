@@ -254,7 +254,10 @@ E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário se
 
 **As tabelas de medição ganharam `Estado` e `Registro`** (2026-10-02): são o índice único das
 medições, e o meta-checador as lê. `medida` exige o registro na mesma linha; afirmação que
-cite uma medição feita cita o registro, e não o `M<n>`. A tensão de um ADR carregar estado
+cite uma medição feita cita o registro, e não o `M<n>`. **Uma linha, um registro:** evidência
+nova que toca uma medição feita não entra como segundo arquivo — ou é item aberto dentro do
+registro existente, ou é medição nova, com linha própria. E `aberta` com registro reprova; a
+evidência parcial de uma medição aberta segue a mesma saída, e a regra não se afrouxa. A tensão de um ADR carregar estado
 que muda está na candidata `C-009`.
 
 **A M5 foi medida em 2026-10-02**: a leitura existe, por `virsh qemu-monitor-command`, e exige
