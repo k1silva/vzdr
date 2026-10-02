@@ -374,9 +374,20 @@ RESULTADOS = [
             DiscoNoInventario(
                 disco="vda",
                 somente_leitura=False,
-                cadeia=(ImagemNoInventario(bitmaps=(BITMAP_BOM,)),),
+                cadeia=(
+                    ImagemNoInventario(
+                        arquivo="/mnt/vstorage/vols/datastores/cinder/volume-a/volume-a",
+                        bitmaps=(BITMAP_BOM,),
+                    ),
+                ),
             ),
-            DiscoNoInventario(disco="sda", somente_leitura=True, cadeia=(ImagemNoInventario(()),)),
+            DiscoNoInventario(
+                disco="sda",
+                somente_leitura=True,
+                cadeia=(
+                    ImagemNoInventario(arquivo="/var/lib/nova/instances/x/disk.config", bitmaps=()),
+                ),
+            ),
         ),
         checkpoints=("vzdr-ckp-" + "a" * 32,),
         jobs_em_curso=("backup-vda-libvirt-1-format",),
@@ -1359,7 +1370,13 @@ def test_discos_do_inventario_em_ordem_canonica():
 
 @pytest.mark.parametrize(
     "estrago",
-    ["disco_repetido", "disco_sem_imagem", "bitmap_repetido"],
+    [
+        "disco_repetido",
+        "disco_sem_imagem",
+        "bitmap_repetido",
+        "imagem_sem_arquivo",
+        "imagem_repetida",
+    ],
 )
 def test_inventario_incoerente_por_dentro_recusa(estrago):
     (original,) = [r for r in RESULTADOS if isinstance(r, ResultadoDeInventario)]
@@ -1368,5 +1385,17 @@ def test_inventario_incoerente_por_dentro_recusa(estrago):
             dataclasses.replace(original, discos=original.discos + original.discos[:1])
         elif estrago == "disco_sem_imagem":
             DiscoNoInventario(disco="vdb", somente_leitura=False, cadeia=())
+        elif estrago == "bitmap_repetido":
+            ImagemNoInventario(arquivo="/v/a", bitmaps=(BITMAP_BOM, BITMAP_BOM))
+        elif estrago == "imagem_sem_arquivo":
+            ImagemNoInventario(arquivo="", bitmaps=())
         else:
-            ImagemNoInventario(bitmaps=(BITMAP_BOM, BITMAP_BOM))
+            imagem = ImagemNoInventario(arquivo="/v/a", bitmaps=())
+            DiscoNoInventario(disco="vdb", somente_leitura=False, cadeia=(imagem, imagem))
+
+
+def test_imagem_sem_arquivo_no_json_recusa():
+    """O arquivo e a identidade da imagem: sem ele, dois inventarios do mesmo disco
+    nao distinguem cadeia que mudou de bitmap que se moveu."""
+    with pytest.raises(RegistroMalformadoError, match="arquivo"):
+        ImagemNoInventario.de_json({"bitmaps": []})

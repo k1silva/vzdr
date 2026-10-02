@@ -66,6 +66,7 @@ INVENTARIO_BOM = tuple(
         somente_leitura=False,
         cadeia=(
             ImagemNoInventario(
+                arquivo=f"/vols/{d}",
                 bitmaps=(
                     EstadoDoBitmap(
                         nome="vzdr-ckp-" + "a" * 32,
@@ -76,7 +77,7 @@ INVENTARIO_BOM = tuple(
                         persistent=True,
                         inconsistent=False,
                     ),
-                )
+                ),
             ),
         ),
     )

@@ -213,6 +213,13 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
 
         Precisa de um nó que possa ser drenado.
 
+        **E um passo a mais, de graça, se a leitura for `inconsistent: true`:** tentar
+        `virsh checkpoint-delete <dom> <nome>` e registrar se funciona, se falha, e com qual
+        erro. O QEMU só permite `block-dirty-bitmap-remove` num bitmap inconsistente, então
+        é possível que o libvirt não consiga apagar o checkpoint cujo bitmap ficou assim — e
+        a `dr-001/T7` precisa saber disso para ordenar o reparo. A M4 produz exatamente esse
+        estado; repetir o laboratório só para isso seria outra sessão.
+
       E uma conferência que a resposta tornou necessária: o mecanismo só vale para bitmap
       **persistente**, e o repositório não registra como o bitmap temporário do laboratório
       foi criado. A regra não é "todo bitmap persistente". É **persistente onde a perda

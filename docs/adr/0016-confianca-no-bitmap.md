@@ -120,7 +120,10 @@ passthrough de monitor, e a regra de não brigar com o nova-compute vale aqui �
 outra classe de risco que escrita, mas ainda é decisão. Se não houver caminho limpo pela API,
 o agente lê pelo canal dele no próprio nó, que é onde ele já roda.
 
-**Mecanismo:** Mecanismo ainda não existe: `M5`.
+**Mecanismo:** `M5`, medida em 2026-10-02 — o registro está em
+`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`. Até o meta-checador aceitar o registro
+como referência, a linha cita a medição; antes desta correção ela dizia "ainda não existe",
+e o checador não via, porque para `M<n>` ele confere só que a medição existe.
 
 ## Alternativas consideradas
 

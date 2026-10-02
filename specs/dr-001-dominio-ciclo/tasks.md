@@ -98,6 +98,8 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     discos do ciclo conferida contra o `somente_leitura` do inventário — disco
     somente-leitura na lista é o ciclo esperando para sempre um bitmap impossível;
     `FonteIncoerenteError` parando alto, sem reenvio nem descarte.
+  - **Não depende de `jobs_em_curso` antes de `query-block-jobs` ser medido no fork** — a
+    forma do campo é suposta (ver o registro da M5).
   - **O teste que protege a propriedade medida em 2026-09-18**: percorrer todos os caminhos
     de falha e afirmar que **nenhum** produz resync completo — só descarte do bitmap
     temporário, com os checkpoints intactos e uma janela a mais no próximo ciclo.

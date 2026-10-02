@@ -55,6 +55,17 @@ engano do `dirty-bitmaps: state false`, que já custou um chamado, pela mesma po
 
 ## O que fica em aberto
 
+- **`query-block-jobs` não foi medido.** O `jobs_em_curso` do inventário depende dele, e a
+  forma do retorno está suposta: sob que chave vem o id (`device` ou `id`), e se o fork
+  mantém o esquema. Só-leitura, sem efeito nenhum:
+  `virsh qemu-monitor-command <dom> --pretty '{"execute":"query-block-jobs"}'`. Não
+  bloqueia o contrato; bloqueia a `dr-001/T6` de depender do campo.
+- **O caminho do `filename` no `query-block`.** A M5 casou node-name e disco pelo
+  `filename`, e o inventário passou a usá-lo como identidade de cada imagem da cadeia
+  (`arquivo`). O registro não guarda a saída crua: em que chave ele veio — `inserted.file`
+  ou `inserted.image.filename`, e nas imagens de backing `backing-image.filename` — fica
+  para conferir junto com o `query-block-jobs`.
+
 - **A M4**, agora conferência, com a previsão registrada antes de rodar, no
   [roadmap](../03-roadmap.md). Precisa de um nó que possa ser drenado.
 - **O backup nativo da VHI usa dirty bitmap nas mesmas imagens**, com `compat: 1.1` como

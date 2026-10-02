@@ -871,24 +871,36 @@ class EstadoDoBitmap:
 
 @dataclass(frozen=True)
 class ImagemNoInventario:
-    """Uma imagem da cadeia de backing de um disco, com os bitmaps que ela tem."""
+    """Uma imagem da cadeia de backing de um disco, com os bitmaps que ela tem.
 
+    `arquivo` e a IDENTIDADE da imagem: o `filename` do `query-block`, que a M5 usou
+    para casar node-name e disco. Sem ele, dois inventarios do mesmo disco nao
+    distinguem "a cadeia mudou de forma" de "os bitmaps se moveram dentro da mesma
+    cadeia" — e isso separa resync de reconciliacao (T7). Nao e o node-name: o
+    `libvirt-N-format` e renumerado a cada partida do dominio, e compara-lo entre
+    dois inventarios casaria imagens diferentes.
+    """
+
+    arquivo: str
     bitmaps: tuple[EstadoDoBitmap, ...]
 
     def __post_init__(self) -> None:
+        if not isinstance(self.arquivo, str) or not self.arquivo:
+            raise RegistroMalformadoError(f"imagem sem arquivo: {self.arquivo!r}")
         nomes = [b.nome for b in self.bitmaps]
         if len(set(nomes)) != len(nomes):
             raise RegistroMalformadoError(f"imagem com bitmap repetido: {nomes}")
 
     def para_json(self) -> dict[str, Any]:
-        return {"bitmaps": [b.para_json() for b in self.bitmaps]}
+        return {"arquivo": self.arquivo, "bitmaps": [b.para_json() for b in self.bitmaps]}
 
     @classmethod
     def de_json(cls, dados: Mapping[str, Any]) -> "ImagemNoInventario":
         return cls(
+            arquivo=_exigir_texto(dados, "arquivo"),
             bitmaps=tuple(
                 EstadoDoBitmap.de_json(b) for b in _exigir_lista_de_objetos(dados, "bitmaps")
-            )
+            ),
         )
 
 
@@ -921,6 +933,9 @@ class DiscoNoInventario:
             raise RegistroMalformadoError(f"disco invalido: {self.disco!r}")
         if not self.cadeia:
             raise RegistroMalformadoError(f"disco {self.disco!r} sem imagem nenhuma")
+        arquivos = [i.arquivo for i in self.cadeia]
+        if len(set(arquivos)) != len(arquivos):
+            raise RegistroMalformadoError(f"disco {self.disco!r} com imagem repetida: {arquivos}")
 
     def para_json(self) -> dict[str, Any]:
         return {
@@ -953,7 +968,10 @@ class ResultadoDeInventario(Resultado):
     DISPOSITIVO, e um backup de terceiro — o nativo da VHI, por exemplo — pode
     rodar sem tocar o nosso bitmap. Sao ids crus, e nao booleano: o id e o que
     separa o zumbi nosso do job de outro sistema, e classifica-lo e da
-    reconciliacao (T7).
+    reconciliacao (T7). A FORMA DESTE CAMPO NAO FOI MEDIDA: a M5 nao rodou
+    `query-block-jobs` no fork, e sob que chave vem o id (`device`, `id`) e
+    suposicao. Esta no registro da M5 como item aberto, e a T6 nao depende do campo
+    antes de ele ser medido.
 
     `checkpoints`: os nomes do `checkpoint-list` do libvirt. Bitmap sem checkpoint
     correspondente e a assinatura do ciclo de energia do guest (OpenNebula
