@@ -92,6 +92,14 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
 
 - [ ] **T6** — A máquina: falha, e a invariante que mais importa
   - Cada linha da tabela de falhas da spec.
+  - **O que a T9 deixou pronto para cá**: as seis condições e as quatro respostas do
+    ADR-0016 sobre o `inventario` do estado, trocando a comparação de nó; o motivo do resync
+    distinguindo não-`recording` (pode ter conserto) de `inconsistent` (sai); a lista de
+    discos do ciclo conferida contra o `somente_leitura` do inventário — disco
+    somente-leitura na lista é o ciclo esperando para sempre um bitmap impossível;
+    `FonteIncoerenteError` parando alto, sem reenvio nem descarte.
+  - **Não depende de `jobs_em_curso` antes de `query-block-jobs` ser medido no fork** — a
+    forma do campo é suposta (ver o registro da M5).
   - **O teste que protege a propriedade medida em 2026-09-18**: percorrer todos os caminhos
     de falha e afirmar que **nenhum** produz resync completo — só descarte do bitmap
     temporário, com os checkpoints intactos e uma janela a mais no próximo ciclo.
@@ -149,7 +157,7 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     telemetria é incompleto; `nunca_iniciou` separado da taxa de falha
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_telemetria.py`
 
-- [ ] **T9** — O inventário responde à pergunta que decide
+- [x] **T9** — O inventário responde à pergunta que decide
   - [ADR-0016](../../docs/adr/0016-confianca-no-bitmap.md): a confiança no bitmap se lê do
     bitmap, e não do nó. `ResultadoDeInventario` passa a trazer, **por disco e por bitmap**,
     o que as seis condições e as quatro respostas leem: nome, `granularity`, `count`,
@@ -157,11 +165,15 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
   - A pergunta da varredura que faltou desta vez, ao lado das outras duas: *o resultado
     responde à pergunta que decide, ou só à que era fácil de obter?* Primeiro faltou o
     sujeito, depois faltaram efeitos; aqui faltou o conteúdo da resposta.
-  - **Decidir aqui se `job_em_curso` sobrevive.** `busy` é do bitmap; job em curso é do
-    dispositivo, e um backup de terceiro pode existir sem tocar o nosso bitmap. Se os dois
-    ficarem, cada um diz por que existe.
-  - **Depende da `M5`** do ADR-0012 (por onde o estado do bitmap é legível na VHI): se a
-    leitura não existir, o desenho do campo muda. Não começa antes dela.
+  - **`job_em_curso` sobreviveu, como ids** (`jobs_em_curso`). `busy` é do bitmap — um
+    backup ou uma migração chegando —; job é do dispositivo, e um backup de terceiro, o nativo
+    da VHI por exemplo, roda sem tocar o nosso bitmap. O id é o que separa o zumbi nosso do
+    job de outro sistema; classificá-lo é da T7.
+  - **Feita depois da `M5`** ([registro](../../docs/validacao/2026-10-02-m5-leitura-do-bitmap.md)):
+    a leitura existe. Os campos têm os nomes do QEMU; `inconsistent` é obrigatório no
+    envelope, embora opcional no QEMU; a invariante documentada do QEMU é conferida, e
+    violá-la é `FonteIncoerenteError`; cada disco diz se é somente-leitura; disco é o
+    target, nunca o node-name.
   - Formato do #33/#36: contrato, varredura conferida para o campo novo, PR próprio.
   - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
 

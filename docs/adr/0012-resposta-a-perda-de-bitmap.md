@@ -92,9 +92,10 @@ normal é um job visível, com motivo, tamanho estimado, progresso e previsão.
 A regra 4 fecha um laço real: migração dispara resync, resync longo é interrompido por
 nova migração, e a VM nunca volta a `PROTEGIDA`.
 
-**Mecanismo:** o teste de confiança e o gatilho passam ao ADR-0016, e se cumprem por
-`dr-001/T9` e `dr-001/T6`; o que era do executor do resync (regras 4 e 5), `C-006`. Até a
-T9 e a T6, o código faz a comparação de nó da T5,
+**Mecanismo:** o teste de confiança e o gatilho passam ao ADR-0016: o que ele lê já está no
+contrato, `tests/unit/test_efeitos.py::test_todo_campo_do_bitmap_e_obrigatorio`, e decidir
+por ele é `dr-001/T6`; o que era do executor do resync (regras 4 e 5), `C-006`. Até a T6, o
+código faz a comparação de nó da T5,
 `tests/unit/test_ciclo.py::test_migracao_detectada_o_ciclo_nao_executa`.
 
 ### 2. `DEGRADADA` não é desprotegida — **rebaixada**
@@ -181,7 +182,7 @@ A decisão 3 fecha quando estes quatro números existirem. Nenhum depende de esc
 | # | Medição | O que decide |
 |---|---|---|
 | M1 | **Vazão real de seed entre os datacenters.** O seed validado transferiu 5.535,6 MiB sem cronometragem. Repetir com `time`. | Converte tamanho em horas. Sem ela, toda estimativa de tempo de resync é chute — inclusive as deste documento. |
-| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. |
+| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. E, acrescentado em 2026-10-02: a profundidade de backing dos discos de dado, de que depende a forma de cadeia do inventário (ADR-0016). |
 | M3 | **Taxa real de mudança**, com bitmap em amostra de 5 a 8 VMs cobrindo os perfis, ao longo de 48h. | Diz quanto o diferencial transferiria de fato — ou seja, qual o ganho real sobre o seed completo. |
 | M4 | **Sobrevivência do bitmap à migração automática do VHI.** Exige dois nós e VM descartável. | Se o bitmap sobreviver, a frequência de resync despenca e a decisão 3 perde urgência. Se não sobreviver, ganha. Há chamado aberto com a Virtuozzo sobre a capability `dirty-bitmaps` desligada. |
 
@@ -250,5 +251,9 @@ E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário se
 | # | Medição | O que decide |
 |---|---|---|
 | M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. |
+
+**A M5 foi medida em 2026-10-02**: a leitura existe, por `virsh qemu-monitor-command`, e exige
+conexão de leitura e escrita com o libvirtd. O registro está em
+[`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`](../validacao/2026-10-02-m5-leitura-do-bitmap.md).
 
 Procedência: revisão do #38 e a pesquisa sobre o estado do bitmap; ver o ADR-0016.

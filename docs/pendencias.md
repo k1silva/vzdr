@@ -129,6 +129,19 @@ penduradas só nela. Se esse número sobe, aparece.
   `resync_interrompido_por_migracao`); e a `DEGRADADA` tem prazo — sem progresso por N horas,
   alarme e escalonamento. Rebaixado na emenda de 2026-10-02 porque o executor é da
   `dr-003`, que não existe. O gatilho é um evento: a spec da `dr-003` ser escrita.
+- **C-007 — A identidade do agente no libvirtd do nó.** Ler o estado do bitmap exige
+  `virDomainQemuMonitorCommand`, e o libvirt o recusa em conexão somente-leitura, mesmo para
+  `query-*` (`virCheckReadOnlyGoto`, conferido no libvirt 9.5.0). A M5 foi feita como root.
+  Então o agente precisa de identidade com acesso de leitura e escrita ao libvirtd, num nó
+  que a Nova governa — peso de segurança, e decisão de implantação, não de domínio. O
+  gatilho é um evento: o desenho de implantação do agente (`packages/agent`). Ver
+  [a M5](validacao/2026-10-02-m5-leitura-do-bitmap.md).
+- **C-008 — O backup nativo da VHI está habilitado nas VMs que o vzdr vai proteger?** Ele usa
+  dirty bitmap nas mesmas imagens, com `compat: 1.1` como requisito. O desenho trata o
+  `busy` que vier dele (repete, escala por prazo; nome que não é nosso é órfão), mas dois
+  sistemas de backup nos mesmos bitmaps é o problema dos dois escritores um nível abaixo de
+  onde se olhava. A resposta mora no ambiente do cliente, e chega com o mesmo acesso da
+  [P-002](#p-002--distribuição-do-parque-do-cliente-alvo).
 
 ## Fechadas
 

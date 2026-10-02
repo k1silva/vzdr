@@ -31,8 +31,11 @@ from vzdr.core.domain.ciclo import (
 from vzdr.core.domain.efeitos import (
     Alvo,
     ConsultarNoDaVm,
+    DiscoNoInventario,
     Efeito,
+    EstadoDoBitmap,
     FecharJanela,
+    ImagemNoInventario,
     IniciarCopia,
     RegistrarPontoDeRecuperacao,
     Resultado,
@@ -56,6 +59,32 @@ NO = "no-1"
 CAMINHO_NORMAL = [f for f in Fase if f is not Fase.CERCANDO]
 
 
+#: Um disco gravavel por disco do ciclo, com um bitmap como a M5 o mediu.
+INVENTARIO_BOM = tuple(
+    DiscoNoInventario(
+        disco=d,
+        somente_leitura=False,
+        cadeia=(
+            ImagemNoInventario(
+                arquivo=f"/vols/{d}",
+                bitmaps=(
+                    EstadoDoBitmap(
+                        nome="vzdr-ckp-" + "a" * 32,
+                        granularity=65536,
+                        count=0,
+                        recording=True,
+                        busy=False,
+                        persistent=True,
+                        inconsistent=False,
+                    ),
+                ),
+            ),
+        ),
+    )
+    for d in DISCOS
+)
+
+
 # ── Como se responde ────────────────────────────────────────────────────────
 
 
@@ -76,7 +105,7 @@ def sucesso(efeito: Efeito, ciclo_id=None) -> Resultado:
     corpo = {
         ResultadoSimples: {"sucesso": True},
         ResultadoDeCopia: {"bytes_transferidos": 1, "concluido": True},
-        ResultadoDeInventario: {"job_em_curso": False, "nomes_encontrados": ()},
+        ResultadoDeInventario: {"discos": INVENTARIO_BOM, "checkpoints": (), "jobs_em_curso": ()},
         ResultadoDeLocalizacao: {"no_atual": NO},
     }[classe]
     return classe(**_base(efeito, ciclo_id), **corpo)
@@ -88,7 +117,11 @@ def fracasso(efeito: Efeito) -> Resultado:
     corpo = {
         ResultadoSimples: {"sucesso": False, "motivo": "teste"},
         ResultadoDeCopia: {"bytes_transferidos": 0, "concluido": False},
-        ResultadoDeInventario: {"job_em_curso": True, "nomes_encontrados": ()},
+        ResultadoDeInventario: {
+            "discos": INVENTARIO_BOM,
+            "checkpoints": (),
+            "jobs_em_curso": ("backup-vda-libvirt-1-format",),
+        },
         ResultadoDeLocalizacao: {"no_atual": "no-2"},
     }[classe]
     return classe(**_base(efeito), **corpo)
@@ -442,16 +475,18 @@ def test_no_do_proximo_ciclo_de_ciclo_que_ainda_corre_e_erro():
 # ── O que a maquina guarda, e de onde ───────────────────────────────────────
 
 
-@pytest.mark.parametrize("job_em_curso", [False, True])
-def test_os_nomes_do_inventario_ficam_no_estado(job_em_curso):
+@pytest.mark.parametrize("jobs", [(), ("backup-vda-libvirt-1-format",)], ids=["sem_job", "com_job"])
+def test_o_inventario_fica_no_estado(jobs):
     """Com job ou sem, a evidencia nao morre dentro de `avancar`."""
     estado = ate(Fase.VALIDANDO).estado
     (inventario,) = estado.pendentes
-    nomes = ("vzdr-ckpt-a", "alheio")
     resposta = ResultadoDeInventario(
-        **_base(inventario), job_em_curso=job_em_curso, nomes_encontrados=nomes
+        **_base(inventario),
+        discos=INVENTARIO_BOM,
+        checkpoints=("vzdr-ckp-" + "a" * 32,),
+        jobs_em_curso=jobs,
     )
-    assert avancar(estado, resposta, T0).estado.nomes_no_inventario == nomes
+    assert avancar(estado, resposta, T0).estado.inventario == resposta
 
 
 def test_efeito_de_agente_leva_o_no_que_o_nova_disse_e_nao_o_gravado():

@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-02
 **Status:** aceito — substitui a decisão 1 do [ADR-0012](0012-resposta-a-perda-de-bitmap.md)
-como teste de confiança do bitmap
+como teste de confiança do bitmap; emendado em 2026-10-02 com a M5 (ver a emenda no fim)
 
 > **Leia antes de implementar.** Este ADR decide **o que se lê e o que se responde**. Ele não
 > decide **por onde se lê**: isso é a medição `M5`, e se a leitura não existir na VHI, o
@@ -65,8 +65,10 @@ Um incremental só começa se, para cada disco, a cadeia do nosso bitmap satisfa
 As quatro primeiras são as do libvirt; as duas últimas, nossas. O nó deixa de ser teste de
 confiança: ele continua sendo onde a VM está, e é por isso que o inventário é pedido a ele.
 
-**Mecanismo:** Mecanismo ainda não existe: `dr-001/T9` (o inventário traz, por disco e por
-bitmap, o que as seis condições leem) e `dr-001/T6` (a máquina decide por elas).
+**Mecanismo:** o inventário traz, por disco e por bitmap, o que as seis condições leem —
+`tests/unit/test_efeitos.py::test_todo_campo_do_bitmap_e_obrigatorio`,
+`tests/unit/test_efeitos.py::test_inconsistent_ausente_recusa_e_nao_vira_consistente`; a
+máquina decidir por elas, Mecanismo ainda não existe: `dr-001/T6`.
 
 ### 2. Quatro respostas, e não duas
 
@@ -107,8 +109,9 @@ laboratório passa a ser cumprida por construção, e não por disciplina. Com o
 janela acumulada de um ciclo travado deixa de ser estimativa e vira leitura, cada ciclo
 ganha ETA honesto, e a curva de custo da mescla ganha dado real.
 
-**Mecanismo:** Mecanismo ainda não existe: `dr-001/T9` (o `count` no contrato) e `dr-001/T6`
-(a comparação).
+**Mecanismo:** o `count` no contrato,
+`tests/unit/test_efeitos.py::test_todo_campo_do_bitmap_e_obrigatorio`; a comparação, Mecanismo
+ainda não existe: `dr-001/T6`.
 
 ### 5. Por onde se lê é medido antes de o campo ser desenhado
 
@@ -117,7 +120,10 @@ passthrough de monitor, e a regra de não brigar com o nova-compute vale aqui �
 outra classe de risco que escrita, mas ainda é decisão. Se não houver caminho limpo pela API,
 o agente lê pelo canal dele no próprio nó, que é onde ele já roda.
 
-**Mecanismo:** Mecanismo ainda não existe: `M5`.
+**Mecanismo:** `M5`, medida em 2026-10-02 — o registro está em
+`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`. Até o meta-checador aceitar o registro
+como referência, a linha cita a medição; antes desta correção ela dizia "ainda não existe",
+e o checador não via, porque para `M<n>` ele confere só que a medição existe.
 
 ## Alternativas consideradas
 
@@ -140,3 +146,42 @@ condições.
 
 O ciclo de energia do guest entra no desenho: ele deixa nome órfão, e a reconciliação o
 recolhe (`dr-001/T7`).
+
+## Emenda de 2026-10-02: o que a M5 mostrou
+
+O texto acima é o original. A `M5` foi medida — no cluster de produção, por um humano, com
+leitura e um checkpoint reversível; registro em
+[`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`](../validacao/2026-10-02-m5-leitura-do-bitmap.md).
+Ela responde a decisão 5 e refina a 1.
+
+**A leitura existe**, por `virsh qemu-monitor-command`, num nó gerenciado pela Nova — e exige
+conexão de leitura e escrita com o libvirtd, mesmo para `query-*`. A identidade do agente que
+isso pede é decisão de implantação, e está na candidata `C-007` de `docs/pendencias.md`.
+
+**Ler pelo monitor; escrever pelo libvirt.** O libvirt documenta que comando de monitor que
+altera estado rastreado por ele é inseguro. O bitmap de um checkpoint é esse estado: a
+remoção vai pela API de checkpoint, e nunca por `block-dirty-bitmap-remove`. Está escrito no
+`RemoverCheckpointsAnteriores`, que é onde quem implementar o agente vai ler.
+
+**`recording` alcança todo `inconsistent`, e `inconsistent` diz o motivo.** O esquema QMP:
+`inconsistent` "implies persistent to be true; recording and busy to be false". A condição 3
+(todos `recording`) já recusa todo bitmap inconsistente; o que `inconsistent` acrescenta é
+**por que**, e é o motivo que escolhe a resposta da decisão 2: desabilitado pode ter conserto,
+inconsistente sai e vira resync. E a invariante dá uma asserção de graça: `inconsistent` com
+`recording` (ou `busy`, ou não persistente) é o fork desobedecendo o próprio QEMU. A resposta
+é parar alto — `FonteIncoerenteError`, um quarto tipo de exceção, porque a ação de quem trata
+é escalar a plataforma, e não consertar o nosso código.
+
+**`inconsistent` é obrigatório no nosso envelope**, mesmo sendo opcional no QEMU — que só o
+imprime quando verdadeiro. Herdar a opcionalidade faria "não disseram" virar "pode confiar"
+para um agente antigo ou com defeito. Quem normaliza ausente → falso é o agente, na borda.
+
+**A condição 5 lê espécie CHECKPOINT.** O libvirt nomeia o bitmap de um checkpoint com o nome
+do checkpoint, o mesmo em todos os discos. "`NomeDeCiclo` da espécie certa", para o bitmap
+que carrega a janela, é a espécie `CHECKPOINT`.
+
+**Disco somente-leitura não tem bitmap**, por decisão do libvirt. O inventário diz quais
+discos são somente-leitura, e a máquina confere a lista de discos que recebeu (`dr-001/T6`).
+
+**A `M4` ganhou previsão escrita antes de rodar**, no roadmap: as três leituras possíveis e o
+que cada uma muda.
