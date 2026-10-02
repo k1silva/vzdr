@@ -107,7 +107,10 @@ _CRASE = re.compile(r"`([^`]+)`")
 _TESTE = re.compile(r"(?P<arquivo>(?:tests|scripts|packages)/[\w/.-]+\.py)::(?P<funcao>test_\w+)")
 _ARQUIVO = re.compile(r"(?:tests|scripts|packages)/[\w/.-]+\.py")
 _MEDICAO = re.compile(r"M\d+")
-_REGISTRO = re.compile(r"docs/validacao/[\w.-]+\.md")
+_REGISTRO = re.compile(r"docs/validacao/(?:[\w.-]+/)*[\w.-]+\.md")
+#: O id no NOME do arquivo, pela convencao que os registros ja seguem
+#: (`2026-10-02-m5-leitura-do-bitmap.md`).
+_MEDICAO_NO_NOME = re.compile(r"(?:^|-)m(\d+)(?:-|$)")
 ESTADOS_DE_MEDICAO = ("aberta", "medida")
 _TAREFA = re.compile(r"T\d+")
 _CANDIDATA = re.compile(r"C-\d{3}")
@@ -312,13 +315,24 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
     # estado para `medida` deixaria a tabela dizendo `aberta`, e toda afirmacao
     # citando M<n> como se nada tivesse sido medido — o estado da decisao 5 do
     # ADR-0016. `aberta` com registro so pega quem preencheu a celula; isto pega quem
-    # esqueceu. LIMITE: so alcanca o arquivo cujo titulo comeca com o id; registro
-    # escrito sem o id no titulo E esquecido na tabela passa.
+    # esqueceu. Em toda a arvore de docs/validacao, e nao so no primeiro nivel: um
+    # registro numa subpasta cairia no buraco que a volta existe para fechar.
+    #
+    # E o NOME do arquivo cruza com o titulo: arquivo cujo nome diz `-m<n>-` e cujo
+    # titulo nao comeca com M<n> reprova. LIMITE que sobra: errar o nome E o titulo
+    # E a tabela, ao mesmo tempo.
     apontados = {r for e, r in _medicoes(raiz).values() if e == "medida" and r}
     pasta = raiz / "docs" / "validacao"
-    for arquivo in sorted(pasta.glob("*.md")) if pasta.exists() else []:
+    for arquivo in sorted(pasta.rglob("*.md")) if pasta.exists() else []:
         ident = _medicao_do_titulo(arquivo)
         caminho = arquivo.relative_to(raiz).as_posix()
+        no_nome = _MEDICAO_NO_NOME.search(arquivo.stem.lower())
+        if no_nome and ident != f"M{no_nome.group(1)}":
+            falhas.append(
+                f"{caminho}: o nome diz M{no_nome.group(1)}, e o titulo diz "
+                f"{ident or 'nenhuma medicao'} — o titulo do registro comeca com o id"
+            )
+            continue
         if ident and caminho not in apontados:
             falhas.append(
                 f"{caminho}: registro orfao — o titulo diz {ident}, e nenhuma medicao medida "

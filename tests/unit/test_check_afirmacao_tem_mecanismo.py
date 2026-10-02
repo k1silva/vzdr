@@ -545,3 +545,35 @@ def test_medida_sem_registro_citada_nao_diz_none(tmp_path):
     falhas = verificar(raiz)
     assert any("M9" in f and "ainda nao tem registro" in f for f in falhas), falhas
     assert not any("None" in f for f in falhas), falhas
+
+
+def test_registro_orfao_em_subpasta_reprova(tmp_path):
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-11").mkdir(parents=True)
+    (raiz / "docs/validacao/2026-11/2026-11-01-m4.md").write_text("# M4 — x\n", encoding="utf-8")
+    assert any("2026-11/" in f and "registro orfao" in f for f in verificar(raiz))
+
+
+def test_registro_em_subpasta_citado_passa(tmp_path):
+    reg = "docs/validacao/2026-11/2026-11-01-m9.md"
+    medicoes = MEDICOES.replace(f"`{REGISTRO}`", f"`{reg}`")
+    raiz = montar(tmp_path, medicoes=medicoes, adr=_adr_com("X", f"`{reg}`"))
+    (raiz / REGISTRO).unlink()
+    (raiz / "docs/validacao/2026-11").mkdir(parents=True)
+    (raiz / reg).write_text("# M9 — o registro\n", encoding="utf-8")
+    assert verificar(raiz) == []
+
+
+def test_nome_com_id_e_titulo_sem_id_reprova(tmp_path):
+    """O limite encolhe de graca: o nome ja segue convencao, e o titulo esquecido
+    deixa de passar."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-11-01-m4-queda.md").write_text("# A queda\n", encoding="utf-8")
+    assert any("o nome diz M4" in f for f in verificar(raiz))
+
+
+def test_nome_sem_id_nao_e_cobrado(tmp_path):
+    """`m2` dentro de outra palavra nao e id: so `-m<n>-` delimitado."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-09-23-com2m-coisa.md").write_text("# Coisa\n", encoding="utf-8")
+    assert verificar(raiz) == []
