@@ -333,3 +333,32 @@ def test_a_pressao_e_impressa_e_nao_reprova(tmp_path):
     so_candidata = sustentadas_por_candidata(raiz)
     assert any("propriedade 1" in a for a in so_candidata), so_candidata
     assert not any("propriedade 2" in a for a in so_candidata), so_candidata
+
+
+# ── O paragrafo do mecanismo, e nao so a primeira linha ─────────────────────
+
+
+def test_referencia_na_linha_de_continuacao_e_lida():
+    adr = "# A\n\n## Decisão\n\n### 1. X\n\n**Mecanismo:** ainda nao existe:\n`T7`, aberta.\n"
+    assert afirmacoes_do_adr(adr) == [("propriedade 1: X", ["T7"])]
+
+
+def test_referencia_quebrada_na_continuacao_reprova(tmp_path):
+    """O sentido perigoso: a referencia a um teste que nao existe, na segunda linha,
+    passava sem ser conferida."""
+    adr = (
+        "# A\n\n## Decisão\n\n### 1. X\n\n"
+        "**Mecanismo:** `tests/unit/test_x.py::test_relogio` e,\n"
+        "na linha seguinte, `tests/unit/test_x.py::test_que_nao_existe`.\n"
+    )
+    raiz = montar(tmp_path, adr=adr)
+    assert any("test_que_nao_existe" in f for f in verificar(raiz))
+
+
+def test_o_paragrafo_termina_na_linha_em_branco():
+    """Texto depois do paragrafo do mecanismo nao vira mecanismo."""
+    adr = (
+        "# A\n\n## Decisão\n\n### 1. X\n\n**Mecanismo:** `T7`.\n\n"
+        "Depois, uma prosa que cita `M4` de passagem.\n"
+    )
+    assert afirmacoes_do_adr(adr) == [("propriedade 1: X", ["T7"])]

@@ -144,10 +144,17 @@ def afirmacoes_do_adr(texto: str) -> list[tuple[str, list[str]]]:
     atual: str | None = None
     refs: dict[str, list[str]] = {}
     ordem: list[str] = []
+    #: O PARAGRAFO inteiro do `**Mecanismo:**`, e nao so a primeira linha. A
+    #: primeira versao lia a linha do rotulo: referencia quebrada para a linha
+    #: seguinte nao era vista nos dois sentidos — a afirmacao reprovava como "sem
+    #: mecanismo" se todas estivessem na continuacao, e uma referencia a teste que
+    #: nao existe, na continuacao, passava sem ser conferida.
+    no_mecanismo = False
     for _, linha in linhas_fora_de_blocos(texto):
         if linha.startswith("## "):
             secao = linha.strip()
             atual = None
+            no_mecanismo = False
             continue
         if secao not in ("## Decisão", "## Decisao"):
             continue
@@ -156,8 +163,14 @@ def afirmacoes_do_adr(texto: str) -> list[tuple[str, list[str]]]:
             atual = f"propriedade {casou.group(1)}: {casou.group(2).strip()}"
             refs[atual] = []
             ordem.append(atual)
+            no_mecanismo = False
+            continue
+        if not linha.strip():
+            no_mecanismo = False
             continue
         if atual and linha.startswith("**Mecanismo:**"):
+            no_mecanismo = True
+        if atual and no_mecanismo:
             refs[atual].extend(referencias(linha))
     return [(r, refs[r]) for r in ordem]
 
