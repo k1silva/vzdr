@@ -364,3 +364,26 @@ def test_o_paragrafo_termina_na_linha_em_branco():
         "Depois, uma prosa que cita `M4` de passagem.\n"
     )
     assert afirmacoes_do_adr(adr) == [("propriedade 1: X", ["T7"])]
+
+
+# ── A volta da quinta forma: toda candidata carrega id ──────────────────────
+
+
+def test_candidata_sem_id_reprova(tmp_path):
+    """Sem id ela fica invisivel, e a referencia a ela diria que nao existe."""
+    pendencias = PENDENCIAS.replace(
+        "- **C-001 — Uma ideia sem forma.** Texto.",
+        "- **C-001 — Uma ideia sem forma.** Texto.\n- **Outra ideia, sem id.** Texto.",
+    )
+    raiz = montar(tmp_path, pendencias=pendencias)
+    assert any("candidata sem id" in f and "Outra ideia" in f for f in verificar(raiz))
+
+
+def test_continuacao_de_item_nao_e_item(tmp_path):
+    """So a linha que abre o item precisa do id; a continuacao indentada, nao."""
+    pendencias = PENDENCIAS.replace(
+        "- **C-001 — Uma ideia sem forma.** Texto.",
+        "- **C-001 — Uma ideia sem forma.** Texto que\n  continua na linha de baixo.",
+    )
+    raiz = montar(tmp_path, pendencias=pendencias)
+    assert verificar(raiz) == []

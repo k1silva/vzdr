@@ -53,6 +53,7 @@ vermelho tambem; se nascer verde, a conclusao nao e "as specs estao perfeitas", 
 
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from blocos_markdown import linhas_fora_de_blocos
@@ -186,20 +187,51 @@ def _medicoes(raiz: Path) -> set[str]:
     return set(re.findall(r"^\| (M\d+) \|", caminho.read_text(encoding="utf-8"), re.MULTILINE))
 
 
-def _candidatas(raiz: Path) -> set[str]:
-    """Os ids da secao `## Candidatas` — so dela: aberta tem prazo e outro papel,
-    fechada nao sustenta nada."""
+def documentos_cobertos() -> list[tuple[str, Callable[[str], list[tuple[str, list[str]]]]]]:
+    """(documento, extrator) de cada documento coberto — dito UMA vez.
+
+    Era construido em dois lugares: em `verificar` e na contagem de
+    `sustentadas_por_candidata`. Um terceiro tipo de documento entraria num e
+    ficaria para tras no outro — e o que ficaria para tras seria a contagem, que
+    nao reprova e por isso ninguem olha."""
+    return [(d, afirmacoes_do_plano) for d in COBERTOS_PLANO] + [
+        (d, afirmacoes_do_adr) for d in COBERTOS_ADR
+    ]
+
+
+def _itens_de_candidatas(raiz: Path) -> list[str]:
+    """As linhas que abrem um item em `## Candidatas` — com id ou sem."""
     caminho = raiz / PENDENCIAS
     if not caminho.exists():
-        return set()
+        return []
     dentro = False
-    ids = set()
+    itens = []
     for _, linha in linhas_fora_de_blocos(caminho.read_text(encoding="utf-8")):
         if linha.startswith("## "):
             dentro = linha.strip() == "## Candidatas"
             continue
-        casou = re.match(r"- \*\*(C-\d{3})\b", linha)
-        if dentro and casou:
+        if dentro and linha.startswith("- "):
+            itens.append(linha)
+    return itens
+
+
+def candidatas_sem_id(raiz: Path) -> list[str]:
+    """A volta da quinta forma: todo item de `## Candidatas` carrega id.
+
+    Sem isto a forma dependeria de uma convencao de formatacao que nada confere:
+    candidata escrita sem `**C-NNN` ficaria invisivel, e a referencia a ela
+    falharia com "nao ha candidata com esse id" — mensagem que mente, porque a
+    candidata existe."""
+    return [i for i in _itens_de_candidatas(raiz) if not re.match(r"- \*\*C-\d{3}\b", i)]
+
+
+def _candidatas(raiz: Path) -> set[str]:
+    """Os ids da secao `## Candidatas` — so dela: aberta tem prazo e outro papel,
+    fechada nao sustenta nada."""
+    ids = set()
+    for item in _itens_de_candidatas(raiz):
+        casou = re.match(r"- \*\*(C-\d{3})\b", item)
+        if casou:
             ids.add(casou.group(1))
     return ids
 
@@ -267,9 +299,7 @@ def verificar(raiz: Path) -> list[str]:
     medicoes = _medicoes(raiz)
     reivindicados: set[str] = set()
 
-    cobertos = [(d, afirmacoes_do_plano) for d in COBERTOS_PLANO] + [
-        (d, afirmacoes_do_adr) for d in COBERTOS_ADR
-    ]
+    cobertos = documentos_cobertos()
     for documento, extrair in cobertos:
         caminho = raiz / documento
         if not caminho.exists():
@@ -296,6 +326,11 @@ def verificar(raiz: Path) -> list[str]:
                     reivindicados.add(Path(ref).name)
                 elif _TESTE.fullmatch(ref):
                     reivindicados.add(Path(ref.split("::")[0]).name)
+
+    for item in candidatas_sem_id(raiz):
+        falhas.append(
+            f"{PENDENCIAS}: candidata sem id — escreva `- **C-NNN — ...**`: {item[:60]!r}"
+        )
 
     agents = raiz / "AGENTS.md"
     if agents.exists():
@@ -340,9 +375,7 @@ def verificar(raiz: Path) -> list[str]:
 
 def sustentadas_por_candidata(raiz: Path) -> list[str]:
     """Afirmacoes cujo unico sustento e candidata. Impresso, e nao reprovado."""
-    cobertos = [(d, afirmacoes_do_plano) for d in COBERTOS_PLANO] + [
-        (d, afirmacoes_do_adr) for d in COBERTOS_ADR
-    ]
+    cobertos = documentos_cobertos()
     saida = []
     for documento, extrair in cobertos:
         caminho = raiz / documento
