@@ -1,7 +1,7 @@
 # ADR-0012: Resposta à perda de bitmap
 
 **Data:** 2026-09-23
-**Status:** aceito
+**Status:** aceito — decisão 1 substituída pelo [ADR-0016](0016-confianca-no-bitmap.md) e decisão 2 rebaixada em 2026-10-02 (ver a emenda no fim)
 
 > **Leia antes de implementar: este ADR não fecha tudo.** A decisão 1 é invariante de
 > segurança e vale desde já. A **decisão 3 — resync diferencial — está em análise**, não
@@ -65,7 +65,7 @@ Esse degrau é quem escreve a política abaixo.
 
 ## Decisão
 
-### 1. Detecção: o nó é parte do estado do ciclo — **aceito**
+### 1. Detecção: o nó é parte do estado do ciclo — **substituída pelo ADR-0016; o que era do executor, rebaixado**
 
 Esta não é uma escolha entre alternativas a serem testadas: é invariante de segurança. Ou o
 agente descarta o bitmap após troca de nó, ou pode usar um bitmap inválido e produzir
@@ -92,7 +92,12 @@ normal é um job visível, com motivo, tamanho estimado, progresso e previsão.
 A regra 4 fecha um laço real: migração dispara resync, resync longo é interrompido por
 nova migração, e a VM nunca volta a `PROTEGIDA`.
 
-### 2. `DEGRADADA` não é desprotegida
+**Mecanismo:** o teste de confiança e o gatilho passam ao ADR-0016, e se cumprem por
+`dr-001/T9` e `dr-001/T6`; o que era do executor do resync (regras 4 e 5), `C-006`. Até a
+T9 e a T6, o código faz a comparação de nó da T5,
+`tests/unit/test_ciclo.py::test_migracao_detectada_o_ciclo_nao_executa`.
+
+### 2. `DEGRADADA` não é desprotegida — **rebaixada**
 
 Os pontos de recuperação já existentes no destino permanecem válidos e utilizáveis durante
 todo o período degradado. O que para é a criação de pontos **novos** no ritmo prometido: o
@@ -100,6 +105,8 @@ ponto mais recente congela e envelhece até o resync terminar.
 
 A interface precisa dizer isso explicitamente, porque a leitura natural de "degradada" é
 "desprotegida", e a diferença é o produto inteiro.
+
+**Mecanismo:** `C-005`.
 
 ### 3. Resync: completo primeiro, diferencial depois — **em análise**
 
@@ -119,6 +126,8 @@ o laboratório tem 11,83 TiB, o cliente-alvo tem 40 TB e distribuição desconhe
 VMs de 10 TB mudariam a conclusão inteiramente.
 
 Fica em aberto, a decidir com as medições abaixo.
+
+**Mecanismo:** `M1`, `M2`, `M3`, `M4`.
 
 ## O diferencial, desenhado
 
@@ -204,3 +213,42 @@ Enquanto M1–M4 não existirem, os tempos citados neste documento (22 h para 3,
   contrato. Contrato fica para quando houver medição de vazão.
 - Falta a vazão real de seed entre os datacenters. Sem ela, a faixa de tamanho que separa
   "seed completo cabe na janela" de "precisa de diferencial" é estimativa.
+
+## Emenda de 2026-10-02: o que estava afirmado sem mecanismo, e para onde foi
+
+O texto acima é o original. Esta emenda acrescenta, e não reescreve: os títulos das decisões
+ganharam o marcador do estado em que ficaram, e cada uma, a linha `**Mecanismo:**`. Foi o
+que o meta-checador cobrou ao passar a cobrir este documento — as três decisões nasceram
+vermelhas, como previsto.
+
+**Decisão 1 — substituída.** Ela usava a comparação de nó como teste de confiança do bitmap,
+e isso é procurador que erra nos dois sentidos: nó igual não implica bitmap bom (o ciclo de
+energia do guest), nó diferente não implica bitmap ruim (a migração graciosa, P-001). A
+evidência está no [ADR-0016](0016-confianca-no-bitmap.md), que passa a decidir o teste e o
+gatilho, lendo o estado do próprio bitmap. O que a decisão dizia sobre o **executor** do
+resync — não participar de migração automática enquanto ele roda (regra 4), e o prazo da
+`DEGRADADA` (regra 5) — não tem mecanismo nem dono: o executor é da `dr-003`, que não existe.
+Deixa de ser aceito e vai para a candidata `C-006`.
+
+**Decisão 2 — rebaixada.** "A interface precisa dizer" não tem mecanismo, e a interface não
+tem momento marcado. Um item sem mecanismo e sem dono não é aceito, e o conserto honesto não
+é achar dono: é parar de chamá-lo de aceito. A exigência foi escrita onde `degradada` é
+definida — a seção "`degradada` é derivada, não marcada" da `dr-001` e o topo de `saude.py` —,
+que é o que quem construir a tela vai ler; e a candidata `C-005` a guarda. O gatilho dela é
+um evento, e não uma data.
+
+**Decisão 3 — continua em análise, com dono honesto: as medições.** Mas a **`M4` mudou de
+natureza**. Era descoberta — o bitmap sobrevive à migração automática? —, e o fornecedor
+respondeu que sim, com storage compartilhado. Passa a ser **conferência de comportamento
+documentado**: o fork da VHI marca `inconsistent` como o upstream diz? Mata o QEMU, reabre,
+lê o campo. Binário, uma rodada, e muda a estimativa de quando a decisão 3 fecha: era a
+medição que exigia dois nós e uma VM descartável, e agora é a mais barata das quatro. Se o
+fork **não** marcar, é a coisa mais importante que podemos descobrir sobre esta plataforma.
+
+E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário ser desenhado:
+
+| # | Medição | O que decide |
+|---|---|---|
+| M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. |
+
+Procedência: revisão do #38 e a pesquisa sobre o estado do bitmap; ver o ADR-0016.

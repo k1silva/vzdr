@@ -26,7 +26,10 @@ TRES REGRAS DE FORMA, e cada uma existe porque a versao natural e a errada:
   auditoria.
 
 E `degradada` nao e desprotegida: os pontos existentes continuam validos. O que
-para e a criacao de pontos novos no ritmo prometido.
+para e a criacao de pontos novos no ritmo prometido. QUEM EXIBIR `degradada`
+EXIBE JUNTO O PONTO MAIS RECENTE, E DIZ QUE ELE CONTINUA UTILIZAVEL — escrito aqui
+porque e aqui que quem constroi a tela vai olhar. Sem mecanismo ainda: candidata
+C-005 de docs/pendencias.md.
 
 Este modulo roda no hypervisor (fecho de 3.9, ADR-0007): sem sintaxe 3.10+.
 """

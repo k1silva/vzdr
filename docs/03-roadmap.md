@@ -83,7 +83,8 @@ lê.
          mecanismo velho para mantê-lo verde. A propriedade que sobrevive à troca: **a
          validade do bitmap é decidida antes de qualquer trabalho caro**. O código da T5
          segue a propriedade; a redação de `tasks.md` muda quando o portão deixar, porque
-         escolher o que um teste protege é decisão de desenho.
+         escolher o que um teste protege é decisão de desenho. A troca entra na
+         `dr-001/T9` e na T6.
 
       4. **O disparo do resync deixa de ser a troca de nó**, se a M4 confirmar o sinal de
          consistência. Troca de nó era proxy, e a resposta da Virtuozzo o torna errado nos
@@ -94,8 +95,12 @@ lê.
          a **procedência** (resposta da Virtuozzo mais medição da M4) e a **condição**
          (storage compartilhado). O 0012 ganha nota de status com **data e motivo**,
          apontando o trecho substituído — "substituído" responde o quê; quem lê depois
-         precisa do porquê. Resolve de passagem a candidata de separar a decisão 3.
-         **Bloqueado pela M4**: o e-mail diz onde olhar, não o que se vai ver.
+         precisa do porquê. O e-mail diz onde olhar, não o que se vai ver.
+         **Feito em 2026-10-02, e sem esperar a M4:** o
+         [ADR-0016](adr/0016-confianca-no-bitmap.md) decide o gatilho pelo comportamento
+         documentado do upstream (QEMU e libvirt), e a M4 passa a **conferir** se o fork da
+         VHI o segue. A candidata de separar a decisão 3 não foi resolvida de passagem: segue
+         como `C-001` em `pendencias.md`.
 
       Os quatro são decisão de desenho, e o portão consolidado do `specs/README.md` os
       segura: ele cobre desenho, não conserto.
@@ -179,7 +184,9 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
       e divergia dele
-- [ ] **Sobrevivência do bitmap à migração e à queda** (M4 do ADR-0012) — desbloqueada: a
+- [ ] **Sobrevivência do bitmap à migração e à queda** (M4 do ADR-0012) — **mudou de
+      natureza em 2026-10-02**: de descoberta para conferência de comportamento documentado
+      (ver a emenda do ADR-0012). A perna que decide é a da queda, e é binária. Desbloqueada: a
       Virtuozzo respondeu ([P-001](pendencias.md), fechada), e a resposta diz **onde olhar**,
       não o que se vai ver. Declaração não fecha medição. Em VM descartável, cluster com
       mais de um nó, duas pernas:

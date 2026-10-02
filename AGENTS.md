@@ -60,8 +60,10 @@ da CI saiu na terceira volta, dando por concluídos dois jobs ainda rodando. Mes
 `gh pr checks --json`, por outro instrumento: o laço parecia certo, e o que enganou foi a
 **ausência de erro**. Em condição de laço ou de verificação, use `command grep` ou caminho
 absoluto, ou decida com comparação explícita (`jq`, `test`) sobre um valor que você imprimiu.
-E condição de "nada pendente" exige que **exista** algo: lista vazia também tem zero
-pendentes.
+E condição de "nada pendente" exige que existam **os que se esperam, pelo nome** — e não
+só "algum". A primeira versão desta regra dizia "que exista algo", e falhou no #39: o laço
+viu um job só, o `declaracao-revisao`, concluído antes de os outros serem criados, e saiu.
+Lista vazia tem zero pendentes; lista incompleta também.
 
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
@@ -256,8 +258,10 @@ dia em que ele der trabalho, sem saber o que apagou.
   host que não seja o local — `check_dsn_guardada.py`.
 - Toda afirmação de desenho num documento coberto nomeia o mecanismo que a mantém
   verdadeira, todo mecanismo nomeado existe, e todo checador do build é reivindicado por
-  alguma afirmação — `check_afirmacao_tem_mecanismo.py`. Cobre hoje o plano da `dr-001` e o
-  ADR-0015; o que falta cobrir é impresso em toda execução.
+  alguma afirmação — `check_afirmacao_tem_mecanismo.py`. Cobre hoje o plano da `dr-001` e os
+  ADRs 0012, 0015 e 0016; o que falta cobrir é impresso em toda execução. Afirmação que uma
+  emenda rebaixou pode se apoiar numa candidata de `docs/pendencias.md` — e só ela: o
+  checador imprime quantas estão nessa condição.
 
 ## O que NUNCA fazer
 

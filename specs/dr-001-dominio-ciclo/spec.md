@@ -419,7 +419,7 @@ O **motivo** sim é registro, porque é o que a interface mostra e o que decide 
 | Motivo | O que acontece em seguida |
 | --- | --- |
 | `ciclo_falhou` | Segue tentando no ritmo do tier |
-| `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)) |
+| `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)). **Substituído** pelo [ADR-0016](../../docs/adr/0016-confianca-no-bitmap.md): o motivo passa a ser a condição do bitmap que falhou, e não o nó — na `dr-001/T6` |
 
 **Esta é a única definição de `degradada`.** O ciclo de vida da VM é marcado e mora na
 [`dr-006`](../dr-006-provisionamento/spec.md), que é quem nomeia os estados dele; a saúde é
@@ -430,6 +430,12 @@ contradição é essa: **ciclo de vida é marcado, saúde é derivada.**
 E `degradada` **não é desprotegida**: os pontos de recuperação existentes continuam válidos.
 O que para é a criação de pontos novos no ritmo prometido. A leitura natural de "degradada"
 é "desprotegida", e a diferença é o produto inteiro.
+
+**Quem exibir `degradada` exibe junto o ponto mais recente, e diz que ele continua
+utilizável.** Está escrito aqui, e não só no ADR-0012, porque é aqui que quem constrói a tela
+vai ler para saber o que `degradada` é — ninguém lê o ADR naquele dia. Ainda não há
+mecanismo que o confira: a interface não existe, e a exigência é a candidata `C-005` de
+[`docs/pendencias.md`](../../docs/pendencias.md).
 
 ## Janelas pendentes: alarme por volume, compactação por quantidade
 
