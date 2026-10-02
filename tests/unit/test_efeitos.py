@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 
+from vzdr.core.domain import efeitos
 from vzdr.core.domain.efeitos import (
     PREEMPCAO_DESPEJA_DETENTOR,
     Alvo,
@@ -21,11 +22,15 @@ from vzdr.core.domain.efeitos import (
     ConfirmarNoDestino,
     ConsultarNoDaVm,
     DescartarBitmap,
+    DiscoNoInventario,
     Efeito,
     EfeitoDeDisco,
     EfeitoDePreempcao,
     EfeitoDeVm,
+    EstadoDoBitmap,
     FecharJanela,
+    FonteIncoerenteError,
+    ImagemNoInventario,
     IniciarCopia,
     InventariarVm,
     PublicarExport,
@@ -44,6 +49,17 @@ from vzdr.core.domain.efeitos import (
     responde_a,
     resultado_de_json,
     se_excluem,
+)
+
+#: Como a M5 o mediu: gravando, persistente, livre, 64 KiB, nada sujo.
+BITMAP_BOM = EstadoDoBitmap(
+    nome="vzdr-ckp-" + "a" * 32,
+    granularity=65536,
+    count=0,
+    recording=True,
+    busy=False,
+    persistent=True,
+    inconsistent=False,
 )
 
 TENANT = uuid4()
@@ -354,8 +370,16 @@ RESULTADOS = [
         vm_id=VM,
         no_que_respondeu=NO,
         chaves=(),
-        job_em_curso=True,
-        nomes_encontrados=("vzdr-bmp-" + "a" * 32,),
+        discos=(
+            DiscoNoInventario(
+                disco="vda",
+                somente_leitura=False,
+                cadeia=(ImagemNoInventario(bitmaps=(BITMAP_BOM,)),),
+            ),
+            DiscoNoInventario(disco="sda", somente_leitura=True, cadeia=(ImagemNoInventario(()),)),
+        ),
+        checkpoints=("vzdr-ckp-" + "a" * 32,),
+        jobs_em_curso=("backup-vda-libvirt-1-format",),
     ),
     ResultadoDeLocalizacao(
         tenant_id=TENANT,
@@ -605,8 +629,9 @@ def test_texto_no_lugar_de_lista_recusa():
         "vm_id": str(VM),
         "no_que_respondeu": NO,
         "chaves": [],
-        "job_em_curso": False,
-        "nomes_encontrados": "vzdr-bmp-x",
+        "discos": [],
+        "checkpoints": "vzdr-ckp-x",
+        "jobs_em_curso": [],
     }
     with pytest.raises(RegistroMalformadoError, match="lista de texto"):
         resultado_de_json(dados)
@@ -694,14 +719,21 @@ def test_tipo_duplicado_levanta():
         _por_tipo(Raiz)
 
 
-def test_as_tres_excecoes_nao_se_capturam_umas_as_outras():
-    """O TIPO da excecao decide a acao de quem trata, e as acoes sao opostas:
-    reenviar, descartar, parar. Se uma herdasse de outra, o `except` de uma
-    capturaria a outra, e o despachante reenviaria para sempre um registro
-    quebrado — o laco que nao termina, com outra roupa."""
-    tres = (ValorDesconhecidoError, RegistroMalformadoError, CatalogoAmbiguoError)
-    for a in tres:
-        for b in tres:
+def test_nenhuma_excecao_do_contrato_captura_outra():
+    """O TIPO da excecao decide a acao de quem trata, e as acoes sao diferentes:
+    reenviar, descartar, parar e consertar o codigo, parar e escalar a plataforma.
+    Se uma herdasse de outra, o `except` de uma capturaria a outra, e o despachante
+    reenviaria para sempre um registro quebrado — o laco que nao termina, com outra
+    roupa. Sobre TODAS as do modulo, e nao sobre uma lista: a quarta entrou na T9,
+    e a lista escrita a mao teria ficado com tres."""
+    todas = [
+        c
+        for c in vars(efeitos).values()
+        if isinstance(c, type) and issubclass(c, Exception) and c.__module__ == efeitos.__name__
+    ]
+    assert FonteIncoerenteError in todas
+    for a in todas:
+        for b in todas:
             if a is not b:
                 assert not issubclass(a, b), (a, b)
 
@@ -1254,3 +1286,87 @@ def test_tipo_de_efeito_desconhecido_nao_e_conferido(no):
     """Contrato mais novo: recusar como malformado descartaria o que deveria ser
     reenviado. A conferencia so vale quando o tipo e conhecido."""
     assert _resultado_para("efeito_de_uma_versao_futura", no).no_que_respondeu == no
+
+
+# ── O inventario responde a pergunta que decide (T9, ADR-0016) ──────────────
+
+
+def _bitmap_json(**mudanca):
+    dados = BITMAP_BOM.para_json()
+    dados.update(mudanca)
+    return dados
+
+
+def test_inconsistent_ausente_recusa_e_nao_vira_consistente():
+    """No QEMU o campo e opcional e ausente quer dizer falso. Aqui, ausente e
+    registro quebrado: herdar a opcionalidade leria "nao disseram" como "pode
+    confiar" — falha aberta, na pior direcao. A normalizacao e do agente, na borda."""
+    dados = _bitmap_json()
+    del dados["inconsistent"]
+    with pytest.raises(RegistroMalformadoError, match="inconsistent"):
+        EstadoDoBitmap.de_json(dados)
+
+
+@pytest.mark.parametrize(
+    "campo", ["nome", "granularity", "count", "recording", "busy", "persistent", "inconsistent"]
+)
+def test_todo_campo_do_bitmap_e_obrigatorio(campo):
+    dados = _bitmap_json()
+    del dados[campo]
+    with pytest.raises(RegistroMalformadoError, match=campo):
+        EstadoDoBitmap.de_json(dados)
+
+
+@pytest.mark.parametrize(
+    "violacao",
+    [{"recording": True}, {"busy": True}, {"persistent": False}],
+    ids=["recording", "busy", "nao_persistente"],
+)
+@pytest.mark.parametrize("caminho", ["construcao", "leitura"])
+def test_inconsistent_que_viola_a_invariante_do_qemu_para(violacao, caminho):
+    """O QEMU documenta: inconsistent implica persistent, e nem recording nem busy.
+    Violado, o fork nao e confiavel nesses campos — e nao e registro quebrado nem
+    contrato novo. Os dois caminhos que constroem o valor recusam igual."""
+    base = {"recording": False, "busy": False, "persistent": True, "inconsistent": True}
+    base.update(violacao)
+    with pytest.raises(FonteIncoerenteError, match="inconsistent"):
+        if caminho == "construcao":
+            dataclasses.replace(BITMAP_BOM, **base)
+        else:
+            EstadoDoBitmap.de_json(_bitmap_json(**base))
+
+
+def test_inconsistent_como_o_qemu_documenta_e_aceito():
+    """Lido, e nao recusado: a resposta a ele (resync) e da maquina, na T6."""
+    lido = dataclasses.replace(
+        BITMAP_BOM, recording=False, busy=False, persistent=True, inconsistent=True
+    )
+    assert lido.inconsistent and not lido.recording
+
+
+def test_inventario_ida_e_volta_com_cadeia_e_disco_somente_leitura():
+    (original,) = [r for r in RESULTADOS if isinstance(r, ResultadoDeInventario)]
+    lido = resultado_de_json(json.loads(json.dumps(original.para_json())))
+    assert lido == original
+    assert {d.disco: d.somente_leitura for d in lido.discos} == {"vda": False, "sda": True}
+
+
+def test_discos_do_inventario_em_ordem_canonica():
+    (original,) = [r for r in RESULTADOS if isinstance(r, ResultadoDeInventario)]
+    invertido = dataclasses.replace(original, discos=tuple(reversed(original.discos)))
+    assert invertido == original
+
+
+@pytest.mark.parametrize(
+    "estrago",
+    ["disco_repetido", "disco_sem_imagem", "bitmap_repetido"],
+)
+def test_inventario_incoerente_por_dentro_recusa(estrago):
+    (original,) = [r for r in RESULTADOS if isinstance(r, ResultadoDeInventario)]
+    with pytest.raises(RegistroMalformadoError):
+        if estrago == "disco_repetido":
+            dataclasses.replace(original, discos=original.discos + original.discos[:1])
+        elif estrago == "disco_sem_imagem":
+            DiscoNoInventario(disco="vdb", somente_leitura=False, cadeia=())
+        else:
+            ImagemNoInventario(bitmaps=(BITMAP_BOM, BITMAP_BOM))

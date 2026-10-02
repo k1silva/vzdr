@@ -266,12 +266,13 @@ class EstadoDoCiclo:
     #: sem migracao os dois sao iguais quando o efeito sai, mas sao duas expressoes
     #: do mesmo fato, e o envelope diz qual e a dele.
     no_encontrado: Optional[str]
-    #: Os nomes que o inventario achou, crus, quando ja respondeu. A T5 so decide
-    #: por `job_em_curso`; classificar os nomes (`ler_nome`, tres estados) e
-    #: achar orfaos e da T7. Guardados aqui porque o ciclo que os viu e o lugar
-    #: mais barato de registra-los — descartados, a evidencia morreria em
-    #: `avancar` e a T7 teria que perguntar de novo.
-    nomes_no_inventario: Optional[tuple[str, ...]]
+    #: O inventario, inteiro, quando ja respondeu — o estado de cada bitmap por
+    #: disco, os checkpoints e os jobs. Hoje a maquina so decide por haver job em
+    #: curso; as seis condicoes e as quatro respostas do ADR-0016 sao da T6, e
+    #: classificar os nomes e achar orfaos, da T7. Guardado aqui porque o ciclo que
+    #: o viu e o lugar mais barato de registra-lo — descartado, a evidencia
+    #: morreria em `avancar` e a T7 teria que perguntar de novo.
+    inventario: Optional[ResultadoDeInventario]
     #: Quando o ponto de recuperacao deste ciclo foi registrado, se foi.
     ponto_registrado_em: Optional[datetime]
     #: `None` enquanto o ciclo corre. Terminado, e o `Desfecho` de saude.py — nao
@@ -374,7 +375,7 @@ def iniciar(
         pendentes=(),
         ja_deixou_residuo=False,
         no_encontrado=None,
-        nomes_no_inventario=None,
+        inventario=None,
         ponto_registrado_em=None,
         desfecho=None,
     )
@@ -446,7 +447,7 @@ def _deu_certo(resultado: Resultado) -> bool:
         # que fazer com o job e da reconciliacao (T7) — e, ate ela existir, uma
         # copia que falhou deixando o job no ar faz todo ciclo seguinte terminar
         # aqui, fora da taxa de falha. Esta na tabela de Riscos do plano.
-        return not resultado.job_em_curso
+        return not resultado.jobs_em_curso
     return True
 
 
@@ -487,7 +488,7 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime
         if estado.migracao_detectada:
             return abandonar(estado, agora)
     if isinstance(entrada, ResultadoDeInventario):
-        estado = replace(estado, nomes_no_inventario=entrada.nomes_encontrados)
+        estado = replace(estado, inventario=entrada)
     if not _deu_certo(entrada):
         return abandonar(estado, agora)
     if isinstance(respondido, RegistrarPontoDeRecuperacao):

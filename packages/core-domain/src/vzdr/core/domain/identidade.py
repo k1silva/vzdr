@@ -176,7 +176,18 @@ def nome_do_bitmap(ciclo_id: UUID) -> str:
 
 
 def nome_do_checkpoint(ciclo_id: UUID) -> str:
-    """O checkpoint que o ciclo cria, um so para a VM inteira."""
+    """O checkpoint que o ciclo cria, um so para a VM inteira.
+
+    E tambem o nome do BITMAP desse checkpoint, em cada disco: o libvirt nomeia o
+    bitmap exatamente como o checkpoint, o mesmo nome em todos os discos que
+    recebem bitmap (medido na M5, libvirt 9.5.0 da VHI). Por isso o bitmap de um
+    checkpoint e lido por `ler_nome` como especie CHECKPOINT, e nao BITMAP.
+
+    E e a EVIDENCIA de que so o export pode levar o disco no nome: um nome de
+    bitmap por disco seria inescrevivel pelo libvirt. O desenho acertou uma
+    restricao antes de ela ser medida — quem quiser "melhorar" o esquema pondo o
+    disco aqui esbarra nela.
+    """
     return nome_de(Especie.CHECKPOINT, ciclo_id)
 
 

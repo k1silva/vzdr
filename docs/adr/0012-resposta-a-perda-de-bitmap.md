@@ -92,9 +92,10 @@ normal é um job visível, com motivo, tamanho estimado, progresso e previsão.
 A regra 4 fecha um laço real: migração dispara resync, resync longo é interrompido por
 nova migração, e a VM nunca volta a `PROTEGIDA`.
 
-**Mecanismo:** o teste de confiança e o gatilho passam ao ADR-0016, e se cumprem por
-`dr-001/T9` e `dr-001/T6`; o que era do executor do resync (regras 4 e 5), `C-006`. Até a
-T9 e a T6, o código faz a comparação de nó da T5,
+**Mecanismo:** o teste de confiança e o gatilho passam ao ADR-0016: o que ele lê já está no
+contrato, `tests/unit/test_efeitos.py::test_todo_campo_do_bitmap_e_obrigatorio`, e decidir
+por ele é `dr-001/T6`; o que era do executor do resync (regras 4 e 5), `C-006`. Até a T6, o
+código faz a comparação de nó da T5,
 `tests/unit/test_ciclo.py::test_migracao_detectada_o_ciclo_nao_executa`.
 
 ### 2. `DEGRADADA` não é desprotegida — **rebaixada**
@@ -250,5 +251,9 @@ E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário se
 | # | Medição | O que decide |
 |---|---|---|
 | M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. |
+
+**A M5 foi medida em 2026-10-02**: a leitura existe, por `virsh qemu-monitor-command`, e exige
+conexão de leitura e escrita com o libvirtd. O registro está em
+[`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`](../validacao/2026-10-02-m5-leitura-do-bitmap.md).
 
 Procedência: revisão do #38 e a pesquisa sobre o estado do bitmap; ver o ADR-0016.

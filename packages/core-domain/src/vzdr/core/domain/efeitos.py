@@ -33,6 +33,10 @@ __all__ = [
     "Alvo",
     "CercarDestino",
     "CatalogoAmbiguoError",
+    "DiscoNoInventario",
+    "EstadoDoBitmap",
+    "FonteIncoerenteError",
+    "ImagemNoInventario",
     "ChaveDeExclusao",
     "ConfirmarNoDestino",
     "ConsultarNoDaVm",
@@ -116,6 +120,23 @@ class CatalogoAmbiguoError(RuntimeError):
 
     Duas classes declarando o mesmo `TIPO`. Reenviar a mensagem entraria em laco,
     e descarta-la jogaria fora registro valido. Nao e dela o defeito.
+    """
+
+
+class FonteIncoerenteError(RuntimeError):
+    """A fonte EXTERNA violou uma invariante que ela mesma documenta: PARAR e
+    escalar para o fornecedor. Nunca reenviar, nunca descartar.
+
+    O caso que a criou: o QEMU documenta que `inconsistent` "implies persistent to
+    be true; recording and busy to be false". Um bitmap que chegue `inconsistent`
+    e `recording` ao mesmo tempo nao e registro quebrado nem contrato mais novo — e
+    o fork da plataforma desobedecendo a propria invariante, e entao a confianca
+    nesses campos cai em todo o parque.
+
+    E um quarto tipo, e nao o `CatalogoAmbiguoError`, pela ACAO de quem trata, que
+    e o criterio dos tres: aquele manda parar e consertar o NOSSO codigo; este
+    manda parar e levar a plataforma ao fornecedor. Reenviar voltaria igual;
+    descartar jogaria fora o unico sinal de que o fork nao e confiavel.
     """
 
 
@@ -569,6 +590,14 @@ class RemoverCheckpointsAnteriores(EfeitoDeVm):
 
     Idempotente: o estado desejado e a ausencia dos anteriores. A maquina so o pede
     depois de confirmados os discos e registrado o ponto — e ai que o P2 vive.
+
+    O AGENTE O EXECUTA PELA API DE CHECKPOINT DO LIBVIRT, e nunca por
+    `block-dirty-bitmap-remove` no monitor. O proprio libvirt documenta, em
+    `virDomainQemuMonitorCommand`: "A @cmd that alters state that is also tracked
+    by libvirt is unsafe". O bitmap de um checkpoint e estado que o libvirt
+    rastreia; remove-lo por baixo deixa o metadado de checkpoint apontando para um
+    bitmap que nao existe — a familia do "Bitmap already exists". Ler pelo monitor
+    e seguro; escrever, nao.
     """
 
     ALVO = Alvo.AGENTE_DE_ORIGEM
@@ -765,23 +794,200 @@ class ResultadoDeCopia(Resultado):
 
 
 @dataclass(frozen=True)
+class EstadoDoBitmap:
+    """Um bitmap, como o `query-block` o mostra — o que as seis condicoes do
+    ADR-0016 leem.
+
+    OS NOMES DOS CAMPOS SAO OS DO QEMU, de proposito: o agente copia, nao traduz, e
+    traducao e onde dois nomes da mesma coisa discordam.
+
+    `inconsistent` e OBRIGATORIO aqui, e no QEMU e opcional — so e impresso quando
+    verdadeiro. Herdar a opcionalidade criaria o primeiro campo cuja AUSENCIA
+    carrega significado vindo de fora, e a regra do contrato e "campo desconhecido
+    se ignora": um agente antigo ou com defeito que nao mandasse o campo seria lido
+    como "consistente", isto e, "pode confiar". Falha aberta, na pior direcao. Quem
+    normaliza ausente -> falso e o AGENTE, na borda, onde tem o JSON do QEMU na mao
+    e sabe que a ausencia veio do QEMU. Aqui, silencio nao significa "esta tudo bem".
+
+    A invariante documentada do QEMU — inconsistente implica persistente, e nem
+    gravando nem ocupado — e conferida na construcao. Violada, e
+    `FonteIncoerenteError`: o fork nao e confiavel nesses campos. E por ela, tambem,
+    que `recording` falso alcanca todo inconsistente: `recording` e o teste mais
+    amplo, e `inconsistent` diz o MOTIVO — desabilitado pode ter conserto;
+    inconsistente sai e vira resync.
+
+    ARMADILHA: o `dirty-flag` do qcow2 NAO e dirty bitmap. E o bit de sujo da
+    imagem, par do `lazy-refcounts`, e vem verdadeiro em toda VM ligada. Le-lo como
+    estado do bitmap e o engano do `dirty-bitmaps: state false` — que ja custou um
+    chamado — pela mesma porta.
+    """
+
+    nome: str
+    granularity: int
+    #: Bytes sujos, ANTES de copiar. Entrada do limiar e do ETA (ADR-0016, decisao 4).
+    count: int
+    recording: bool
+    busy: bool
+    persistent: bool
+    inconsistent: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.nome, str) or not self.nome:
+            raise RegistroMalformadoError(f"bitmap sem nome: {self.nome!r}")
+        if self.granularity <= 0 or self.count < 0:
+            raise RegistroMalformadoError(
+                f"bitmap {self.nome!r}: granularity {self.granularity} e count {self.count}"
+            )
+        if self.inconsistent and (self.recording or self.busy or not self.persistent):
+            raise FonteIncoerenteError(
+                f"bitmap {self.nome!r} inconsistent com recording={self.recording}, "
+                f"busy={self.busy}, persistent={self.persistent}: o QEMU documenta que "
+                f"inconsistent implica persistent, e nem recording nem busy"
+            )
+
+    def para_json(self) -> dict[str, Any]:
+        return {
+            "nome": self.nome,
+            "granularity": self.granularity,
+            "count": self.count,
+            "recording": self.recording,
+            "busy": self.busy,
+            "persistent": self.persistent,
+            "inconsistent": self.inconsistent,
+        }
+
+    @classmethod
+    def de_json(cls, dados: Mapping[str, Any]) -> "EstadoDoBitmap":
+        return cls(
+            nome=_exigir_texto(dados, "nome"),
+            granularity=_exigir_inteiro(dados, "granularity"),
+            count=_exigir_inteiro(dados, "count"),
+            recording=_exigir_bool(dados, "recording"),
+            busy=_exigir_bool(dados, "busy"),
+            persistent=_exigir_bool(dados, "persistent"),
+            inconsistent=_exigir_bool(dados, "inconsistent"),
+        )
+
+
+@dataclass(frozen=True)
+class ImagemNoInventario:
+    """Uma imagem da cadeia de backing de um disco, com os bitmaps que ela tem."""
+
+    bitmaps: tuple[EstadoDoBitmap, ...]
+
+    def __post_init__(self) -> None:
+        nomes = [b.nome for b in self.bitmaps]
+        if len(set(nomes)) != len(nomes):
+            raise RegistroMalformadoError(f"imagem com bitmap repetido: {nomes}")
+
+    def para_json(self) -> dict[str, Any]:
+        return {"bitmaps": [b.para_json() for b in self.bitmaps]}
+
+    @classmethod
+    def de_json(cls, dados: Mapping[str, Any]) -> "ImagemNoInventario":
+        return cls(
+            bitmaps=tuple(
+                EstadoDoBitmap.de_json(b) for b in _exigir_lista_de_objetos(dados, "bitmaps")
+            )
+        )
+
+
+@dataclass(frozen=True)
+class DiscoNoInventario:
+    """Um disco da VM, pelo TARGET (`vda`), e nunca pelo node-name.
+
+    O node-name do QEMU e `libvirt-N-format`, e o N e atribuido pelo libvirt a
+    cada partida do dominio, sem seguir a ordem dos targets (medido na M5: `vda`
+    era `libvirt-1`, o cdrom `sda`, `libvirt-2`). Guardado, ele apontaria para
+    outro disco depois de um reinicio. O agente le o node-name no momento de agir,
+    casando o `filename` com o caminho do volume — nunca pelo numero.
+
+    `somente_leitura`: o libvirt nao poe bitmap em disco somente-leitura (M5: o
+    cdrom nao recebeu nenhum). A maquina confere com isto a lista de discos que
+    recebeu, em vez de confiar no chamador: um disco somente-leitura na lista faria
+    o ciclo esperar para sempre por um bitmap impossivel.
+
+    `cadeia`: as imagens de backing, do topo para baixo — as condicoes 1 e 2 do
+    ADR-0016 sao sobre ela. Na M5 o volume de dados tinha profundidade zero; isso
+    vale para aquela VM, e nao para o parque.
+    """
+
+    disco: str
+    somente_leitura: bool
+    cadeia: tuple[ImagemNoInventario, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.disco, str) or not self.disco:
+            raise RegistroMalformadoError(f"disco invalido: {self.disco!r}")
+        if not self.cadeia:
+            raise RegistroMalformadoError(f"disco {self.disco!r} sem imagem nenhuma")
+
+    def para_json(self) -> dict[str, Any]:
+        return {
+            "disco": self.disco,
+            "somente_leitura": self.somente_leitura,
+            "cadeia": [i.para_json() for i in self.cadeia],
+        }
+
+    @classmethod
+    def de_json(cls, dados: Mapping[str, Any]) -> "DiscoNoInventario":
+        return cls(
+            disco=_exigir_texto(dados, "disco"),
+            somente_leitura=_exigir_bool(dados, "somente_leitura"),
+            cadeia=tuple(
+                ImagemNoInventario.de_json(i) for i in _exigir_lista_de_objetos(dados, "cadeia")
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class ResultadoDeInventario(Resultado):
+    """A fotografia que DECIDE se o incremental comeca (ADR-0016).
+
+    A versao anterior trazia `job_em_curso: bool` e nomes soltos — respondia a
+    pergunta que era facil de obter, e nao a que decide. Agora traz, por disco e
+    por imagem da cadeia, o estado de cada bitmap.
+
+    `jobs_em_curso` FICA, ao lado do `busy`, e cada um diz por que existe: `busy` e
+    do BITMAP — alguem o usa, um backup ou uma migracao chegando —; job e do
+    DISPOSITIVO, e um backup de terceiro — o nativo da VHI, por exemplo — pode
+    rodar sem tocar o nosso bitmap. Sao ids crus, e nao booleano: o id e o que
+    separa o zumbi nosso do job de outro sistema, e classifica-lo e da
+    reconciliacao (T7).
+
+    `checkpoints`: os nomes do `checkpoint-list` do libvirt. Bitmap sem checkpoint
+    correspondente e a assinatura do ciclo de energia do guest (OpenNebula
+    one#6206), e o orfao so aparece cruzando os dois.
+    """
+
     TIPO = "inventario"
 
-    job_em_curso: bool
-    nomes_encontrados: tuple[str, ...]
+    discos: tuple[DiscoNoInventario, ...]
+    checkpoints: tuple[str, ...]
+    jobs_em_curso: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        nomes = [d.disco for d in self.discos]
+        if len(set(nomes)) != len(nomes):
+            raise RegistroMalformadoError(f"inventario com disco repetido: {nomes}")
+        object.__setattr__(self, "discos", tuple(sorted(self.discos, key=lambda d: d.disco)))
 
     def _corpo_json(self) -> dict[str, Any]:
         return {
-            "job_em_curso": self.job_em_curso,
-            "nomes_encontrados": list(self.nomes_encontrados),
+            "discos": [d.para_json() for d in self.discos],
+            "checkpoints": list(self.checkpoints),
+            "jobs_em_curso": list(self.jobs_em_curso),
         }
 
     @classmethod
     def _corpo_de_json(cls, dados: Mapping[str, Any]) -> dict[str, Any]:
         return {
-            "job_em_curso": _exigir_bool(dados, "job_em_curso"),
-            "nomes_encontrados": _exigir_lista_de_texto(dados, "nomes_encontrados"),
+            "discos": tuple(
+                DiscoNoInventario.de_json(d) for d in _exigir_lista_de_objetos(dados, "discos")
+            ),
+            "checkpoints": _exigir_lista_de_texto(dados, "checkpoints"),
+            "jobs_em_curso": _exigir_lista_de_texto(dados, "jobs_em_curso"),
         }
 
 
@@ -944,6 +1150,16 @@ def _exigir_lista_de_texto(dados: Mapping[str, Any], nome: str) -> tuple[str, ..
     for item in valor:
         if not isinstance(item, str):
             raise RegistroMalformadoError(f"{nome!r} tem item que nao e texto: {item!r}")
+    return tuple(valor)
+
+
+def _exigir_lista_de_objetos(dados: Mapping[str, Any], nome: str) -> tuple[Mapping[str, Any], ...]:
+    valor = _exigir(dados, nome)
+    if isinstance(valor, (str, Mapping)) or not isinstance(valor, (list, tuple)):
+        raise RegistroMalformadoError(f"{nome!r} tem que ser lista de objetos, e veio {valor!r}")
+    for item in valor:
+        if not isinstance(item, Mapping):
+            raise RegistroMalformadoError(f"{nome!r} tem item que nao e objeto: {item!r}")
     return tuple(valor)
 
 
