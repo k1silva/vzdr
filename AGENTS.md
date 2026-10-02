@@ -45,25 +45,28 @@ do `tail`, não o do `make` — o comando reprova e o `&&` seguinte roda assim m
 aconteceu: um commit entrou com arquivo não formatado por causa disso. Se a saída é
 longa demais para ler, o problema é a saída, não a leitura.
 
-**Nem silencie o canal de erro.** `2>/dev/null` em comando de verificação é a mesma lição
-do cano por outra porta: transforma falha em sucesso aparente. Aconteceu com um laço de
-espera de CI que chamava `gh pr checks --json`, opção que a versão instalada não tem. Todo
-o laço falhava na primeira chamada, o erro ia para o nulo, e o laço nunca terminava — o
-que parecia **paciência, não erro**. Sintoma indistinguível do estado normal é irmão de
-"ausência de check parece aprovação". Laço de verificação tem **limite de voltas**, e erro
-de ferramenta aparece em vez de sumir.
+**Nem silencie o canal de erro.** `2>/dev/null` em comando de verificação transforma falha
+em sucesso aparente — a lição do cano por outra porta.
 
-**Nem ramifique pelo código de saída de um comando que você não sabe o que é.** No shell
-do agente, `grep` pode ser uma **função** que chama outro programa — aqui, o ugrep —, e
-com `-qv` ela devolve o código ao contrário do GNU grep. Aconteceu no #36: um laço de espera
-da CI saiu na terceira volta, dando por concluídos dois jobs ainda rodando. Mesmo sintoma do
-`gh pr checks --json`, por outro instrumento: o laço parecia certo, e o que enganou foi a
-**ausência de erro**. Em condição de laço ou de verificação, use `command grep` ou caminho
-absoluto, ou decida com comparação explícita (`jq`, `test`) sobre um valor que você imprimiu.
-E condição de "nada pendente" exige que existam **os que se esperam, pelo nome** — e não
-só "algum". A primeira versão desta regra dizia "que exista algo", e falhou no #39: o laço
-viu um job só, o `declaracao-revisao`, concluído antes de os outros serem criados, e saiu.
-Lista vazia tem zero pendentes; lista incompleta também.
+**Nem ramifique pelo código de saída de um comando que você não sabe o que é.** No shell do
+agente, `grep` pode ser uma **função** que chama outro programa. Em condição de laço ou de
+verificação, use `command grep` ou caminho absoluto, ou decida com comparação explícita
+(`jq`, `test`) sobre um valor que você imprimiu.
+
+**Laço de verificação afirma a presença do que espera; ausência nunca é evidência.** Antes
+de começar, ele declara o conjunto que espera, **pelo nome**, e só termina quando cada item
+desse conjunto responde. Tem limite de voltas, e erro de ferramenta aparece. Três
+instrumentos, três causas, um erro só — e nos três o sintoma foi indistinguível do estado
+normal, porque quem enganou foi a falta de erro:
+
+- `gh pr checks --json`, opção que a versão instalada não tem, com o erro em `2>/dev/null`:
+  o laço falhava em toda volta e **nunca terminava**. A ausência foi lida como espera — o
+  mesmo erro no sentido oposto: parecia paciência.
+- `grep -qv`, com `grep` sendo uma função que chama o ugrep e devolve o código invertido: o
+  laço saiu na terceira volta com dois jobs rodando (#36).
+- a lista de jobs consultada antes de todos existirem: havia um só, concluído, e o laço
+  saiu (#39). A regra anterior pedia "que exista algo"; lista incompleta também tem zero
+  pendentes.
 
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
