@@ -577,3 +577,37 @@ def test_nome_sem_id_nao_e_cobrado(tmp_path):
     raiz = montar(tmp_path)
     (raiz / "docs/validacao/2026-09-23-com2m-coisa.md").write_text("# Coisa\n", encoding="utf-8")
     assert verificar(raiz) == []
+
+
+# ── Marco nao e medicao ─────────────────────────────────────────────────────
+
+
+def _escreve(raiz, caminho, texto):
+    (raiz / caminho).parent.mkdir(parents=True, exist_ok=True)
+    (raiz / caminho).write_text(texto, encoding="utf-8")
+
+
+def test_marco_declarado_como_medicao_reprova_nos_tres_lugares(tmp_path):
+    """`M2` querendo dizer o marco 2 seria conferido contra a tabela e aprovado."""
+    raiz = montar(tmp_path)
+    _escreve(raiz, "docs/03-roadmap.md", "# Roadmap\n\n## M2 — Ciclo real\n")
+    _escreve(raiz, "specs/dr-009-x/spec.md", "# dr-009\n\n**Marco:** M4\n")
+    _escreve(
+        raiz,
+        "specs/README.md",
+        "| # | Spec | Marco |\n| --- | --- | --- |\n| dr-009 | X | M4 |\n",
+    )
+    falhas = verificar(raiz)
+    assert any("03-roadmap.md" in f and "M2" in f for f in falhas), falhas
+    assert any("dr-009-x/spec.md" in f for f in falhas), falhas
+    assert any("specs/README.md" in f and "dr-009" in f for f in falhas), falhas
+
+
+def test_marco_escrito_como_marco_passa(tmp_path):
+    raiz = montar(tmp_path)
+    _escreve(raiz, "docs/03-roadmap.md", "# Roadmap\n\n## Marco 2 — Ciclo real\n")
+    _escreve(raiz, "specs/dr-009-x/spec.md", "# dr-009\n\n**Marco:** 4\n")
+    _escreve(
+        raiz, "specs/README.md", "| # | Spec | Marco |\n| --- | --- | --- |\n| dr-009 | X | 4 |\n"
+    )
+    assert verificar(raiz) == []
