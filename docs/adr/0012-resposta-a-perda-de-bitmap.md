@@ -182,7 +182,7 @@ A decisão 3 fecha quando estes quatro números existirem. Nenhum depende de esc
 | # | Medição | O que decide |
 |---|---|---|
 | M1 | **Vazão real de seed entre os datacenters.** O seed validado transferiu 5.535,6 MiB sem cronometragem. Repetir com `time`. | Converte tamanho em horas. Sem ela, toda estimativa de tempo de resync é chute — inclusive as deste documento. |
-| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. |
+| M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. E, acrescentado em 2026-10-02: a profundidade de backing dos discos de dado, de que depende a forma de cadeia do inventário (ADR-0016). |
 | M3 | **Taxa real de mudança**, com bitmap em amostra de 5 a 8 VMs cobrindo os perfis, ao longo de 48h. | Diz quanto o diferencial transferiria de fato — ou seja, qual o ganho real sobre o seed completo. |
 | M4 | **Sobrevivência do bitmap à migração automática do VHI.** Exige dois nós e VM descartável. | Se o bitmap sobreviver, a frequência de resync despenca e a decisão 3 perde urgência. Se não sobreviver, ganha. Há chamado aberto com a Virtuozzo sobre a capability `dirty-bitmaps` desligada. |
 

@@ -183,7 +183,9 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
 - [ ] **Profundidade de backing dos discos de dado, no parque.** A M5 leu
       `backing_file_depth: 0` numa VM, o que torna triviais as condições 1 e 2 do ADR-0016
       para ela. Não se generaliza: o censo confirma, VM a VM
-      ([M5](validacao/2026-10-02-m5-leitura-do-bitmap.md)).
+      ([M5](validacao/2026-10-02-m5-leitura-do-bitmap.md)). É parte da **M2**: se o parque
+      do cliente nunca tem profundidade > 0, o código de cadeia do inventário é peso morto;
+      se tem, a forma é suposta e a `dr-001/T6` depende dela.
 - [ ] **Taxa real de mudança** (M3 do ADR-0012) — `scripts/medir-taxa-mudanca.sh`, com
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"

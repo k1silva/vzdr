@@ -60,11 +60,15 @@ engano do `dirty-bitmaps: state false`, que já custou um chamado, pela mesma po
   mantém o esquema. Só-leitura, sem efeito nenhum:
   `virsh qemu-monitor-command <dom> --pretty '{"execute":"query-block-jobs"}'`. Não
   bloqueia o contrato; bloqueia a `dr-001/T6` de depender do campo.
-- **O caminho do `filename` no `query-block`.** A M5 casou node-name e disco pelo
+- **A chave do `filename` no `query-block`.** A M5 casou node-name e disco pelo
   `filename`, e o inventário passou a usá-lo como identidade de cada imagem da cadeia
-  (`arquivo`). O registro não guarda a saída crua: em que chave ele veio — `inserted.file`
-  ou `inserted.image.filename`, e nas imagens de backing `backing-image.filename` — fica
-  para conferir junto com o `query-block-jobs`.
+  (`arquivo`). **A saída crua não foi guardada.** O contrato decidiu uma chave só:
+  `inserted.image.filename` no topo e `backing-image.filename` descendo a cadeia — nunca
+  `inserted.file`, que existe uma vez por dispositivo e não popula a cadeia. Que o fork a
+  preencha como o esquema diz é item a conferir na próxima leitura, junto com o
+  `query-block-jobs`. E guardar a saída crua da próxima vez.
+- **Cadeia com profundidade maior que zero não foi vista.** Aqui era zero. A forma dela é
+  suposta no contrato; quem responde é a M2.
 
 - **A M4**, agora conferência, com a previsão registrada antes de rodar, no
   [roadmap](../03-roadmap.md). Precisa de um nó que possa ser drenado.

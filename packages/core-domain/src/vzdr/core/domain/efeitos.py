@@ -879,6 +879,14 @@ class ImagemNoInventario:
     cadeia" — e isso separa resync de reconciliacao (T7). Nao e o node-name: o
     `libvirt-N-format` e renumerado a cada partida do dominio, e compara-lo entre
     dois inventarios casaria imagens diferentes.
+
+    UMA CHAVE SO, para todas as imagens: o `filename` do `ImageInfo` —
+    `inserted.image.filename` no topo, e `backing-image.filename` descendo a cadeia.
+    NUNCA `inserted.file`: ele existe uma vez por dispositivo e nao popula a cadeia.
+    Ler `inserted.file` no topo e `backing-image.filename` no resto seria dar a dois
+    conceitos a mesma aparencia, e "unico na cadeia" passaria ou reprovaria pelo
+    motivo errado. A saida crua da M5 nao foi guardada: que o fork preenche essa
+    chave como o esquema diz e item a conferir na proxima leitura.
     """
 
     arquivo: str
@@ -922,6 +930,13 @@ class DiscoNoInventario:
     `cadeia`: as imagens de backing, do topo para baixo — as condicoes 1 e 2 do
     ADR-0016 sao sobre ela. Na M5 o volume de dados tinha profundidade zero; isso
     vale para aquela VM, e nao para o parque.
+
+    SUPOSICAO EXPLICITA: a forma de uma cadeia com profundidade maior que zero e
+    suposta, e nao medida. A unicidade do `arquivo` e o percurso da cadeia so foram
+    exercidos pelos nossos testes, que provam que o codigo faz o que escrevemos, e
+    nao que o fork produz essa forma. Se o parque nunca tem profundidade > 0, este
+    codigo e peso morto; se tem, a T6 depende de algo nao medido. Quem responde e a
+    M2 (censo do parque do cliente).
     """
 
     disco: str
