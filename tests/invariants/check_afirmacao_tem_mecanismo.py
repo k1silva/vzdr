@@ -194,18 +194,37 @@ def afirmacoes_do_adr(texto: str) -> list[tuple[str, list[str]]]:
     return [(r, refs[r]) for r in ordem]
 
 
-def _linhas_de_medicao(raiz: Path) -> list[tuple[str, list[str]]]:
-    """(id, celulas) de cada linha `| M<n> | ... |` da tabela do ADR-0012."""
+def _celulas(linha: str) -> list[str]:
+    return [c.strip() for c in linha.strip().strip("|").split("|")]
+
+
+def _linhas_de_medicao(raiz: Path) -> list[tuple[str, dict[str, str]]]:
+    """(id, {coluna: celula}) de cada linha `| M<n> | ... |` da tabela do ADR-0012.
+
+    Pelo NOME da coluna, lido do cabecalho da tabela em que a linha esta, e nao pela
+    posicao. Por posicao, toda deriva conhecida ja falhava alto — o valor lido nao
+    era um estado valido —, mas pelo nome a pergunta nao existe."""
     caminho = raiz / MEDICOES
     if not caminho.exists():
         return []
     linhas = []
+    cabecalho: list[str] = []
     for _, linha in linhas_fora_de_blocos(caminho.read_text(encoding="utf-8")):
+        if not linha.startswith("|"):
+            cabecalho = []
+            continue
+        if linha.startswith("| # |"):
+            cabecalho = _celulas(linha)
+            continue
         casou = re.match(r"\| (M\d+) \|", linha)
         if casou:
-            linhas.append(
-                (casou.group(1), [c.strip() for c in linha.strip().strip("|").split("|")])
+            celulas = _celulas(linha)
+            # Linha com outro numero de celulas que o cabecalho nao tem leitura: fica
+            # sem colunas, e o estado vazio reprova alto em vez de ser adivinhado.
+            colunas = (
+                dict(zip(cabecalho, celulas, strict=True)) if len(celulas) == len(cabecalho) else {}
             )
+            linhas.append((casou.group(1), colunas))
     return linhas
 
 
@@ -218,11 +237,30 @@ def _medicoes(raiz: Path) -> dict[str, tuple[str, str | None]]:
     """M<n> -> (estado, registro). A tabela do ADR-0012 e o indice UNICO: um
     segundo seria a segunda expressao do mesmo fato."""
     saida = {}
-    for ident, celulas in _linhas_de_medicao(raiz):
-        estado = celulas[-2] if len(celulas) >= 5 else ""
-        registro = _registro_da_celula(celulas[-1]) if len(celulas) >= 5 else None
+    for ident, colunas in _linhas_de_medicao(raiz):
+        estado = colunas.get("Estado", "")
+        registro = _registro_da_celula(colunas.get("Registro", ""))
         saida[ident] = (estado, registro)
     return saida
+
+
+def _titulo(arquivo: Path) -> str:
+    for linha in arquivo.read_text(encoding="utf-8").splitlines():
+        if linha.startswith("# "):
+            return linha[2:].strip()
+    return ""
+
+
+def _medicao_do_titulo(arquivo: Path) -> str | None:
+    """O id que o TITULO do arquivo diz responder (`# M5 — ...`), ou nada.
+
+    E o que faz um arquivo de docs/validacao ser REGISTRO. Nem todo arquivo dali e:
+    o censo e a validacao cross-DC de 2026-09-23 sao evidencia sem medicao do
+    indice, e nao esquecimento. E o id tem que estar no titulo, e nao em qualquer
+    lugar do texto: o registro da M5 cita M2 e M4 no corpo, e "nomear em qualquer
+    lugar" deixava uma linha M2 apontar para ele."""
+    casou = re.match(r"(M\d+)\b", _titulo(arquivo))
+    return casou.group(1) if casou else None
 
 
 def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
@@ -246,8 +284,8 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
     lista vira ambiguidade.
     """
     falhas = []
-    for ident, celulas in _linhas_de_medicao(raiz):
-        if len(celulas) >= 5 and len(_CRASE.findall(celulas[-1])) > 1:
+    for ident, colunas in _linhas_de_medicao(raiz):
+        if len(_CRASE.findall(colunas.get("Registro", ""))) > 1:
             falhas.append(
                 f"{MEDICOES}: {ident}: mais de um registro na celula — uma linha, um registro"
             )
@@ -265,8 +303,27 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
             arquivo = raiz / registro
             if not arquivo.exists():
                 falhas.append(f"{onde}: o registro `{registro}` nao existe")
-            elif not re.search(rf"\b{ident}\b", arquivo.read_text(encoding="utf-8")):
-                falhas.append(f"{onde}: o registro `{registro}` nao diz que responde a {ident}")
+            elif _medicao_do_titulo(arquivo) != ident:
+                falhas.append(
+                    f"{onde}: o titulo do registro `{registro}` nao diz que responde a {ident}"
+                )
+
+    # A VOLTA: registro -> tabela. Quem mede, escreve o registro e esquece de mudar o
+    # estado para `medida` deixaria a tabela dizendo `aberta`, e toda afirmacao
+    # citando M<n> como se nada tivesse sido medido — o estado da decisao 5 do
+    # ADR-0016. `aberta` com registro so pega quem preencheu a celula; isto pega quem
+    # esqueceu. LIMITE: so alcanca o arquivo cujo titulo comeca com o id; registro
+    # escrito sem o id no titulo E esquecido na tabela passa.
+    apontados = {r for e, r in _medicoes(raiz).values() if e == "medida" and r}
+    pasta = raiz / "docs" / "validacao"
+    for arquivo in sorted(pasta.glob("*.md")) if pasta.exists() else []:
+        ident = _medicao_do_titulo(arquivo)
+        caminho = arquivo.relative_to(raiz).as_posix()
+        if ident and caminho not in apontados:
+            falhas.append(
+                f"{caminho}: registro orfao — o titulo diz {ident}, e nenhuma medicao medida "
+                f"aponta para ele. Mude o estado de {ident} e preencha o registro na tabela"
+            )
     return falhas
 
 
@@ -368,7 +425,8 @@ def _problema_da_referencia(
             return f"`{ref}`: a medicao nao existe no ADR-0012"
         estado, registro = medicoes[ref]
         if estado == "medida":
-            return f"`{ref}`: a medicao foi feita, e o mecanismo agora e o registro — cite `{registro}`"
+            cite = f"cite `{registro}`" if registro else "e ela ainda nao tem registro na tabela"
+            return f"`{ref}`: a medicao foi feita, e o mecanismo agora e o registro — {cite}"
         return None
     qualificada = _TAREFA_QUALIFICADA.fullmatch(ref)
     if qualificada:
