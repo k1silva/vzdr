@@ -43,7 +43,7 @@ Em `inserted.dirty-bitmaps[]`, no nó de formato qcow2:
 | `persistent: true` sem flag nenhuma, com `compat: 1.1` | — |
 | `count: 0` funcionando | A entrada do limiar e do ETA (ADR-0016, decisão 4) |
 | O cdrom (`ro: true`) não recebeu bitmap | O libvirt não põe bitmap em disco somente-leitura. O ciclo recebe só os graváveis, e a máquina confere a lista contra o `somente_leitura` do inventário. O censo já excluía os 24 discos raw; agora se sabe que não é convenção nossa |
-| `node-name` é `libvirt-N-format`, e o N não segue os targets (`vda` era `libvirt-1`, o cdrom `sda`, `libvirt-2`) | Atribuído por partida do domínio: nunca guardar, ler no momento de agir, e casar pelo `filename` com o caminho do volume |
+| `node-name` é `libvirt-N-format`, e o N não segue os targets (`vda` era `libvirt-1`, o cdrom `sda`, `libvirt-2`) | Não carrega a identidade do disco: nunca guardar, ler no momento de agir, e casar pelo `filename` com o caminho do volume. Que seja reatribuído a cada partida do domínio é suposição — aqui foi uma leitura, num boot |
 | O libvirt nomeia o bitmap exatamente como o checkpoint, o mesmo em todos os discos | Confirma por medição que só o export pode levar o disco no nome (`identidade.py`) |
 | Volume de dados com `backing_file_depth: 0` | As condições 1 e 2 do ADR-0016 ficam triviais **para esta VM**. Para o parque, é pergunta do censo |
 
