@@ -70,8 +70,9 @@ engano do `dirty-bitmaps: state false`, que já custou um chamado, pela mesma po
 - **Cadeia com profundidade maior que zero não foi vista.** Aqui era zero. A forma dela é
   suposta no contrato; quem responde é a M2.
 
-- **A M4**, agora conferência, com a previsão registrada antes de rodar, no
-  [roadmap](../03-roadmap.md). Precisa de um nó que possa ser drenado.
+- **A M7** (queda pela janela — a M4 antiga foi aposentada e partida em M6 e M7), agora
+  conferência, com a previsão registrada antes de rodar, no [roadmap](../03-roadmap.md). E
+  a **M6** (saída pela porta), que é a que precisa de um nó que possa ser drenado.
 - **O backup nativo da VHI usa dirty bitmap nas mesmas imagens**, com `compat: 1.1` como
   requisito. `busy` pode vir dele, e não de um zumbi nosso. O desenho trata (repete, escala
   por prazo; nome que não é nosso é órfão), mas a pergunta operacional fica: candidata `C-008`.

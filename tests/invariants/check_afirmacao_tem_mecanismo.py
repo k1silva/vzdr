@@ -10,7 +10,7 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
 2. **Todo mecanismo nomeado existe.** Referencia em crase, de quatro formas:
    - `tests/.../x.py::test_nome` — o arquivo existe e define a funcao;
    - `tests/invariants/check_x.py` (ou outro .py) — o arquivo existe;
-   - `M4` — a medicao existe na tabela do ADR-0012 E AINDA ESTA ABERTA. Como a
+   - `M7` — a medicao existe na tabela do ADR-0012 E AINDA ESTA ABERTA. Como a
      tarefa: medicao feita com a afirmacao ainda apontando para ela reprova,
      porque o mecanismo agora existe e se chama registro;
    - `docs/validacao/x.md` — o REGISTRO de uma medicao feita: o arquivo existe, e e
@@ -257,7 +257,7 @@ def _medicao_do_titulo(arquivo: Path) -> str | None:
     E o que faz um arquivo de docs/validacao ser REGISTRO. Nem todo arquivo dali e:
     o censo e a validacao cross-DC de 2026-09-23 sao evidencia sem medicao do
     indice, e nao esquecimento. E o id tem que estar no titulo, e nao em qualquer
-    lugar do texto: o registro da M5 cita M2 e M4 no corpo, e "nomear em qualquer
+    lugar do texto: o registro da M5 cita outras medicoes no corpo, e "nomear em qualquer
     lugar" deixava uma linha M2 apontar para ele."""
     casou = re.match(r"(M\d+)\b", _titulo(arquivo))
     return casou.group(1) if casou else None
@@ -277,7 +277,7 @@ def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
     linha propria, ou a evidencia parcial vira item aberto DENTRO de um registro que
     ja existe — como o registro da M5 faz com o `query-block-jobs`.
 
-    UMA LINHA, UM REGISTRO. Evidencia nova que toca uma medicao feita — a M4 vai
+    UMA LINHA, UM REGISTRO. Evidencia nova que toca uma medicao feita — a M7 vai
     produzir uma, sobre o `checkpoint-delete` — nao entra como segundo arquivo na
     celula: ou e item aberto no registro existente, ou medicao nova com linha
     propria. Celula com mais de um registro reprova, senao a coluna vira lista e a

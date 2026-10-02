@@ -507,7 +507,7 @@ def test_arquivo_de_validacao_sem_medicao_no_titulo_nao_e_registro(tmp_path):
 
 
 def test_registro_que_cita_a_medicao_so_no_corpo_nao_responde_a_ela(tmp_path):
-    """O registro da M5 cita M2 e M4 no corpo; "nomear em qualquer lugar" deixava
+    """O registro da M5 cita outras medicoes no corpo; "nomear em qualquer lugar" deixava
     uma linha M2 apontar para ele."""
     raiz = montar(tmp_path)
     (raiz / REGISTRO).write_text(

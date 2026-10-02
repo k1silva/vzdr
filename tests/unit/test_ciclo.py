@@ -293,8 +293,8 @@ def test_a_primeira_coisa_e_perguntar_ao_nova_onde_a_vm_esta():
 
 def test_migracao_detectada_o_ciclo_nao_executa():
     """No atual diferente do gravado: o bitmap atravessou evento de host e nao e
-    usado. O ciclo termina sem pedir nada e diz por que. Quem criaria o resync nao
-    existe ainda (M4); o que impede o proximo ciclo de errar e
+    usado. O ciclo termina sem pedir nada e diz por que. Quem executaria o resync
+    nao existe ainda (dr-003; C-006); o que impede o proximo ciclo de errar e
     `no_do_proximo_ciclo`, testado abaixo."""
     t = comecar()
     t = avancar(t.estado, fracasso(t.estado.pendentes[0]), T0 + UM_MINUTO)

@@ -43,7 +43,7 @@ lacunas; todos estão `recording`; nenhum está `inconsistent`.
 **Os dois limites desta evidência**, que não se herdam como certeza:
 
 - é **upstream**, e a VHI roda um fork. Se o fork marca `inconsistent` como o upstream
-  documenta é exatamente o que a `M4` passa a conferir (ver a emenda do ADR-0012);
+  documenta é exatamente o que a `M7` passa a conferir (ver a emenda do ADR-0012);
 - a página do libvirt descreve a validação e **não diz** que ele cai para cópia completa: ele
   recusa. O completo é decisão nossa — e é este ADR.
 
@@ -68,7 +68,8 @@ confiança: ele continua sendo onde a VM está, e é por isso que o inventário 
 **Mecanismo:** o inventário traz, por disco e por bitmap, o que as seis condições leem —
 `tests/unit/test_efeitos.py::test_todo_campo_do_bitmap_e_obrigatorio`,
 `tests/unit/test_efeitos.py::test_inconsistent_ausente_recusa_e_nao_vira_consistente`; a
-máquina decidir por elas, Mecanismo ainda não existe: `dr-001/T6`.
+máquina decidir por elas, Mecanismo ainda não existe: `dr-001/T6`; e que o fork marque
+`inconsistent` como o upstream documenta, de que a condição 4 depende, `M7`.
 
 ### 2. Quatro respostas, e não duas
 
@@ -136,7 +137,7 @@ medição feita citada como `M<n>` reprova.
 
 ## Consequências
 
-Fica mais fácil: o gatilho do resync deixa de depender da `M4` — ele é definível hoje. A `M4`
+Fica mais fácil: o gatilho do resync deixa de depender da `M7` — ele é definível hoje. A `M7`
 muda de natureza, de descoberta para conferência (ver a emenda do ADR-0012).
 
 Fica mais difícil: o contrato do inventário cresce (`dr-001/T9`), e a leitura pode não existir
@@ -183,5 +184,5 @@ que carrega a janela, é a espécie `CHECKPOINT`.
 **Disco somente-leitura não tem bitmap**, por decisão do libvirt. O inventário diz quais
 discos são somente-leitura, e a máquina confere a lista de discos que recebeu (`dr-001/T6`).
 
-**A `M4` ganhou previsão escrita antes de rodar**, no roadmap: as três leituras possíveis e o
+**A `M7` ganhou previsão escrita antes de rodar**, no roadmap: as três leituras possíveis e o
 que cada uma muda.

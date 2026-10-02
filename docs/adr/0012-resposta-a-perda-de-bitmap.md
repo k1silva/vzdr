@@ -5,7 +5,7 @@
 
 > **Leia antes de implementar: este ADR não fecha tudo.** A decisão 1 é invariante de
 > segurança e vale desde já. A **decisão 3 — resync diferencial — está em análise**, não
-> decidida, e depende das medições M1–M4 em "O que falta medir"; o rastreio delas está em
+> decidida, e depende das medições M1–M3, M6 e M7 em "O que falta medir"; o rastreio delas está em
 > [`docs/pendencias.md`](../pendencias.md). O status é `aceito` porque o que este
 > documento fecha, fecha — não porque tudo esteja resolvido.
 >
@@ -128,7 +128,7 @@ VMs de 10 TB mudariam a conclusão inteiramente.
 
 Fica em aberto, a decidir com as medições abaixo.
 
-**Mecanismo:** `M1`, `M2`, `M3`, `M4`.
+**Mecanismo:** `M1`, `M2`, `M3`, `M6`, `M7`.
 
 ## O diferencial, desenhado
 
@@ -184,9 +184,11 @@ A decisão 3 fecha quando estes quatro números existirem. Nenhum depende de esc
 | M1 | **Vazão real de seed entre os datacenters.** O seed validado transferiu 5.535,6 MiB sem cronometragem. Repetir com `time`. | Converte tamanho em horas. Sem ela, toda estimativa de tempo de resync é chute — inclusive as deste documento. | aberta | — |
 | M2 | **Distribuição do parque do cliente-alvo.** Mesmo `censo-discos.sh`, rodado lá. | Diz se o diferencial é urgente ou confortável. É a medição que falta para a decisão 3, e ela não está no laboratório. E, acrescentado em 2026-10-02: a profundidade de backing dos discos de dado, de que depende a forma de cadeia do inventário (ADR-0016). | aberta | — |
 | M3 | **Taxa real de mudança**, com bitmap em amostra de 5 a 8 VMs cobrindo os perfis, ao longo de 48h. | Diz quanto o diferencial transferiria de fato — ou seja, qual o ganho real sobre o seed completo. | aberta | — |
-| M4 | **Sobrevivência do bitmap à migração automática do VHI.** Exige dois nós e VM descartável. | Se o bitmap sobreviver, a frequência de resync despenca e a decisão 3 perde urgência. Se não sobreviver, ganha. Há chamado aberto com a Virtuozzo sobre a capability `dirty-bitmaps` desligada. | aberta | — |
 
-Enquanto M1–M4 não existirem, os tempos citados neste documento (22 h para 3,75 TiB a
+*(A M4, que estava nesta tabela — sobrevivência do bitmap à migração —, foi aposentada em
+2026-10-02 e partida em M6 e M7: ver a emenda no fim.)*
+
+Enquanto M1–M3, M6 e M7 não existirem, os tempos citados neste documento (22 h para 3,75 TiB a
 50 MiB/s, ~2 h de diferencial) são **estimativas com vazão arbitrada**, não medições.
 
 ## Alternativas consideradas
@@ -238,19 +240,22 @@ definida — a seção "`degradada` é derivada, não marcada" da `dr-001` e o t
 que é o que quem construir a tela vai ler; e a candidata `C-005` a guarda. O gatilho dela é
 um evento, e não uma data.
 
-**Decisão 3 — continua em análise, com dono honesto: as medições.** Mas a **`M4` mudou de
-natureza**. Era descoberta — o bitmap sobrevive à migração automática? —, e o fornecedor
-respondeu que sim, com storage compartilhado. Passa a ser **conferência de comportamento
-documentado**: o fork da VHI marca `inconsistent` como o upstream diz? Mata o QEMU, reabre,
-lê o campo. Binário, uma rodada, e muda a estimativa de quando a decisão 3 fecha: era a
-medição que exigia dois nós e uma VM descartável, e agora é a mais barata das quatro. Se o
-fork **não** marcar, é a coisa mais importante que podemos descobrir sobre esta plataforma.
+**Decisão 3 — continua em análise, com dono honesto: as medições.** Mas a medição da
+sobrevivência do bitmap **mudou de natureza**. Era descoberta — o bitmap sobrevive à
+migração automática? —, e o fornecedor respondeu que sim, com storage compartilhado. A
+perna que decide passa a ser **conferência de comportamento documentado**: o fork da VHI
+marca `inconsistent` como o upstream diz? Mata o QEMU, reabre, lê o campo. Binário, uma
+rodada, num nó só, e muda a estimativa de quando a decisão 3 fecha: é a mais barata de
+todas. Se o fork **não** marcar, é a coisa mais importante que podemos descobrir sobre esta
+plataforma. Essa perna é a `M7`; a outra, a migração graciosa, é a `M6` (abaixo).
 
 E uma medição nova, que o ADR-0016 exige antes de o contrato do inventário ser desenhado:
 
 | # | Medição | O que decide | Estado | Registro |
 |---|---|---|---|---|
 | M5 | **Por onde o estado do bitmap é legível na VHI.** `query-block` é QMP: pela API do libvirt, passthrough de monitor; ou pelo canal do agente no próprio nó. Ler os campos `recording`, `busy`, `inconsistent`, `granularity` e `count` de uma VM do laboratório pelos dois caminhos. | Se a leitura existe pelo caminho limpo. Se não existir por nenhum, o desenho do campo da `dr-001/T9` muda. | medida | `docs/validacao/2026-10-02-m5-leitura-do-bitmap.md` |
+| M6 | **Saída pela porta: o bitmap atravessa a migração graciosa.** Em VM descartável, cluster com mais de um nó, e um nó que possa ser drenado: criar bitmap persistente, migrar ao vivo, ler no destino nome, granularidade e conteúdo. | Se a migração graciosa preserva o bitmap, migração deixa de ser causa de resync. É a perna da antiga M4 que a Virtuozzo respondeu por declaração; a medição confere. | aberta | — |
+| M7 | **Queda pela janela: o fork marca `inconsistent`.** Em VM descartável, num nó só: matar o processo QEMU, reabrir, ler o `query-block`. Previsão escrita antes de rodar, no roadmap; e, se der `inconsistent: true`, tentar `checkpoint-delete` e registrar o resultado. | Se o sinal de que o ADR-0016 depende existe neste fork. Se não marcar, a confiança no flag cai. | aberta | — |
 
 **As tabelas de medição ganharam `Estado` e `Registro`** (2026-10-02): são o índice único das
 medições, e o meta-checador as lê. `medida` exige o registro na mesma linha; afirmação que
