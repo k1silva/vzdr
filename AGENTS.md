@@ -60,8 +60,10 @@ da CI saiu na terceira volta, dando por concluídos dois jobs ainda rodando. Mes
 `gh pr checks --json`, por outro instrumento: o laço parecia certo, e o que enganou foi a
 **ausência de erro**. Em condição de laço ou de verificação, use `command grep` ou caminho
 absoluto, ou decida com comparação explícita (`jq`, `test`) sobre um valor que você imprimiu.
-E condição de "nada pendente" exige que **exista** algo: lista vazia também tem zero
-pendentes.
+E condição de "nada pendente" exige que existam **os que se esperam, pelo nome** — e não
+só "algum". A primeira versão desta regra dizia "que exista algo", e falhou no #39: o laço
+viu um job só, o `declaracao-revisao`, concluído antes de os outros serem criados, e saiu.
+Lista vazia tem zero pendentes; lista incompleta também.
 
 `make check` não inclui `test-db` nem `test-int`: ele é determinístico e não depende de
 infraestrutura. Quem mexe em esquema, isolamento de tenant ou migração roda `make test-db`
