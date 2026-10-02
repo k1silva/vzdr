@@ -90,16 +90,22 @@ estacionamento de ideia ainda sem forma. Item daqui que ganha data **sai** — p
 ou para as tarefas de uma spec — a menos que atenda ao critério de "Abertas", e aí sobe de
 seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe para evitar.
 
-- **Separar a decisão 3 do ADR-0012 num ADR próprio**, com status `proposto`. Aquele
+**O id (`C-NNN`) é para poder ser citado**, e não é prazo. Uma candidata pode sustentar uma
+afirmação que uma emenda **rebaixou** — deixou de chamar de aceita porque não tem mecanismo
+nem dono —, e o `check_afirmacao_tem_mecanismo.py` confere que ela existe. Só isso: candidata
+nunca sustenta decisão viva, e o checador imprime em toda execução quantas afirmações estão
+penduradas só nela. Se esse número sobe, aparece.
+
+- **C-001 — Separar a decisão 3 do ADR-0012 num ADR próprio**, com status `proposto`. Aquele
   documento empacota três decisões de maturidade diferente, e foi por isso que ele não
   coube no vocabulário de status do `template.md`. A nota no topo é remendo, não conserto.
-- **Uma *view* nomeando "ação veio por token"** na auditoria. Hoje o fato está lá e é
+- **C-002 — Uma *view* nomeando "ação veio por token"** na auditoria. Hoje o fato está lá e é
   inequívoco — `servico_id` é preenchido se, e somente se, a origem é serviço, garantido
   no `Principal` desde a T4 — mas a consulta exige que quem lê conheça o truque. Uma view
   chamada `auditoria_por_servico` (ou coluna derivada) paga-se quando existir tela de
   leitura de auditoria, em `core-007`. **Não** é coluna nova: `origem` seria segunda fonte
   de verdade para algo já inequívoco, e duas fontes podem discordar.
-- **Cercamento por security group, na nuvem de destino** — a v2 do cercamento da
+- **C-003 — Cercamento por security group, na nuvem de destino** — a v2 do cercamento da
   [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md). O cercamento da v1 tem ponto cego: o
   caminho de escrita do zumbi é origem → receptora, direto na 10809, e o caminho do
   cercamento é control plane → relé → receptora. O túnel do relé pode cair com a conexão de
@@ -108,9 +114,15 @@ seção. Sem essa saída, a lista vira o depósito que o arquivo inteiro existe 
   receptora e sem depender do relé. Usa o quarto alvo de execução,
   `API_DA_NUVEM_DE_DESTINO` — que já entrou na v1, pelo ponto de recuperação; o que esta
   candidata acrescenta é o efeito de revogar a regra, e não o alvo.
-- **Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
+- **C-004 — Restringir `ignore_missing_imports` do `mypy` a módulos de terceiros** — hoje é global,
   e foi o que tornou a ausência de `py.typed` invisível. Registrada como TI2 em
   `specs/core-001-tenancy/tasks.md`.
+- **C-005 — A interface diz que `degradada` não é desprotegida.** Decidido no ADR-0012
+  (decisão 2) e rebaixado na emenda de 2026-10-02: não tem mecanismo, e a interface que o
+  cumpriria não tem momento marcado. O gatilho é um **evento**, e não uma data — o dia em que
+  alguém construir uma tela que mostre `degradada`. Por isso a exigência mora onde o conceito
+  é definido, que é o que essa pessoa vai ler: a seção "`degradada` é derivada, não
+  marcada" da [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md), e o topo de `saude.py`.
 
 ## Fechadas
 

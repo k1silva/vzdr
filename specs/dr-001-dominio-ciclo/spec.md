@@ -431,6 +431,12 @@ E `degradada` **não é desprotegida**: os pontos de recuperação existentes co
 O que para é a criação de pontos novos no ritmo prometido. A leitura natural de "degradada"
 é "desprotegida", e a diferença é o produto inteiro.
 
+**Quem exibir `degradada` exibe junto o ponto mais recente, e diz que ele continua
+utilizável.** Está escrito aqui, e não só no ADR-0012, porque é aqui que quem constrói a tela
+vai ler para saber o que `degradada` é — ninguém lê o ADR naquele dia. Ainda não há
+mecanismo que o confira: a interface não existe, e a exigência é a candidata `C-005` de
+[`docs/pendencias.md`](../../docs/pendencias.md).
+
 ## Janelas pendentes: alarme por volume, compactação por quantidade
 
 Não existe limite de janelas pendentes que dispare resync. Um limite desses derrubaria a
