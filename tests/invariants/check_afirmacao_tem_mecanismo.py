@@ -13,7 +13,15 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
    - `M4` — a medicao existe na tabela do ADR-0012;
    - `T7` — a tarefa existe e AINDA ESTA ABERTA. E declaracao honesta de que o
      mecanismo ainda nao existe. Tarefa marcada feita com a afirmacao ainda
-     apontando para ela reprova: o mecanismo tinha que ter sido nomeado.
+     apontando para ela reprova: o mecanismo tinha que ter sido nomeado;
+   - `C-005` — a candidata existe em `## Candidatas` de docs/pendencias.md. E a
+     forma de dizer "decidimos que importa, nao decidimos como", e e a mais facil
+     de abusar: candidata e barata de escrever. Por isso ela SO vale numa
+     afirmacao REBAIXADA — a que uma emenda deixou de chamar de aceita, marcada no
+     proprio titulo —, e nunca sustenta decisao viva. E o checador imprime, em toda
+     execucao, quantas afirmacoes estao sustentadas so por candidata: pressao
+     visivel, e nao portao. Portao empurraria a inventar mecanismo, que e pior do
+     que admitir que ele nao existe.
 3. **A volta, que e a metade que se esquece: todo checador no build e
    reivindicado.** Por uma referencia num documento coberto, ou pelo nome do
    arquivo, em crase, no AGENTS.md — em QUALQUER lugar dele. O checador nao confere
@@ -77,12 +85,17 @@ def ainda_nao_cobertos(raiz: Path) -> list[str]:
 
 TAREFAS = {"specs/dr-001-dominio-ciclo/plan.md": "specs/dr-001-dominio-ciclo/tasks.md"}
 MEDICOES = "docs/adr/0012-resposta-a-perda-de-bitmap.md"
+PENDENCIAS = "docs/pendencias.md"
 
 _CRASE = re.compile(r"`([^`]+)`")
 _TESTE = re.compile(r"(?P<arquivo>(?:tests|scripts|packages)/[\w/.-]+\.py)::(?P<funcao>test_\w+)")
 _ARQUIVO = re.compile(r"(?:tests|scripts|packages)/[\w/.-]+\.py")
 _MEDICAO = re.compile(r"M\d+")
 _TAREFA = re.compile(r"T\d+")
+_CANDIDATA = re.compile(r"C-\d{3}")
+#: O titulo da afirmacao diz que ela foi rebaixada. E onde a emenda declara que
+#: deixou de chamar aquilo de aceito — e o unico lugar em que candidata vale.
+_REBAIXADA = re.compile(r"rebaixad[ao]", re.IGNORECASE)
 #: `dr-001/T6` — tarefa com a spec dita. Obrigatoria fora de um plano: num ADR, `T6`
 #: solto nao diz de qual spec e a tarefa.
 _TAREFA_QUALIFICADA = re.compile(r"(?P<spec>[a-z]+-\d+)/(?P<tarefa>T\d+)")
@@ -102,6 +115,7 @@ def referencias(texto: str) -> list[str]:
             or _MEDICAO.fullmatch(item)
             or _TAREFA.fullmatch(item)
             or _TAREFA_QUALIFICADA.fullmatch(item)
+            or _CANDIDATA.fullmatch(item)
         ):
             achadas.append(item)
     return achadas
@@ -155,6 +169,24 @@ def _medicoes(raiz: Path) -> set[str]:
     return set(re.findall(r"^\| (M\d+) \|", caminho.read_text(encoding="utf-8"), re.MULTILINE))
 
 
+def _candidatas(raiz: Path) -> set[str]:
+    """Os ids da secao `## Candidatas` — so dela: aberta tem prazo e outro papel,
+    fechada nao sustenta nada."""
+    caminho = raiz / PENDENCIAS
+    if not caminho.exists():
+        return set()
+    dentro = False
+    ids = set()
+    for _, linha in linhas_fora_de_blocos(caminho.read_text(encoding="utf-8")):
+        if linha.startswith("## "):
+            dentro = linha.strip() == "## Candidatas"
+            continue
+        casou = re.match(r"- \*\*(C-\d{3})\b", linha)
+        if dentro and casou:
+            ids.add(casou.group(1))
+    return ids
+
+
 def _tarefas(raiz: Path, documento: str) -> dict[str, bool]:
     """T<n> -> feita? — das tarefas do proprio plano."""
     tasks = TAREFAS.get(documento)
@@ -174,6 +206,10 @@ def _tarefas_de(caminho: Path) -> dict[str, bool]:
 def _problema_da_referencia(
     raiz: Path, ref: str, tarefas: dict[str, bool], medicoes: set[str]
 ) -> str | None:
+    if _CANDIDATA.fullmatch(ref):
+        if ref not in _candidatas(raiz):
+            return f"`{ref}`: nao ha candidata com esse id em {PENDENCIAS}"
+        return None
     teste = _TESTE.fullmatch(ref)
     if teste:
         arquivo = raiz / teste.group("arquivo")
@@ -233,6 +269,12 @@ def verificar(raiz: Path) -> list[str]:
                 problema = _problema_da_referencia(raiz, ref, tarefas, medicoes)
                 if problema:
                     falhas.append(f"{documento}: '{rotulo}': {problema}")
+                if _CANDIDATA.fullmatch(ref) and not _REBAIXADA.search(rotulo):
+                    falhas.append(
+                        f"{documento}: '{rotulo}': `{ref}`: candidata so sustenta afirmacao "
+                        f"rebaixada — marque no titulo que a emenda a rebaixou, ou nomeie o "
+                        f"mecanismo"
+                    )
                 if _ARQUIVO.fullmatch(ref):
                     reivindicados.add(Path(ref).name)
                 elif _TESTE.fullmatch(ref):
@@ -279,11 +321,31 @@ def verificar(raiz: Path) -> list[str]:
     return falhas
 
 
+def sustentadas_por_candidata(raiz: Path) -> list[str]:
+    """Afirmacoes cujo unico sustento e candidata. Impresso, e nao reprovado."""
+    cobertos = [(d, afirmacoes_do_plano) for d in COBERTOS_PLANO] + [
+        (d, afirmacoes_do_adr) for d in COBERTOS_ADR
+    ]
+    saida = []
+    for documento, extrair in cobertos:
+        caminho = raiz / documento
+        if not caminho.exists():
+            continue
+        for rotulo, refs in extrair(caminho.read_text(encoding="utf-8")):
+            if refs and all(_CANDIDATA.fullmatch(r) for r in refs):
+                saida.append(f"{documento}: '{rotulo}'")
+    return saida
+
+
 def main() -> int:
     falhas = verificar(RAIZ)
     faltam = ainda_nao_cobertos(RAIZ)
     print(f"ainda nao cobertos por este checador ({len(faltam)}):")
     for item in faltam:
+        print(f"  - {item}")
+    so_candidata = sustentadas_por_candidata(RAIZ)
+    print(f"\nsustentadas so por candidata ({len(so_candidata)}):")
+    for item in so_candidata:
         print(f"  - {item}")
     if falhas:
         print("\nafirmacao sem mecanismo, ou mecanismo sem afirmacao:")

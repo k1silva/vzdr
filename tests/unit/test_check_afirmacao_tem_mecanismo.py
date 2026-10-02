@@ -16,6 +16,7 @@ from check_afirmacao_tem_mecanismo import (  # noqa: E402
     afirmacoes_do_plano,
     ainda_nao_cobertos,
     referencias,
+    sustentadas_por_candidata,
     verificar,
 )
 
@@ -52,8 +53,33 @@ MAKEFILE = "invariants:\n\tpython tests/invariants/check_a.py\n"
 AGENTS = "O `check_a.py` verifica a regra A.\n"
 
 
-def montar(tmp_path, plano=PLANO_OK, adr=ADR_OK, agents=AGENTS, makefile=MAKEFILE, tasks=TASKS):
+PENDENCIAS = """# Pendencias
+
+## Abertas
+
+### P-002 — aberta
+
+## Candidatas
+
+- **C-001 — Uma ideia sem forma.** Texto.
+
+## Fechadas
+
+- **C-009 — Ja resolvida.** Nao sustenta nada.
+"""
+
+
+def montar(
+    tmp_path,
+    plano=PLANO_OK,
+    adr=ADR_OK,
+    agents=AGENTS,
+    makefile=MAKEFILE,
+    tasks=TASKS,
+    pendencias=PENDENCIAS,
+):
     arquivos = {
+        "docs/pendencias.md": pendencias,
         "specs/dr-001-dominio-ciclo/plan.md": plano,
         "specs/dr-001-dominio-ciclo/tasks.md": tasks,
         "docs/adr/0015-efeito-como-valor.md": adr,
@@ -164,13 +190,14 @@ def test_mecanismo_fora_de_decisao_nao_conta():
     assert afirmacoes_do_adr(texto) == [("propriedade 1: A", [])]
 
 
-def test_referencias_reconhece_as_quatro_formas():
-    texto = "`tests/unit/t.py::test_a`, `tests/invariants/check_b.py`, `M4`, `T7`, `alvo`"
+def test_referencias_reconhece_as_cinco_formas():
+    texto = "`tests/unit/t.py::test_a`, `tests/invariants/check_b.py`, `M4`, `T7`, `C-001`, `alvo`"
     assert referencias(texto) == [
         "tests/unit/t.py::test_a",
         "tests/invariants/check_b.py",
         "M4",
         "T7",
+        "C-001",
     ]
 
 
@@ -258,3 +285,51 @@ def test_mensagem_nao_promete_secao_que_nao_confere(tmp_path):
     nunca foi conferido: qualquer crase em qualquer lugar satisfazia."""
     (falha,) = verificar(montar(tmp_path, agents="Nada.\n"))
     assert "onde a regra" not in falha and "em crase" in falha
+
+
+# ── A quinta forma: candidata, so em afirmacao rebaixada ────────────────────
+
+
+def _adr_com(titulo: str, mecanismo: str) -> str:
+    return f"# ADR\n\n## Decisão\n\n### 1. {titulo}\n\n**Mecanismo:** {mecanismo}\n"
+
+
+def test_candidata_que_existe_em_afirmacao_rebaixada_passa(tmp_path):
+    raiz = montar(tmp_path, adr=_adr_com("A interface diz — **rebaixada**", "`C-001`"))
+    assert verificar(raiz) == []
+
+
+def test_candidata_que_nao_existe_reprova(tmp_path):
+    raiz = montar(tmp_path, adr=_adr_com("A interface diz — **rebaixada**", "`C-002`"))
+    assert any("C-002" in f and "nao ha candidata" in f for f in verificar(raiz))
+
+
+def test_candidata_nao_sustenta_decisao_viva(tmp_path):
+    """A guarda contra o abuso: candidata e barata, e decisao viva precisa de
+    mecanismo de verdade."""
+    raiz = montar(tmp_path, adr=_adr_com("A interface diz", "`C-001`"))
+    assert any("so sustenta afirmacao rebaixada" in f for f in verificar(raiz))
+
+
+def test_candidata_nao_sustenta_risco_de_plano(tmp_path):
+    plano = PLANO_OK.replace("Medido em `M1`", "Um dia: `C-001`")
+    raiz = montar(tmp_path, plano=plano)
+    assert any("so sustenta afirmacao rebaixada" in f for f in verificar(raiz))
+
+
+def test_id_fora_da_secao_de_candidatas_nao_conta(tmp_path):
+    """C-009 esta em Fechadas: item resolvido nao sustenta afirmacao nenhuma."""
+    raiz = montar(tmp_path, adr=_adr_com("A interface diz — **rebaixada**", "`C-009`"))
+    assert any("C-009" in f for f in verificar(raiz))
+
+
+def test_a_pressao_e_impressa_e_nao_reprova(tmp_path):
+    """Contada so a afirmacao cujo unico sustento e candidata."""
+    adr = _adr_com("A interface diz — **rebaixada**", "`C-001`") + (
+        "\n### 2. Outra — **rebaixada**\n\n**Mecanismo:** `C-001`, `M1`\n"
+    )
+    raiz = montar(tmp_path, adr=adr)
+    assert verificar(raiz) == []
+    so_candidata = sustentadas_por_candidata(raiz)
+    assert any("propriedade 1" in a for a in so_candidata), so_candidata
+    assert not any("propriedade 2" in a for a in so_candidata), so_candidata
