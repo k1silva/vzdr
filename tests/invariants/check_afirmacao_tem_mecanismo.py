@@ -10,7 +10,13 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
 2. **Todo mecanismo nomeado existe.** Referencia em crase, de quatro formas:
    - `tests/.../x.py::test_nome` — o arquivo existe e define a funcao;
    - `tests/invariants/check_x.py` (ou outro .py) — o arquivo existe;
-   - `M4` — a medicao existe na tabela do ADR-0012;
+   - `M4` — a medicao existe na tabela do ADR-0012 E AINDA ESTA ABERTA. Como a
+     tarefa: medicao feita com a afirmacao ainda apontando para ela reprova,
+     porque o mecanismo agora existe e se chama registro;
+   - `docs/validacao/x.md` — o REGISTRO de uma medicao feita: o arquivo existe, e e
+     o que a tabela do ADR-0012 da como registro de uma medicao `medida`. O
+     registro entra como mecanismo citavel, e nao como documento auditado: as
+     linhas dele sao evidencia, e exigir mecanismo delas seria circular;
    - `T7` — a tarefa existe e AINDA ESTA ABERTA. E declaracao honesta de que o
      mecanismo ainda nao existe. Tarefa marcada feita com a afirmacao ainda
      apontando para ela reprova: o mecanismo tinha que ter sido nomeado;
@@ -30,6 +36,11 @@ E o meta-checador bidirecional de coerencia documento <-> realidade. Tres regras
    nao faz. E o AGENTS.md, alem de reivindicar, e AUDITADO: todo arquivo que ele
    nomeia tem que existir. Sem isto acumulam checadores orfaos, e o
    primeiro que der trabalho sera apagado sem que se saiba o que se apagou.
+
+DENTRO DO PARAGRAFO DO MECANISMO, CRASE E REFERENCIA — aresta conhecida, e
+deliberada. Prosa sobre o passado ("esta linha ja disse ...") se escreve SEM
+crase. Nao ha marcador de "citacao historica", e nao deve haver: um escape assim
+e um jeito de fazer afirmacao falsa passar com cara de comentario.
 
 ESCOPO POR DOCUMENTO, NUNCA PELO CRITERIO. Enfraquecer o criterio para terminar
 rapido seria contorno disfarcado: a regra continuaria escrita e deixaria de
@@ -96,6 +107,8 @@ _CRASE = re.compile(r"`([^`]+)`")
 _TESTE = re.compile(r"(?P<arquivo>(?:tests|scripts|packages)/[\w/.-]+\.py)::(?P<funcao>test_\w+)")
 _ARQUIVO = re.compile(r"(?:tests|scripts|packages)/[\w/.-]+\.py")
 _MEDICAO = re.compile(r"M\d+")
+_REGISTRO = re.compile(r"docs/validacao/[\w.-]+\.md")
+ESTADOS_DE_MEDICAO = ("aberta", "medida")
 _TAREFA = re.compile(r"T\d+")
 _CANDIDATA = re.compile(r"C-\d{3}")
 #: O titulo da afirmacao diz que ela foi rebaixada. E onde a emenda declara que
@@ -121,6 +134,7 @@ def referencias(texto: str) -> list[str]:
             or _TAREFA.fullmatch(item)
             or _TAREFA_QUALIFICADA.fullmatch(item)
             or _CANDIDATA.fullmatch(item)
+            or _REGISTRO.fullmatch(item)
         ):
             achadas.append(item)
     return achadas
@@ -180,11 +194,80 @@ def afirmacoes_do_adr(texto: str) -> list[tuple[str, list[str]]]:
     return [(r, refs[r]) for r in ordem]
 
 
-def _medicoes(raiz: Path) -> set[str]:
+def _linhas_de_medicao(raiz: Path) -> list[tuple[str, list[str]]]:
+    """(id, celulas) de cada linha `| M<n> | ... |` da tabela do ADR-0012."""
     caminho = raiz / MEDICOES
     if not caminho.exists():
-        return set()
-    return set(re.findall(r"^\| (M\d+) \|", caminho.read_text(encoding="utf-8"), re.MULTILINE))
+        return []
+    linhas = []
+    for _, linha in linhas_fora_de_blocos(caminho.read_text(encoding="utf-8")):
+        casou = re.match(r"\| (M\d+) \|", linha)
+        if casou:
+            linhas.append(
+                (casou.group(1), [c.strip() for c in linha.strip().strip("|").split("|")])
+            )
+    return linhas
+
+
+def _registro_da_celula(celula: str) -> str | None:
+    casou = _CRASE.fullmatch(celula)
+    return casou.group(1).strip() if casou else None
+
+
+def _medicoes(raiz: Path) -> dict[str, tuple[str, str | None]]:
+    """M<n> -> (estado, registro). A tabela do ADR-0012 e o indice UNICO: um
+    segundo seria a segunda expressao do mesmo fato."""
+    saida = {}
+    for ident, celulas in _linhas_de_medicao(raiz):
+        estado = celulas[-2] if len(celulas) >= 5 else ""
+        registro = _registro_da_celula(celulas[-1]) if len(celulas) >= 5 else None
+        saida[ident] = (estado, registro)
+    return saida
+
+
+def problemas_da_tabela_de_medicoes(raiz: Path) -> list[str]:
+    """O indice nao pode mentir — senao o conserto renasce um nivel acima.
+
+    `medida` sem registro na MESMA linha e exatamente o que a decisao 5 do
+    ADR-0016 era: um campo que diz "feito" e ninguem confere. E o registro tem que
+    existir e nomear a medicao que responde.
+
+    `aberta` COM registro tambem reprova, e e o caso simetrico do bug consertado:
+    medicao feita, registro escrito, estado esquecido em `aberta`. Um dia havera
+    evidencia parcial de uma medicao aberta, e a vontade sera afrouxar isto. A saida
+    ja combinada, e nunca afrouxar: ou a medicao se parte em duas, cada uma com
+    linha propria, ou a evidencia parcial vira item aberto DENTRO de um registro que
+    ja existe — como o registro da M5 faz com o `query-block-jobs`.
+
+    UMA LINHA, UM REGISTRO. Evidencia nova que toca uma medicao feita — a M4 vai
+    produzir uma, sobre o `checkpoint-delete` — nao entra como segundo arquivo na
+    celula: ou e item aberto no registro existente, ou medicao nova com linha
+    propria. Celula com mais de um registro reprova, senao a coluna vira lista e a
+    lista vira ambiguidade.
+    """
+    falhas = []
+    for ident, celulas in _linhas_de_medicao(raiz):
+        if len(celulas) >= 5 and len(_CRASE.findall(celulas[-1])) > 1:
+            falhas.append(
+                f"{MEDICOES}: {ident}: mais de um registro na celula — uma linha, um registro"
+            )
+    for ident, (estado, registro) in _medicoes(raiz).items():
+        onde = f"{MEDICOES}: {ident}"
+        if estado not in ESTADOS_DE_MEDICAO:
+            falhas.append(f"{onde}: estado {estado!r} — tem que ser um de {ESTADOS_DE_MEDICAO}")
+            continue
+        if estado == "aberta" and registro is not None:
+            falhas.append(f"{onde}: aberta, e com registro `{registro}` — ou mede, ou nao tem")
+        if estado == "medida":
+            if registro is None or not _REGISTRO.fullmatch(registro):
+                falhas.append(f"{onde}: medida sem registro em docs/validacao/ na mesma linha")
+                continue
+            arquivo = raiz / registro
+            if not arquivo.exists():
+                falhas.append(f"{onde}: o registro `{registro}` nao existe")
+            elif not re.search(rf"\b{ident}\b", arquivo.read_text(encoding="utf-8")):
+                falhas.append(f"{onde}: o registro `{registro}` nao diz que responde a {ident}")
+    return falhas
 
 
 def documentos_cobertos() -> list[tuple[str, Callable[[str], list[tuple[str, list[str]]]]]]:
@@ -253,8 +336,15 @@ def _tarefas_de(caminho: Path) -> dict[str, bool]:
 
 
 def _problema_da_referencia(
-    raiz: Path, ref: str, tarefas: dict[str, bool], medicoes: set[str]
+    raiz: Path, ref: str, tarefas: dict[str, bool], medicoes: dict[str, tuple[str, str | None]]
 ) -> str | None:
+    if _REGISTRO.fullmatch(ref):
+        if not (raiz / ref).exists():
+            return f"`{ref}`: o registro nao existe"
+        respondidas = [m for m, (e, r) in medicoes.items() if e == "medida" and r == ref]
+        if not respondidas:
+            return f"`{ref}`: nao e o registro de nenhuma medicao feita na tabela do ADR-0012"
+        return None
     if _CANDIDATA.fullmatch(ref):
         if ref not in _candidatas(raiz):
             return f"`{ref}`: nao ha candidata com esse id em {PENDENCIAS}"
@@ -274,7 +364,12 @@ def _problema_da_referencia(
     if _ARQUIVO.fullmatch(ref):
         return None if (raiz / ref).exists() else f"`{ref}`: o arquivo nao existe"
     if _MEDICAO.fullmatch(ref):
-        return None if ref in medicoes else f"`{ref}`: a medicao nao existe no ADR-0012"
+        if ref not in medicoes:
+            return f"`{ref}`: a medicao nao existe no ADR-0012"
+        estado, registro = medicoes[ref]
+        if estado == "medida":
+            return f"`{ref}`: a medicao foi feita, e o mecanismo agora e o registro — cite `{registro}`"
+        return None
     qualificada = _TAREFA_QUALIFICADA.fullmatch(ref)
     if qualificada:
         candidatos = sorted(raiz.glob(f"specs/{qualificada.group('spec')}-*/tasks.md"))
@@ -326,6 +421,8 @@ def verificar(raiz: Path) -> list[str]:
                     reivindicados.add(Path(ref).name)
                 elif _TESTE.fullmatch(ref):
                     reivindicados.add(Path(ref.split("::")[0]).name)
+
+    falhas.extend(problemas_da_tabela_de_medicoes(raiz))
 
     for item in candidatas_sem_id(raiz):
         falhas.append(

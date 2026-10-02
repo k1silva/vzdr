@@ -120,10 +120,10 @@ passthrough de monitor, e a regra de não brigar com o nova-compute vale aqui �
 outra classe de risco que escrita, mas ainda é decisão. Se não houver caminho limpo pela API,
 o agente lê pelo canal dele no próprio nó, que é onde ele já roda.
 
-**Mecanismo:** `M5`, medida em 2026-10-02 — o registro está em
-`docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`. Até o meta-checador aceitar o registro
-como referência, a linha cita a medição; antes desta correção ela dizia "ainda não existe",
-e o checador não via, porque para `M<n>` ele confere só que a medição existe.
+**Mecanismo:** o registro da M5, `docs/validacao/2026-10-02-m5-leitura-do-bitmap.md`. Esta
+linha já disse "ainda não existe: M5" com a M5 medida, e o checador não via: para M<n> ele
+conferia só que a medição existia. Agora a tabela do ADR-0012 tem estado e registro, e
+medição feita citada como `M<n>` reprova.
 
 ## Alternativas consideradas
 
