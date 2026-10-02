@@ -876,9 +876,10 @@ class ImagemNoInventario:
     `arquivo` e a IDENTIDADE da imagem: o `filename` do `query-block`, que a M5 usou
     para casar node-name e disco. Sem ele, dois inventarios do mesmo disco nao
     distinguem "a cadeia mudou de forma" de "os bitmaps se moveram dentro da mesma
-    cadeia" — e isso separa resync de reconciliacao (T7). Nao e o node-name: o
-    `libvirt-N-format` e renumerado a cada partida do dominio, e compara-lo entre
-    dois inventarios casaria imagens diferentes.
+    cadeia" — e isso separa resync de reconciliacao (T7). Nao e o node-name: o N
+    do `libvirt-N-format` nao seguia a ordem dos targets na leitura da M5, entao
+    ele nao carrega a identidade do disco; que ele mude entre reinicios e suposicao,
+    nao medida.
 
     UMA CHAVE SO, para todas as imagens: o `filename` do `ImageInfo` —
     `inserted.image.filename` no topo, e `backing-image.filename` descendo a cadeia.
@@ -916,11 +917,16 @@ class ImagemNoInventario:
 class DiscoNoInventario:
     """Um disco da VM, pelo TARGET (`vda`), e nunca pelo node-name.
 
-    O node-name do QEMU e `libvirt-N-format`, e o N e atribuido pelo libvirt a
-    cada partida do dominio, sem seguir a ordem dos targets (medido na M5: `vda`
-    era `libvirt-1`, o cdrom `sda`, `libvirt-2`). Guardado, ele apontaria para
-    outro disco depois de um reinicio. O agente le o node-name no momento de agir,
-    casando o `filename` com o caminho do volume — nunca pelo numero.
+    O node-name do QEMU e `libvirt-N-format`, e na leitura da M5 o N nao seguia a
+    ordem dos targets (`vda` era `libvirt-1`, o cdrom `sda`, `libvirt-2`). Isso
+    basta para nao usa-lo como identidade. SUPOSICAO, e nao medida: que o libvirt o
+    reatribua a cada partida do dominio — a M5 viu uma leitura, num boot. Por isso
+    o agente le o node-name no momento de agir, casando o `filename` com o caminho
+    do volume, e nunca pelo numero.
+
+    PONTO CEGO, dito para quem ler: justificativa de decisao em docstring nao passa
+    pelo meta-checador, que so le paragrafo de mecanismo e linha de Riscos. Esta
+    afirmava mais do que a M5 mediu ("renumerado a cada partida"), e nada pegou.
 
     `somente_leitura`: o libvirt nao poe bitmap em disco somente-leitura (M5: o
     cdrom nao recebeu nenhum). A maquina confere com isto a lista de discos que

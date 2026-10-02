@@ -484,3 +484,64 @@ def test_celula_com_dois_registros_reprova(tmp_path):
     )
     raiz = montar(tmp_path, medicoes=medicoes)
     assert any("uma linha, um registro" in f for f in verificar(raiz))
+
+
+# ── A volta: registro -> tabela; e a leitura pelo cabecalho ─────────────────
+
+
+def test_registro_orfao_reprova(tmp_path):
+    """Mediu, escreveu o registro, esqueceu o estado: a tabela diz `aberta` e toda
+    afirmacao segue citando M<n>. E quem esqueceu a celula que tem que ser pego."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-11-01-m4.md").write_text("# M4 — medida\n", encoding="utf-8")
+    assert any("registro orfao" in f and "M4" in f for f in verificar(raiz))
+
+
+def test_arquivo_de_validacao_sem_medicao_no_titulo_nao_e_registro(tmp_path):
+    """O censo e a validacao cross-DC sao evidencia sem medicao do indice."""
+    raiz = montar(tmp_path)
+    (raiz / "docs/validacao/2026-09-23-censo.md").write_text(
+        "# Censo do parque\n\nNao serve de proxy para a M2.\n", encoding="utf-8"
+    )
+    assert verificar(raiz) == []
+
+
+def test_registro_que_cita_a_medicao_so_no_corpo_nao_responde_a_ela(tmp_path):
+    """O registro da M5 cita outras medicoes no corpo; "nomear em qualquer lugar" deixava
+    uma linha M2 apontar para ele."""
+    raiz = montar(tmp_path)
+    (raiz / REGISTRO).write_text(
+        "# M8 — outra medicao\n\nSobre a M9, de passagem.\n", encoding="utf-8"
+    )
+    falhas = verificar(raiz)
+    assert any("titulo do registro" in f and "M9" in f for f in falhas), falhas
+
+
+def test_colunas_lidas_pelo_nome_e_nao_pela_posicao(tmp_path):
+    """Estado e Registro fora das duas ultimas posicoes continuam lidos certo. Uma
+    versao anterior deste teste deixava Estado na penultima por acaso, e o arnes
+    mostrou que a leitura por posicao passava nela."""
+    medicoes = (
+        "| # | Estado | Registro | Medição | O que decide |\n"
+        "|---|---|---|---|---|\n"
+        "| M1 | aberta | — | vazao | horas |\n"
+        "| M4 | aberta | — | bitmap | resync |\n"
+        f"| M9 | medida | `{REGISTRO}` | leitura | campo |\n"
+    )
+    assert verificar(montar(tmp_path, medicoes=medicoes)) == []
+
+
+def test_linha_com_celulas_a_mais_reprova_e_nao_e_adivinhada(tmp_path):
+    medicoes = MEDICOES.replace(
+        "| M1 | vazao | horas | aberta | — |", "| M1 | vazao | horas | extra | aberta | — |"
+    )
+    raiz = montar(tmp_path, medicoes=medicoes)
+    assert any("M1" in f and "estado ''" in f for f in verificar(raiz))
+
+
+def test_medida_sem_registro_citada_nao_diz_none(tmp_path):
+    medicoes = MEDICOES.replace(f"medida | `{REGISTRO}` |", "medida | — |")
+    raiz = montar(tmp_path, adr=_adr_com("X", "`M9`"), medicoes=medicoes)
+    falhas = verificar(raiz)
+    assert any("M9" in f and "ainda nao tem registro" in f for f in falhas), falhas
+    assert not any("None" in f for f in falhas), falhas

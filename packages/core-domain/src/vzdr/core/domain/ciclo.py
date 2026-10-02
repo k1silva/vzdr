@@ -211,7 +211,7 @@ class MigracaoSemResyncError(RuntimeError):
     silencio que a decisao 1 do ADR-0012 existe para impedir.
 
     O no certo so existe depois de o bitmap ser descartado e a VM ressincronizada,
-    e esse caminho nao esta construido (ADR-0012, M4). Ate la, o agendador que
+    e esse caminho nao esta construido (o executor e da dr-003; C-006). Ate la, o agendador que
     pede o no recebe isto, e nao um laco silencioso.
     """
 
@@ -422,7 +422,7 @@ def no_do_proximo_ciclo(estado: EstadoDoCiclo) -> str:
     - sem migracao: o no onde o ciclo encontrou a VM, ou o gravado, se o Nova nao
       chegou a responder;
     - com migracao: `MigracaoSemResyncError`. Nenhum dos dois nos e certo antes do
-      resync, e o resync nao existe ainda (M4).
+      resync, e o executor do resync nao existe ainda (dr-003; C-006).
     """
     if estado.desfecho is None:
         raise ValueError("o ciclo ainda corre; o no do proximo sai de um ciclo terminado")
@@ -483,7 +483,7 @@ def avancar(estado: EstadoDoCiclo, entrada: Optional[Resultado], agora: datetime
         estado = replace(estado, no_encontrado=entrada.no_atual)
         # A comparacao do no, antes de qualquer outra coisa (ADR-0012): bitmap que
         # atravessou evento de host nao e usado. O ciclo nao executa; o que vem
-        # depois — descartar o bitmap e ressincronizar — nao esta construido (M4),
+        # depois — descartar o bitmap e ressincronizar — nao esta construido (dr-003),
         # e `no_do_proximo_ciclo` recusa em vez de deixar o proximo ciclo errar.
         if estado.migracao_detectada:
             return abandonar(estado, agora)

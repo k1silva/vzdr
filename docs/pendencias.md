@@ -168,6 +168,11 @@ decisão ter sido tomada como foi.
 | **Estado** | **fechada em 2026-09-29** — o fornecedor respondeu |
 | **Revisões** | nenhuma |
 
+> **Nota de 2026-10-02, sem reescrever o registro:** a M4 citada abaixo foi aposentada e
+> partida em **M6** (saída pela porta, a migração graciosa — é dela que esta pendência
+> tratava) e **M7** (queda pela janela). Onde o texto diz M4 sobre migração, leia M6; onde
+> diz "host que cai", leia M7.
+
 **O que ela bloqueia.** A medição **M4** do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md):
 se o bitmap sobrevive à migração automática do VHI. M4 exige cluster com mais de um nó e
 VM descartável, e a resposta do fornecedor muda como o teste é feito — ou se ele é

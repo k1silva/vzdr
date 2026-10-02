@@ -78,7 +78,7 @@ lê.
          depende disto, porque distinguir "ainda no seed" de "em proteção sem ponto" exige
          saber onde fica a fronteira.
       3. **O que o teste da T5 protege.** `tasks.md` pede "a comparação do nó é a primeira
-         coisa" — afirmação sobre a *implementação*, que o item 4 prevê trocar. Quando a M4
+         coisa" — afirmação sobre a *implementação*, que o item 4 prevê trocar. Quando a M7
          fechar, esse teste fica vermelho com a propriedade intacta, e alguém mantém o
          mecanismo velho para mantê-lo verde. A propriedade que sobrevive à troca: **a
          validade do bitmap é decidida antes de qualquer trabalho caro**. O código da T5
@@ -86,19 +86,19 @@ lê.
          escolher o que um teste protege é decisão de desenho. A troca entra na
          `dr-001/T9` e na T6.
 
-      4. **O disparo do resync deixa de ser a troca de nó**, se a M4 confirmar o sinal de
+      4. **O disparo do resync deixa de ser a troca de nó**, se a M7 confirmar o sinal de
          consistência. Troca de nó era proxy, e a resposta da Virtuozzo o torna errado nos
          dois sentidos: migração graciosa troca de nó e não perde bitmap; queda pode perder
          bitmap sem trocar de nó. A troca de nó passa a ser motivo para **ir olhar**, não
          conclusão. A forma: **ADR novo**, e não reescrita do ADR-0012 — ADR registra por
          que se decidiu naquele momento, e reescrever apaga o que se sabia. O novo carrega
-         a **procedência** (resposta da Virtuozzo mais medição da M4) e a **condição**
+         a **procedência** (resposta da Virtuozzo mais medição da M7) e a **condição**
          (storage compartilhado). O 0012 ganha nota de status com **data e motivo**,
          apontando o trecho substituído — "substituído" responde o quê; quem lê depois
          precisa do porquê. O e-mail diz onde olhar, não o que se vai ver.
-         **Feito em 2026-10-02, e sem esperar a M4:** o
+         **Feito em 2026-10-02, e sem esperar a M7:** o
          [ADR-0016](adr/0016-confianca-no-bitmap.md) decide o gatilho pelo comportamento
-         documentado do upstream (QEMU e libvirt), e a M4 passa a **conferir** se o fork da
+         documentado do upstream (QEMU e libvirt), e a M7 passa a **conferir** se o fork da
          VHI o segue. A candidata de separar a decisão 3 não foi resolvida de passagem: segue
          como `C-001` em `pendencias.md`.
 
@@ -190,15 +190,18 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
       bitmap, em amostra de **5 a 8 VMs cobrindo os perfis**, ao longo de 48 h. O método é
       o do [ADR-0012](adr/0012-resposta-a-perda-de-bitmap.md); esta linha dizia "20-30 VMs"
       e divergia dele
-- [ ] **Sobrevivência do bitmap à migração e à queda** (M4 do ADR-0012) — **mudou de
-      natureza em 2026-10-02**: de descoberta para conferência de comportamento documentado
-      (ver a emenda do ADR-0012). A perna que decide é a da queda, e é binária. Desbloqueada: a
-      Virtuozzo respondeu ([P-001](pendencias.md), fechada), e a resposta diz **onde olhar**,
-      não o que se vai ver. Declaração não fecha medição. Em VM descartável, cluster com
-      mais de um nó, duas pernas:
-      - **saída pela porta** — criar bitmap persistente, migrar ao vivo, ler o bitmap no
-        destino e conferir nome, granularidade e conteúdo;
-      - **queda pela janela** — matar o processo QEMU da VM, reabrir, e ler o que o
+- **Sobrevivência do bitmap à migração e à queda** — eram as duas pernas da M4 do ADR-0012,
+  que foi **aposentada em 2026-10-02** e partida em duas medições, porque têm pré-requisitos,
+  desfechos esperados e dependentes diferentes, e vão ser medidas em dias diferentes.
+  Desbloqueadas: a Virtuozzo respondeu ([P-001](pendencias.md), fechada), e a resposta diz
+  **onde olhar**, não o que se vai ver. Declaração não fecha medição.
+  - [ ] **M6 — saída pela porta** (evento gracioso). Em VM descartável, cluster com mais de
+        um nó, e um nó que possa ser drenado: criar bitmap persistente, migrar ao vivo, ler o
+        bitmap no destino e conferir nome, granularidade e conteúdo.
+  - [ ] **M7 — queda pela janela** (evento abrupto). **É a que decide**, é binária, e é dela
+        que o ADR-0016 depende. Mudou de natureza em 2026-10-02: de descoberta para
+        conferência de comportamento documentado (ver a emenda do ADR-0012). Em VM
+        descartável, num nó só: matar o processo QEMU da VM, reabrir, e ler o que o
         `query-block` reporta do bitmap persistido. A lembrança de duas pessoas é que o
         qcow2 marca como **inconsistente** o bitmap que não foi fechado limpo, e que o
         `query-block` expõe isso — ninguém verificou. Se existir, é o sinal que substitui a
@@ -213,13 +216,11 @@ vez de repetir, senão os dois divergem e nenhum dos dois é autoridade.
         | o bitmap ou o checkpoint desaparece | falha fechada por outro caminho, igualmente aceitável; muda o desenho, não a confiança |
         | `recording: true`, sem `inconsistent`, `count` preservado | alarme: o fork não marca, e a confiança no flag cai |
 
-        Precisa de um nó que possa ser drenado.
-
         **E um passo a mais, de graça, se a leitura for `inconsistent: true`:** tentar
         `virsh checkpoint-delete <dom> <nome>` e registrar se funciona, se falha, e com qual
         erro. O QEMU só permite `block-dirty-bitmap-remove` num bitmap inconsistente, então
         é possível que o libvirt não consiga apagar o checkpoint cujo bitmap ficou assim — e
-        a `dr-001/T7` precisa saber disso para ordenar o reparo. A M4 produz exatamente esse
+        a `dr-001/T7` precisa saber disso para ordenar o reparo. A M7 produz exatamente esse
         estado; repetir o laboratório só para isso seria outra sessão.
 
       E uma conferência que a resposta tornou necessária: o mecanismo só vale para bitmap
