@@ -419,7 +419,7 @@ O **motivo** sim é registro, porque é o que a interface mostra e o que decide 
 | Motivo | O que acontece em seguida |
 | --- | --- |
 | `ciclo_falhou` | Segue tentando no ritmo do tier |
-| `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)) |
+| `migracao_detectada` | Job de resync criado, não iniciado ([ADR-0012](../../docs/adr/0012-resposta-a-perda-de-bitmap.md)). **Substituído** pelo [ADR-0016](../../docs/adr/0016-confianca-no-bitmap.md): o motivo passa a ser a condição do bitmap que falhou, e não o nó — na `dr-001/T6` |
 
 **Esta é a única definição de `degradada`.** O ciclo de vida da VM é marcado e mora na
 [`dr-006`](../dr-006-provisionamento/spec.md), que é quem nomeia os estados dele; a saúde é

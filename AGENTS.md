@@ -256,8 +256,10 @@ dia em que ele der trabalho, sem saber o que apagou.
   host que não seja o local — `check_dsn_guardada.py`.
 - Toda afirmação de desenho num documento coberto nomeia o mecanismo que a mantém
   verdadeira, todo mecanismo nomeado existe, e todo checador do build é reivindicado por
-  alguma afirmação — `check_afirmacao_tem_mecanismo.py`. Cobre hoje o plano da `dr-001` e o
-  ADR-0015; o que falta cobrir é impresso em toda execução.
+  alguma afirmação — `check_afirmacao_tem_mecanismo.py`. Cobre hoje o plano da `dr-001` e os
+  ADRs 0012, 0015 e 0016; o que falta cobrir é impresso em toda execução. Afirmação que uma
+  emenda rebaixou pode se apoiar numa candidata de `docs/pendencias.md` — e só ela: o
+  checador imprime quantas estão nessa condição.
 
 ## O que NUNCA fazer
 

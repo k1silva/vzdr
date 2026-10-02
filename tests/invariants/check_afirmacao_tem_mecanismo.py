@@ -61,7 +61,11 @@ RAIZ = Path(__file__).resolve().parents[2]
 
 #: Documentos cobertos. Cresce por documento, e nunca afrouxando o criterio.
 COBERTOS_PLANO = ("specs/dr-001-dominio-ciclo/plan.md",)
-COBERTOS_ADR = ("docs/adr/0015-efeito-como-valor.md",)
+COBERTOS_ADR = (
+    "docs/adr/0012-resposta-a-perda-de-bitmap.md",
+    "docs/adr/0015-efeito-como-valor.md",
+    "docs/adr/0016-confianca-no-bitmap.md",
+)
 
 #: O universo de documentos com afirmacao cruzada. O que NAO e coberto e derivado
 #: dele por subtracao, e nunca escrito a mao: a primeira versao tinha uma tupla

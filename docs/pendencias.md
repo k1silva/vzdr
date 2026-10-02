@@ -123,6 +123,12 @@ penduradas só nela. Se esse número sobe, aparece.
   alguém construir uma tela que mostre `degradada`. Por isso a exigência mora onde o conceito
   é definido, que é o que essa pessoa vai ler: a seção "`degradada` é derivada, não
   marcada" da [`dr-001`](../specs/dr-001-dominio-ciclo/spec.md), e o topo de `saude.py`.
+- **C-006 — O que o executor do resync tem que garantir, herdado do ADR-0012.** A decisão 1
+  daquele ADR dizia, sobre o executor: enquanto o resync roda, a VM não participa de migração
+  automática (e, se a VHI não expuser como, o resync reinicia e o evento é registrado como
+  `resync_interrompido_por_migracao`); e a `DEGRADADA` tem prazo — sem progresso por N horas,
+  alarme e escalonamento. Rebaixado na emenda de 2026-10-02 porque o executor é da
+  `dr-003`, que não existe. O gatilho é um evento: a spec da `dr-003` ser escrita.
 
 ## Fechadas
 

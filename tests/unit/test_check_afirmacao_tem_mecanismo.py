@@ -83,7 +83,9 @@ def montar(
         "specs/dr-001-dominio-ciclo/plan.md": plano,
         "specs/dr-001-dominio-ciclo/tasks.md": tasks,
         "docs/adr/0015-efeito-como-valor.md": adr,
-        "docs/adr/0012-resposta-a-perda-de-bitmap.md": MEDICOES,
+        # O ADR-0012 e coberto e e onde as medicoes moram: as duas coisas.
+        "docs/adr/0012-resposta-a-perda-de-bitmap.md": ADR_OK + "\n" + MEDICOES,
+        "docs/adr/0016-confianca-no-bitmap.md": ADR_OK,
         "tests/unit/test_x.py": TESTE,
         "tests/invariants/check_a.py": "",
         "AGENTS.md": agents,

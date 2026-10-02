@@ -149,11 +149,30 @@ hypervisor — se uma tarefa precisar, ela está no lugar errado.
     telemetria é incompleto; `nunca_iniciou` separado da taxa de falha
   - Arquivos: `.../domain/ciclo.py`, `tests/unit/test_telemetria.py`
 
+- [ ] **T9** — O inventário responde à pergunta que decide
+  - [ADR-0016](../../docs/adr/0016-confianca-no-bitmap.md): a confiança no bitmap se lê do
+    bitmap, e não do nó. `ResultadoDeInventario` passa a trazer, **por disco e por bitmap**,
+    o que as seis condições e as quatro respostas leem: nome, `granularity`, `count`,
+    `recording`, `busy`, `persistent`, `inconsistent`, e a posição na cadeia.
+  - A pergunta da varredura que faltou desta vez, ao lado das outras duas: *o resultado
+    responde à pergunta que decide, ou só à que era fácil de obter?* Primeiro faltou o
+    sujeito, depois faltaram efeitos; aqui faltou o conteúdo da resposta.
+  - **Decidir aqui se `job_em_curso` sobrevive.** `busy` é do bitmap; job em curso é do
+    dispositivo, e um backup de terceiro pode existir sem tocar o nosso bitmap. Se os dois
+    ficarem, cada um diz por que existe.
+  - **Depende da `M5`** do ADR-0012 (por onde o estado do bitmap é legível na VHI): se a
+    leitura não existir, o desenho do campo muda. Não começa antes dela.
+  - Formato do #33/#36: contrato, varredura conferida para o campo novo, PR próprio.
+  - Arquivos: `.../domain/efeitos.py`, `tests/unit/test_efeitos.py`
+
 ## Ordem
 
 ```
-T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8
+T1 → T2 → T3 → T4 → T5 → T9 → T6 → T7 → T8
 ```
+
+- **T9 antes de T6**: as quatro respostas do ADR-0016 são decididas sobre o que o
+  inventário traz, e a T6 é onde a máquina as dá.
 
 - **T1 antes de tudo**: o ADR decide a forma que a T3 implementa.
 - **T2 antes de T3**: os efeitos carregam os nomes.
@@ -169,8 +188,7 @@ porque `check_eventos.py` exige emissor e teste.
 | --- | --- |
 | `dr.ciclo_concluido` | T8 |
 | `dr.ciclo_falhou` | T8 |
-| `dr.migracao_detectada` | T5 — a comparação do nó (ADR-0012) |
-| `dr.resync_necessario` | T7 |
+| `dr.resync_necessario` | T6 — o gatilho do [ADR-0016](../../docs/adr/0016-confianca-no-bitmap.md), com o motivo |
 
 Nomes conforme o [ADR-0005](../../docs/adr/0005-convencao-de-eventos.md): `dominio.acao`,
 particípio, snake_case. **Quem emite** pode não ser esta camada — o domínio é puro e não
